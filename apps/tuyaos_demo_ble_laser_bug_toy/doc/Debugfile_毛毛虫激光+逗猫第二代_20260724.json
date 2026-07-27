@@ -22,7 +22,7 @@
             "attr": 1664,
             "code": "mode",
             "defaultValue": "",
-            "desc": "active：激光模式\nsimple：捕捉模式\nmild：交替模式",
+            "desc": "active：好动模式\nsimple：一般模式\nmild：温和模式",
             "editPermission": true,
             "extContent": "",
             "iconname": "icon-dp_mode",
@@ -65,8 +65,8 @@
         {
             "attr": 1664,
             "code": "work_state",
-            "defaultValue": "",
-            "desc": "work：逗宠中\nstandby：待机中\ncharging：充电中\ncharge_done：充电完成",
+            "defaultValue": "work",
+            "desc": "work：逗宠中\nstandby：待机中",
             "editPermission": true,
             "extContent": "",
             "id": 26,
@@ -75,9 +75,7 @@
             "property": {
                 "range": [
                     "work",
-                    "standby",
-                    "charging",
-                    "charge_done"
+                    "standby"
                 ],
                 "type": "enum"
             },
@@ -87,16 +85,16 @@
         {
             "attr": 1152,
             "code": "auto_tease_time",
-            "defaultValue": "0",
+            "defaultValue": "10",
             "desc": "",
             "editPermission": true,
             "extContent": "",
             "id": 28,
             "mode": "rw",
-            "name": "交替模式下激光追逐持续时长",
+            "name": "每个循环激光追逐持续时长",
             "property": {
                 "max": 180,
-                "min": 0,
+                "min": 10,
                 "scale": 0,
                 "step": 1,
                 "type": "value",
@@ -108,16 +106,16 @@
         {
             "attr": 1152,
             "code": "standby_tease_time",
-            "defaultValue": "0",
+            "defaultValue": "10",
             "desc": "",
             "editPermission": true,
             "extContent": "",
             "id": 29,
             "mode": "rw",
-            "name": "交替模式下捕捉昆虫持续时长",
+            "name": "每个循环捕捉昆虫持续时长",
             "property": {
                 "max": 180,
-                "min": 0,
+                "min": 10,
                 "scale": 0,
                 "step": 1,
                 "type": "value",
@@ -129,7 +127,7 @@
         {
             "attr": 1152,
             "code": "stepless_control",
-            "defaultValue": "0",
+            "defaultValue": "1",
             "desc": "",
             "editPermission": true,
             "extContent": "",
@@ -138,7 +136,7 @@
             "name": "速度控制",
             "property": {
                 "max": 100,
-                "min": 0,
+                "min": 1,
                 "scale": 0,
                 "step": 1,
                 "type": "value",

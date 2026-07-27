@@ -5,7 +5,7 @@
         "kind": "apps",
         "vendor": "tlsr825x_ble",
         "fw": {
-            "name": "tuyaos_demo_ble_cat_string",
+            "name": "tuyaos_demo_ble_laser_bug_toy",
             "ver": "1.0.0"
         },
         "sdk": {
@@ -14,20 +14,20 @@
     },
     "app": {
         "c_files": [
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/app_battery.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/app_charge.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/app_dp_parser.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/app_key.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/app_led.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/app_motor.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/app_product_test.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/app_state.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/tuya_ble_protocol_callback.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/src/tuya_sdk_callback.c"
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/app_battery.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/app_charge.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/app_dp_parser.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/app_key.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/app_led.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/app_motor.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/app_product_test.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/app_state.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/tuya_ble_protocol_callback.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/src/tuya_sdk_callback.c"
         ],
         "h_dir": [
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_cat_string/include"
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_laser_bug_toy/include"
         ],
         "l_files": []
     },

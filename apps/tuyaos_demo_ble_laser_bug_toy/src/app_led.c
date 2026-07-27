@@ -11,6 +11,7 @@
 #include "app_state.h"
 #include "app_battery.h"
 #include "tuya_sdk_callback.h"
+#include "tuya_ble_main.h"
 
 #define LED_BLINK_PERIOD_MS 250
 

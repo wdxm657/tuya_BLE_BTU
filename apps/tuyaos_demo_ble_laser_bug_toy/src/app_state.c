@@ -281,22 +281,23 @@ VOID_T app_state_process(VOID_T)
 
 UINT8_T app_state_get_dp_enum(VOID_T)
 {
-    if (s_app_powered)
-    {
-        return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
-    }
-    else{
-        if (s_charge_done || s_charging)
-        {
-            if (s_charge_done) {
-                return (UINT8_T)DEV_STATE_CHARGE_DONE;
-            }
-            if (s_charging) {
-                return (UINT8_T)DEV_STATE_CHARGING;
-            }
-        }
-        return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
-    }    
+    return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
+    // if (s_app_powered)
+    // {
+    //     return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
+    // }
+    // else{
+    //     if (s_charge_done || s_charging)
+    //     {
+    //         if (s_charge_done) {
+    //             return (UINT8_T)DEV_STATE_CHARGE_DONE;
+    //         }
+    //         if (s_charging) {
+    //             return (UINT8_T)DEV_STATE_CHARGING;
+    //         }
+    //     }
+    //     return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
+    // }    
 }
 
 VOID_T app_state_register_change_cb(VOID_T (*cb)(dev_state_t, dev_state_t))

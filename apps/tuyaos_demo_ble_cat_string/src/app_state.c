@@ -256,7 +256,7 @@ VOID_T app_state_set_low_voltage_lock(BOOL_T locked)
     s_low_voltage_lock = locked;
     TAL_PR_WARN("[state] low voltage lock=%d", locked);
     if (locked) {
-        app_state_stop_cycle_timers();
+        app_state_set_app_power(FALSE);
     } else if (s_machine_powered && s_app_powered && !s_cycle_limit_reached) {
         app_state_reset_cycle_tracking();
         app_state_set(DEV_STATE_WORK);
@@ -288,22 +288,23 @@ VOID_T app_state_process(VOID_T)
 
 UINT8_T app_state_get_dp_enum(VOID_T)
 {
-    if (s_app_powered)
-    {
-        return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
-    }
-    else{
-        if (s_charge_done || s_charging)
-        {
-            if (s_charge_done) {
-                return (UINT8_T)DEV_STATE_CHARGE_DONE;
-            }
-            if (s_charging) {
-                return (UINT8_T)DEV_STATE_CHARGING;
-            }
-        }
-        return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
-    }    
+    return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
+    // if (s_app_powered)
+    // {
+    //     return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
+    // }
+    // else{
+    //     if (s_charge_done || s_charging)
+    //     {
+    //         if (s_charge_done) {
+    //             return (UINT8_T)DEV_STATE_CHARGE_DONE;
+    //         }
+    //         if (s_charging) {
+    //             return (UINT8_T)DEV_STATE_CHARGING;
+    //         }
+    //     }
+    //     return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
+    // }    
 }
 
 VOID_T app_state_register_change_cb(VOID_T (*cb)(dev_state_t, dev_state_t))

@@ -67,6 +67,12 @@ UINT16_T tal_app_server_conn_handle = 0xFFFF;
 
 /* 电池电量DP定时上报（向APP周期性通知） */
 STATIC TIMER_ID s_dp_report_timer_id = NULL;
+STATIC UINT8_T s_dp_force_report_count = 0;
+STATIC UINT8_T s_last_battery = 0xFF;
+STATIC UINT8_T s_last_switch = 0xFF;
+STATIC UINT8_T s_last_mode = 0xFF;
+STATIC UINT8_T s_last_stepless = 0xFF;
+STATIC UINT8_T s_last_work_state = 0xFF;
 
 /* 设备状态DP定时上报（向APP周期性通知 work_state） */
 TAL_UART_CFG_T tal_uart_cfg = {
@@ -128,25 +134,28 @@ STATIC VOID_T battery_critical_poweroff(VOID_T)
  ********************* DP 定时上报 **************************************
  **********************************************************************/
 
-/* DP定时上报：每秒上报开关与工作状态，避免状态停留在旧值 */
+/* DP定时上报：连接后5秒内每秒上报，之后变化时上报 */
 STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 {
+    BOOL_T force_report;
+
     app_led_update();
 
     if(tal_app_server_conn_handle == 0XFFFF){
         return;
     }
 
-    static UINT8_T s_last_battery = 0xFF;
-    static UINT8_T s_last_mode    = 0xFF;
-    static UINT8_T s_last_stepless = 0xFF;
+    force_report = (s_dp_force_report_count > 0);
+    if (s_dp_force_report_count > 0) {
+        s_dp_force_report_count--;
+    }
 
     UINT8_T buf[DT_VALUE_LEN] = {0};
 
     /* 电池电量 */
     {
         UINT8_T percent = app_battery_get_percent();
-        if (percent != s_last_battery) {
+        if (force_report || percent != s_last_battery) {
             s_last_battery = percent;
             buf[3] = percent;
             app_dp_report(DP_ID_BATTERY, buf, DT_VALUE_LEN);
@@ -157,16 +166,19 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     /* 开关状态 */
     {
         UINT8_T power_on = app_state_is_app_power_on() ? 1 : 0;
-        memset(buf, 0, DT_VALUE_LEN);
-        buf[0] = power_on;
-        app_dp_report(DP_ID_SWITCH, buf, DT_BOOL_LEN);
-        TAL_PR_DEBUG("[dp] switch report: %d", power_on);
+        if (force_report || power_on != s_last_switch) {
+            s_last_switch = power_on;
+            memset(buf, 0, DT_VALUE_LEN);
+            buf[0] = power_on;
+            app_dp_report(DP_ID_SWITCH, buf, DT_BOOL_LEN);
+            TAL_PR_DEBUG("[dp] switch report: %d", power_on);
+        }
     }
 
     /* 工作模式 */
     {
         UINT8_T mode = (UINT8_T)app_motor_get_mode();
-        if (mode != s_last_mode) {
+        if (force_report || mode != s_last_mode) {
             s_last_mode = mode;
             memset(buf, 0, DT_VALUE_LEN);
             buf[0] = mode;
@@ -178,7 +190,7 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     /* PWM stepless duty */
     {
         UINT8_T stepless = app_motor_get_stepless_percent();
-        if (stepless != s_last_stepless) {
+        if (force_report || stepless != s_last_stepless) {
             s_last_stepless = stepless;
             memset(buf, 0, DT_VALUE_LEN);
             buf[3] = stepless;
@@ -190,8 +202,11 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     /* 工作状态 */
     {
         UINT8_T state = app_state_get_dp_enum();
-        app_dp_report(DP_ID_WORK_STATE, &state, DT_ENUM_LEN);
-        TAL_PR_DEBUG("[dp] work_state report: %d", state);
+        if (force_report || state != s_last_work_state) {
+            s_last_work_state = state;
+            app_dp_report(DP_ID_WORK_STATE, &state, DT_ENUM_LEN);
+            TAL_PR_DEBUG("[dp] work_state report: %d", state);
+        }
     }
 }
 
@@ -205,8 +220,14 @@ STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
         case TAL_BLE_EVT_PERIPHERAL_CONNECT: {
             TAL_PR_INFO("connected");
             // 清除配网标志位
-            tal_flash_erase(APP_DATA_FLASH_ADDR, 0x1000);
+            // tal_flash_erase(APP_DATA_FLASH_ADDR, 0x1000);
             tal_app_server_conn_handle = p_event->ble_event.connect.peer.conn_handle;
+            s_dp_force_report_count = 5;
+            s_last_battery = 0xFF;
+            s_last_switch = 0xFF;
+            s_last_mode = 0xFF;
+            s_last_stepless = 0xFF;
+            s_last_work_state = 0xFF;
 
             tuya_ble_connected_handler();
             app_led_update();
@@ -234,6 +255,12 @@ STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
             tal_ble_advertising_start(&tal_adv_param);
 #endif
             tal_app_server_conn_handle = 0xFFFF;
+            s_dp_force_report_count = 0;
+            s_last_battery = 0xFF;
+            s_last_switch = 0xFF;
+            s_last_mode = 0xFF;
+            s_last_stepless = 0xFF;
+            s_last_work_state = 0xFF;
             app_led_update();
         } break;
 
