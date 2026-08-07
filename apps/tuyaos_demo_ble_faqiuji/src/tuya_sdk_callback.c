@@ -40,6 +40,8 @@
 
 #include "app_config.h"
 #include "app_dp_parser.h"
+#include "faqiuji_mcu_protocol.h"
+#include "faqiuji_audio.h"
 
 /***********************************************************************
  ********************* constant ( macro and enum ) *********************
@@ -227,6 +229,7 @@ STATIC VOID_T tuya_log_output_cb(IN CONST CHAR_T *str)
 STATIC VOID_T tuya_uart_irq_rx_cb(TUYA_UART_NUM_E port_id, VOID_T *buff, UINT16_T len)
 {
     if (port_id == TUYA_UART_NUM_0) {
+        faqiuji_mcu_protocol_input(buff, len);
         tuya_ble_common_uart_receive_data(buff, len);
     } else {
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
@@ -322,7 +325,7 @@ OPERATE_RET tuya_init_third(VOID_T)
     // tal_i2c_init(TUYA_I2C_NUM_0, &iic_cfg);
 #endif
 
-    return OPRT_OK;
+    return faqiuji_audio_init();
 }
 
 OPERATE_RET tuya_init_last(VOID_T)
@@ -331,6 +334,7 @@ OPERATE_RET tuya_init_last(VOID_T)
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
 
     tuya_ble_protocol_init();
+    faqiuji_mcu_protocol_init(NULL);
 
     tal_uart_rx_reg_irq_cb(TUYA_UART_NUM_0, tuya_uart_irq_rx_cb);
 
@@ -369,6 +373,7 @@ OPERATE_RET tuya_main_loop(VOID_T)
 #if !TUYA_BLE_USE_OS
     tuya_ble_main_tasks_exec();
 #endif
+    faqiuji_audio_task();
 //    tal_watchdog_refresh();
     
     return (tuya_ble_sleep_allowed_check() == TRUE);
@@ -378,4 +383,3 @@ UINT16_T tuya_app_get_conn_handle(VOID_T)
 {
     return tal_app_server_conn_handle;
 }
-

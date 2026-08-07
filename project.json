@@ -15,6 +15,9 @@
     "app": {
         "c_files": [
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/app_dp_parser.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/faqiuji_audio.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/faqiuji_ext_flash.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/faqiuji_mcu_protocol.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/tuya_ble_protocol_callback.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/tuya_sdk_callback.c"
         ],
