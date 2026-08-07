@@ -81,17 +81,20 @@ extern unsigned int ota_program_offset;
 // #endif
 #define APP_DATA_FLASH_ADDR 0x7F000
 #define LASER_BUG 0
-#define CAT_STRING 1
+#define CAT_STRING 0
 #define BLE_BALL 0
+#define FAQIUJI 1
 
 #if LASER_BUG
 #ifndef BOARD_KEY_PIN
 #define BOARD_KEY_PIN                           (TUYA_GPIO_NUM_28) // D4 按键
+
 #endif
 
 #if (BOARD_ENABLE_LOG)
 #ifndef BOARD_LOG_TX_PIN
 #define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_14) // B6 日志输出引脚
+
 #endif
 #endif
 
@@ -113,7 +116,9 @@ extern unsigned int ota_program_offset;
 #define MOTOR_FOR_2       TUYA_PWM_NUM_1 // C3 电机正转 PWM_OUTPUT
 #define MOTOR_3           TUYA_PWM_NUM_0 // C2 直流电机 无正反转
 
-#elif CAT_STRING
+#endif
+
+#if CAT_STRING
 // PIN
 // #ifndef BOARD_POWER_ON_PIN
 // #define BOARD_POWER_ON_PIN                      (TUYA_GPIO_NUM_31) // D7 无用 测试引脚
@@ -121,11 +126,13 @@ extern unsigned int ota_program_offset;
 
 #ifndef BOARD_KEY_PIN
 #define BOARD_KEY_PIN                           (TUYA_GPIO_NUM_16) // C0 按键
+
 #endif
 
 #if (BOARD_ENABLE_LOG)
 #ifndef BOARD_LOG_TX_PIN
 #define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_20) // C4 日志输出引脚
+
 #endif
 #endif
 
@@ -152,19 +159,25 @@ extern unsigned int ota_program_offset;
 
 #if (!BOARD_ENABLE_LOG)
 #define AD_NTC 8   // PC4
+
 #endif
-#elif BLE_BALL
+#endif
+
+#if BLE_BALL
 // PIN
 #ifndef BOARD_POWER_ON_PIN
 #define BOARD_POWER_ON_PIN                      (TUYA_GPIO_NUM_31) // D7 无用 测试引脚
+
 #endif
 
 #ifndef BOARD_KEY_PIN
 #define BOARD_KEY_PIN                           (TUYA_GPIO_NUM_17) // C1 按键
+
 #endif
 
 #ifndef BOARD_LOG_TX_PIN
 #define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_16) // C0 日志输出引脚
+
 #endif
 
 
@@ -178,7 +191,41 @@ extern unsigned int ota_program_offset;
 #define M_INA TUYA_GPIO_NUM_12 // B4
 #define M_INB TUYA_GPIO_NUM_13 // B5
 #define VIBRATION_SENSOR_PIN TUYA_GPIO_NUM_28 // D4
+
 #endif
+
+#if FAQIUJI
+// PIN
+// #ifndef BOARD_POWER_ON_PIN
+// #define BOARD_POWER_ON_PIN                      (TUYA_GPIO_NUM_31) // D7 无用 测试引脚
+// #endif
+
+#ifndef BOARD_KEY_PIN
+#define BOARD_KEY_PIN                           (TUYA_GPIO_NUM_16) // C0 按键
+
+#endif
+
+#if (BOARD_ENABLE_LOG)
+#ifndef BOARD_LOG_TX_PIN
+#define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_17) // C1 调试日志输出引脚
+
+#endif
+#endif
+
+// 音频文件保存到外部FLASH
+#define NOR_FLASH_CS    TUYA_GPIO_NUM_26 // PD2
+#define NOR_FLASH_CCLK  TUYA_GPIO_NUM_31 // PD7
+#define NOR_FLASH_SDI   TUYA_GPIO_NUM_14 // PB6
+#define NOR_FLASH_SDO   TUYA_GPIO_NUM_15 // PB7
+
+#define SLAVE_MCU_TX TUYA_GPIO_NUM_9 //PB1 与控制外设的MCU通信
+#define SLAVE_MCU_RX TUYA_GPIO_NUM_0 //PA0 与控制外设的MCU通信
+
+#define ADC_AUDIO_IN  TUYA_GPIO_NUM_20 // PC4 ADC采样音频信号
+#define PWM_AUDIO_OUT TUYA_GPIO_NUM_18 // PC2 PWM输出音频信号
+
+#endif
+
 // IRQ NUM
 #ifndef BOARD_GPIO_IRQ_NUM
 #define BOARD_GPIO_IRQ_NUM                      (2)

@@ -23,8 +23,16 @@
  **********************************************************************/
 #define TKL_UART_PORT_NUM0      0
 #define UART_DATA_LEN           252    // data max 252
+
+#if FAQIUJI
+#define TKL_UART_TX_PIN_ID       9     // GPIO_PB1
+#define TKL_UART_RX_PIN_ID       0     // GPIO_PA0
+
+#else
 #define TKL_UART_TX_PIN_ID       9     // GPIO_PB1
 #define TKL_UART_RX_PIN_ID       15    // GPIO_PB7
+
+#endif
 
 /***********************************************************************
  ********************* struct ******************************************
