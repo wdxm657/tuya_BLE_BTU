@@ -16,15 +16,15 @@
 
 #define BUG_SEQ_STEPS          2
 #define MOTOR_STEP_MS          1000
-#define BUG_PULL_STEP_MAX_MS   1500
-#define BUG_PULL_STEP_MIN_MS   800
+#define BUG_PULL_STEP_MAX_MS   2000
+#define BUG_PULL_STEP_MIN_MS   1000
 #define BUG_DIRECTION_STOP_MS  1000
 #define BUG_PULL_REPEAT_COUNT  1
-#define BUG_PULL_BOOST_PERCENT 50
+#define BUG_PULL_STRONG_DUTY_PERCENT 90
 #define BUG_SLEEP_FINISH_MOTOR 1
-#define MOTOR_DUTY_MIN_PERCENT 30
-#define MOTOR_DUTY_MAX_PERCENT 50
-#define MOTOR_DUTY_DEFAULT_PERCENT 35
+#define MOTOR_DUTY_MIN_PERCENT 20
+#define MOTOR_DUTY_MAX_PERCENT 40
+#define MOTOR_DUTY_DEFAULT_PERCENT 30
 #define MOTOR_STEPLESS_DEFAULT_PERCENT \
     (((MOTOR_DUTY_DEFAULT_PERCENT - MOTOR_DUTY_MIN_PERCENT) * 100) / \
      (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT))
@@ -48,8 +48,8 @@ typedef struct {
     UINT8_T m2_dir;
     BOOL_T  m3_on;
     UINT16_T duration_ms;
-    BOOL_T  m1_boost;
-    BOOL_T  m2_boost;
+    BOOL_T  m1_strong;
+    BOOL_T  m2_strong;
 } motor_step_t;
 
 STATIC const motor_step_t s_bug_seq[BUG_SEQ_STEPS] = {
@@ -74,21 +74,14 @@ STATIC UINT16_T s_alt_bug_time_s = 60;
 
 STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg);
 
-STATIC UINT32_T app_motor_duty_get(VOID_T)
+STATIC UINT32_T app_motor_battery_boost_percent_get(VOID_T)
 {
-    UINT32_T base_percent;
-    UINT32_T duty_percent;
     INT32_T voltage;
     UINT32_T range;
     UINT32_T drop;
-    UINT32_T boost;
-
-    base_percent = MOTOR_DUTY_MIN_PERCENT +
-                   ((UINT32_T)s_stepless_percent *
-                    (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT)) / 100;
 
     if (app_charge_is_detected() || app_charge_is_full()) {
-        return MOTOR_PWM_DUTY_1 * base_percent;
+        return 0;
     }
 
     voltage = app_battery_get_voltage();
@@ -101,9 +94,19 @@ STATIC UINT32_T app_motor_duty_get(VOID_T)
 
     range = BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN;
     drop = (UINT32_T)(BATTERY_VOLTAGE_MAX - (UINT32_T)voltage);
-    boost = (drop * DUTY_BOOST_MAX) / range;
-    // TAL_PR_DEBUG("boost %d", boost);
-    duty_percent = base_percent + boost;
+    return (drop * DUTY_BOOST_MAX) / range;
+}
+
+STATIC UINT32_T app_motor_duty_get(VOID_T)
+{
+    UINT32_T base_percent;
+    UINT32_T duty_percent;
+
+    base_percent = MOTOR_DUTY_MIN_PERCENT +
+                   ((UINT32_T)s_stepless_percent *
+                    (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT)) / 100;
+
+    duty_percent = base_percent + app_motor_battery_boost_percent_get();
     if (duty_percent > 100) {
         duty_percent = 100;
     }
@@ -130,21 +133,20 @@ STATIC VOID_T app_motor_pair_set(TUYA_PWM_NUM_E for_ch, TUYA_PWM_NUM_E rev_ch, U
     }
 }
 
-STATIC VOID_T app_motor_boost_pair_duty(UINT32_T duty, const motor_step_t *step,
-                                        UINT32_T *m1_duty, UINT32_T *m2_duty)
+STATIC VOID_T app_motor_pull_pair_duty_get(UINT32_T duty, const motor_step_t *step,
+                                           UINT32_T *m1_duty, UINT32_T *m2_duty)
 {
-    UINT32_T max_duty = MOTOR_PWM_DUTY_1 * 100U;
-    UINT32_T boost_delta = MOTOR_PWM_DUTY_1 * BUG_PULL_BOOST_PERCENT;
+    UINT32_T strong_percent = BUG_PULL_STRONG_DUTY_PERCENT +
+                              app_motor_battery_boost_percent_get();
+    UINT32_T strong_duty;
 
-    if (boost_delta > max_duty) {
-        boost_delta = max_duty;
+    if (strong_percent > 100) {
+        strong_percent = 100;
     }
-    if ((step->m1_boost || step->m2_boost) && (duty + boost_delta > max_duty)) {
-        duty = max_duty - boost_delta;
-    }
+    strong_duty = MOTOR_PWM_DUTY_1 * strong_percent;
 
-    *m1_duty = step->m1_boost ? (duty + boost_delta) : duty;
-    *m2_duty = step->m2_boost ? (duty + boost_delta) : duty;
+    *m1_duty = step->m1_strong ? strong_duty : duty;
+    *m2_duty = step->m2_strong ? strong_duty : duty;
 }
 
 STATIC VOID_T app_motor_all_stop(VOID_T)
@@ -167,7 +169,7 @@ STATIC VOID_T app_motor_apply_step(const motor_step_t *step)
     UINT32_T m1_duty;
     UINT32_T m2_duty;
 
-    app_motor_boost_pair_duty(duty, step, &m1_duty, &m2_duty);
+    app_motor_pull_pair_duty_get(duty, step, &m1_duty, &m2_duty);
     TAL_PR_DEBUG("duty %d m1_duty %d m2_duty %d", duty, m1_duty, m2_duty);
 
     app_motor_pair_set(MOTOR_FOR_1, MOTOR_REV_1, step->m1_dir, m1_duty);
