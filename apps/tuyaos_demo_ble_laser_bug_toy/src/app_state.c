@@ -102,15 +102,24 @@ STATIC VOID_T app_state_work_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 VOID_T app_state_init(VOID_T)
 {
     tal_sw_timer_create(app_state_work_timeout_handler, NULL, &s_work_timer_id);
+    TUYA_GPIO_LEVEL_E level = TUYA_GPIO_LEVEL_LOW;
 
     s_machine_powered = TRUE;
-    s_app_powered = TRUE;
     s_charging = FALSE;
     s_charge_done = FALSE;
     s_low_voltage_lock = FALSE;
     s_run_active = FALSE;
-    s_dev_state = DEV_STATE_WORK;
-    app_state_start_work_timer(WORK_PERIOD_MS);
+    if (tal_gpio_read(USB_DET, &level) != OPRT_OK) {
+    }
+    if (level == TUYA_GPIO_LEVEL_LOW) {
+        s_app_powered = FALSE;
+        s_dev_state = DEV_STATE_STANDBY;
+    }else{
+        s_dev_state = DEV_STATE_WORK;
+        s_app_powered = TRUE;
+        app_state_start_work_timer(WORK_PERIOD_MS);
+    }
+
 
     TAL_PR_INFO("[state] initialized");
 }

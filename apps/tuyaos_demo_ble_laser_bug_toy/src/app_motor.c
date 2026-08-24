@@ -22,9 +22,9 @@
 #define BUG_PULL_REPEAT_COUNT  1
 #define BUG_PULL_STRONG_DUTY_PERCENT 90
 #define BUG_SLEEP_FINISH_MOTOR 1
-#define MOTOR_DUTY_MIN_PERCENT 20
-#define MOTOR_DUTY_MAX_PERCENT 40
-#define MOTOR_DUTY_DEFAULT_PERCENT 30
+#define MOTOR_DUTY_MIN_PERCENT 30
+#define MOTOR_DUTY_MAX_PERCENT 50
+#define MOTOR_DUTY_DEFAULT_PERCENT 40
 #define MOTOR_STEPLESS_DEFAULT_PERCENT \
     (((MOTOR_DUTY_DEFAULT_PERCENT - MOTOR_DUTY_MIN_PERCENT) * 100) / \
      (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT))
@@ -53,8 +53,8 @@ typedef struct {
 } motor_step_t;
 
 STATIC const motor_step_t s_bug_seq[BUG_SEQ_STEPS] = {
-    {MOTOR_DIR_FORWARD, MOTOR_DIR_FORWARD, FALSE, BUG_PULL_STEP_MAX_MS, TRUE,  FALSE},
-    {MOTOR_DIR_REVERSE, MOTOR_DIR_REVERSE, FALSE, BUG_PULL_STEP_MAX_MS, FALSE, TRUE},
+    {MOTOR_DIR_FORWARD, MOTOR_DIR_REVERSE, FALSE, BUG_PULL_STEP_MAX_MS, FALSE, TRUE},
+    {MOTOR_DIR_REVERSE, MOTOR_DIR_FORWARD, FALSE, BUG_PULL_STEP_MAX_MS, TRUE, FALSE},
 };
 
 STATIC game_mode_t s_game_mode = GAME_MODE_BUG_HUNT;
@@ -138,6 +138,7 @@ STATIC VOID_T app_motor_pull_pair_duty_get(UINT32_T duty, const motor_step_t *st
 {
     UINT32_T strong_percent = BUG_PULL_STRONG_DUTY_PERCENT +
                               app_motor_battery_boost_percent_get();
+    UINT32_T short_percent = app_motor_battery_boost_percent_get();
     UINT32_T strong_duty;
 
     if (strong_percent > 100) {
@@ -145,8 +146,17 @@ STATIC VOID_T app_motor_pull_pair_duty_get(UINT32_T duty, const motor_step_t *st
     }
     strong_duty = MOTOR_PWM_DUTY_1 * strong_percent;
 
-    *m1_duty = step->m1_strong ? strong_duty : duty;
-    *m2_duty = step->m2_strong ? strong_duty : duty;
+    if (step->m1_strong)
+    {
+        *m1_duty = strong_duty;
+        *m2_duty = duty + short_percent * MOTOR_PWM_DUTY_1;
+    }else{
+        *m1_duty = duty + short_percent * MOTOR_PWM_DUTY_1;
+        *m2_duty = strong_duty;
+    }
+
+    // *m1_duty = step->m1_strong ? strong_duty : duty;
+    // *m2_duty = step->m2_strong ? strong_duty : duty;
 }
 
 STATIC VOID_T app_motor_all_stop(VOID_T)
