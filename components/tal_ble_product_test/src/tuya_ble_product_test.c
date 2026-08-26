@@ -302,6 +302,7 @@ STATIC VOID_T tuya_ble_auc_enter(UINT8_T *para, UINT16_T len)
 
     /* if dev is binding, can't entry ftm mode */
     if (tuya_ble_current_para.sys_settings.bound_flag == 1) {
+        TAL_PR_INFO("TAL_BLE_EVT_READ_RX");
         TUYA_BLE_LOG_DEBUG("AUC ENTER, BUT DEV IS BINDING");
 
         tuya_ble_device_delay_ms(200);

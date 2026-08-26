@@ -349,6 +349,13 @@ STATIC VOID_T tuya_log_output_cb(IN CONST CHAR_T *str)
 STATIC VOID_T tuya_uart_irq_rx_cb(TUYA_UART_NUM_E port_id, VOID_T *buff, UINT16_T len)
 {
     if (port_id == TUYA_UART_NUM_0) {
+        UINT8_T* TEST = (UINT8_T*)buff;
+        for (size_t i = 0; i < len; i++)
+        {
+            tal_log_print_raw("%2x", TEST[i]);
+            /* code */
+        }
+        tal_log_print_raw("\r\n");
         tuya_ble_common_uart_receive_data(buff, len);
     } else {
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
@@ -432,6 +439,8 @@ OPERATE_RET tuya_init_second(VOID_T)
     return OPRT_OK;
 }
 
+#define SHOUQUAN 0
+
 OPERATE_RET tuya_init_third(VOID_T)
 {
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
@@ -481,8 +490,9 @@ OPERATE_RET tuya_init_third(VOID_T)
     app_key_init();
 
     /* 3. LED 指示灯 */
+    #if !SHOUQUAN
     app_led_init();
-
+    #endif
     /* 4. 电池监测（ADC+定时器） */
     app_battery_init();
 
@@ -526,11 +536,14 @@ STATIC VOID_T machine_power_on_cb(VOID_T)
 OPERATE_RET tuya_init_last(VOID_T)
 {
     // PB1 TX   PB7 RX
-    // tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
-
+    #if SHOUQUAN
+    tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
+    #endif
     tuya_ble_protocol_init();
 
-    // tal_uart_rx_reg_irq_cb(TUYA_UART_NUM_0, tuya_uart_irq_rx_cb);
+    #if SHOUQUAN
+    tal_uart_rx_reg_irq_cb(TUYA_UART_NUM_0, tuya_uart_irq_rx_cb);
+    #endif
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
     tal_sdk_test_init();
