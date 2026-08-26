@@ -9,7 +9,7 @@
  * 按键物理引脚：C1 (TUYA_GPIO_NUM_17)，低电平有效（按下=低）
  *
  * 行为：
- *   短按（<3s 松开）-> 开关机（切换低功耗模式）
+ *   短按（<3s 松开）-> 开关机（USB 插入时切换软件开关，否则切换低功耗模式）
  *   长按（>=3s 松开）-> 蓝牙恢复出厂设置
  *
  * 算法说明：
@@ -185,10 +185,18 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                         if (s_boot_tick_ms != 0 && (now_ms - s_boot_tick_ms) < 3000) {
                             TAL_PR_DEBUG("[key] short press ignored (within 3s of boot)");
                         } else {
-                            /* 短按松开 -> 进入低功耗 */
-                            TAL_PR_INFO("[key] short press release (%dms) -> toggle machine power",
-                                        press_duration);
-                            app_state_toggle_power();
+                            if (app_state_is_usb_inserted()) {
+                                /* USB 插入时短按只切换软件开关，不进入低功耗 */
+                                TAL_PR_INFO("[key] short press release (%dms) -> toggle app power",
+                                            press_duration);
+                                app_state_set_power(TRUE);
+                                app_state_set_app_power(!app_state_is_app_power_on());
+                            } else {
+                                /* 短按松开 -> 进入低功耗 */
+                                TAL_PR_INFO("[key] short press release (%dms) -> toggle machine power",
+                                            press_duration);
+                                app_state_toggle_power();
+                            }
                         }
                     }
 

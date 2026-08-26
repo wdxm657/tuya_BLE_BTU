@@ -32,6 +32,7 @@ BOOL_T app_state_is_machine_powered_on(VOID_T);
 BOOL_T app_state_set_app_power(BOOL_T on);
 BOOL_T app_state_is_app_power_on(VOID_T);
 BOOL_T app_state_is_powered_on(VOID_T);
+BOOL_T app_state_is_usb_inserted(VOID_T);
 
 VOID_T app_state_set_charging(BOOL_T charging);
 BOOL_T app_state_is_charging(VOID_T);

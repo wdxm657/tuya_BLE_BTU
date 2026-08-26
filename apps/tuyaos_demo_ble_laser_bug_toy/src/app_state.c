@@ -26,6 +26,17 @@ STATIC VOID_T (*s_machine_on_cb)(VOID_T) = NULL;
 STATIC VOID_T (*s_machine_off_cb)(VOID_T) = NULL;
 STATIC BOOL_T (*s_pre_sleep_cb)(VOID_T) = NULL;
 
+BOOL_T app_state_is_usb_inserted(VOID_T)
+{
+    TUYA_GPIO_LEVEL_E level = TUYA_GPIO_LEVEL_HIGH;
+
+    if (tal_gpio_read(USB_DET, &level) != OPRT_OK) {
+        return s_charging;
+    }
+
+    return level == TUYA_GPIO_LEVEL_LOW;
+}
+
 STATIC BOOL_T app_state_should_run(VOID_T)
 {
     return (s_machine_powered && s_app_powered && !s_low_voltage_lock && s_dev_state != DEV_STATE_SLEEP);
@@ -136,6 +147,13 @@ BOOL_T app_state_toggle_power(VOID_T)
 
 BOOL_T app_state_set_power(BOOL_T on)
 {
+    if (!on && app_state_is_usb_inserted()) {
+        TAL_PR_INFO("[state] usb inserted, switch app power off instead of low power");
+        s_charging = TRUE;
+        app_state_set_app_power(FALSE);
+        return s_machine_powered;
+    }
+
     if (s_machine_powered == on) {
         app_state_notify_run_if_needed();
         return s_machine_powered;

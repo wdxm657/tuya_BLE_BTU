@@ -23,8 +23,8 @@
 // FW_INFO
 //
 #define FIRMWARE_NAME           "tuyaos_demo_ble_laser_bug_toy"
-#define FIRMWARE_VERSION        "1.0.1"
-#define FIRMWARE_VERSION_HEX    0x00010001
+#define FIRMWARE_VERSION        "1.0.3"
+#define FIRMWARE_VERSION_HEX    0x00010003
 #define HARDWARE_VERSION        "0.1.0"
 #define HARDWARE_VERSION_HEX    0x00000100
 
