@@ -110,7 +110,6 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         }
         app_dp_set_value(g_cmd.dp_data, percent);
         app_motor_set_stepless_percent((UINT8_T)percent);
-        app_state_reset_work_cycle();
         break;
     }
     default:

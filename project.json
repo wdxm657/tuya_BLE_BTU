@@ -6,7 +6,7 @@
         "vendor": "tlsr825x_ble",
         "fw": {
             "name": "tuyaos_demo_ble_laser_bug_toy",
-            "ver": "1.0.3"
+            "ver": "1.0.4"
         },
         "sdk": {
             "libs": []
