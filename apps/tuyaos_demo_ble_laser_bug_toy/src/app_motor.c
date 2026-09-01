@@ -16,7 +16,7 @@
 
 #define BUG_SEQ_STEPS          2
 #define MOTOR_STEP_MS          1000
-#define BUG_PULL_STEP_MAX_MS   2000
+#define BUG_PULL_STEP_MAX_MS   3000
 #define BUG_PULL_STEP_MIN_MS   1000
 #define BUG_DIRECTION_STOP_MS  1000
 #define BUG_PULL_REPEAT_COUNT  1
@@ -31,7 +31,7 @@
 
 #define BATTERY_VOLTAGE_MIN    3500
 #define BATTERY_VOLTAGE_MAX    4200
-#define DUTY_BOOST_MAX         10
+#define DUTY_BOOST_MAX         0
 
 #if (BUG_SLEEP_FINISH_MOTOR == 1)
 #define BUG_SLEEP_FINISH_SEQ_INDEX  1
