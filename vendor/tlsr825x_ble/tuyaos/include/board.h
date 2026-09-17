@@ -80,10 +80,10 @@ extern unsigned int ota_program_offset;
 // #define BOARD_FLASH_MAC_START_ADDR              (0)
 // #endif
 #define APP_DATA_FLASH_ADDR 0x7F000
-#define LASER_BUG 1
+#define LASER_BUG 0
 #define CAT_STRING 0
 #define BLE_BALL 0
-#define FAQIUJI 0
+#define FAQIUJI 1
 
 #if LASER_BUG
 #ifndef BOARD_KEY_PIN
@@ -195,6 +195,7 @@ extern unsigned int ota_program_offset;
 #endif
 
 #if FAQIUJI
+#define TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE 1
 // PIN
 // #ifndef BOARD_POWER_ON_PIN
 // #define BOARD_POWER_ON_PIN                      (TUYA_GPIO_NUM_31) // D7 无用 测试引脚

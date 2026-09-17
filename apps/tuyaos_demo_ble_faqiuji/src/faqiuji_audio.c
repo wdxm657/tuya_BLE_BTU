@@ -101,8 +101,9 @@ OPERATE_RET faqiuji_audio_init(VOID_T)
     };
     if (ret != OPRT_OK) return ret;
 
-    audio_amic_init(AUDIO_8K);
+    //buffer_mic set must before audio_init !!!
     audio_config_mic_buf(sg_capture_buffer, sizeof(sg_capture_buffer));
+    audio_amic_init(AUDIO_8K);
     ret = tal_pwm_init(AUDIO_PWM_CH, &pwm_cfg);
     if (ret != OPRT_OK) return ret;
     ret = tkl_timer_init(AUDIO_TIMER_CH, &(TUYA_TIMER_BASE_CFG_T) {
