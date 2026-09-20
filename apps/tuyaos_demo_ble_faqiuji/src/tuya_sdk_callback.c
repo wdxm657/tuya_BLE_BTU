@@ -276,6 +276,28 @@ VOID_T tuya_ble_bulkdata_report_cb(UINT8_T* p_block_buf, UINT32_T block_length, 
 
 #endif
 
+STATIC VOID_T faqiuji_board_io_init(VOID_T)
+{
+    TUYA_GPIO_BASE_CFG_T flash_protect_cfg = {
+        .mode = TUYA_GPIO_PUSH_PULL,
+        .direct = TUYA_GPIO_OUTPUT,
+        .level = TUYA_GPIO_LEVEL_HIGH,
+    };
+    TUYA_GPIO_BASE_CFG_T output_off_cfg = {
+        .mode = TUYA_GPIO_PUSH_PULL,
+        .direct = TUYA_GPIO_OUTPUT,
+        .level = TUYA_GPIO_LEVEL_LOW,
+    };
+
+    /* Keep the external flash writable and audio amplifier disabled at boot. */
+    tal_gpio_init(NOR_FLASH_HOLD, &flash_protect_cfg);
+    tal_gpio_init(NOR_FLASH_WP, &flash_protect_cfg);
+    tal_gpio_init(SPK_CTRL, &output_off_cfg);
+    tal_gpio_init(SPK_POWER_CON, &output_off_cfg);
+    tal_gpio_init(LED_G, &output_off_cfg);
+    tal_gpio_init(LED_B, &output_off_cfg);
+}
+
 OPERATE_RET app_config_info_set(VOID_T)
 {
     tal_common_info_t tal_common_info   = {0};
@@ -328,6 +350,7 @@ OPERATE_RET tuya_init_second(VOID_T)
 OPERATE_RET tuya_init_third(VOID_T)
 {
     // GPIO 外设初始化
+    faqiuji_board_io_init();
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
     // TUYA_IIC_BASE_CFG_T iic_cfg = {
     //     .role = TUYA_IIC_MODE_MASTER,

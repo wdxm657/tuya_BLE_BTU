@@ -208,7 +208,7 @@ extern unsigned int ota_program_offset;
 
 #if (BOARD_ENABLE_LOG)
 #ifndef BOARD_LOG_TX_PIN
-// #define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_17) // C1 调试日志输出引脚
+#define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_17) // C1 调试日志输出引脚
 
 #endif
 #endif
