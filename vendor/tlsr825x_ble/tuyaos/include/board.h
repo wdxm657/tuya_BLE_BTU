@@ -80,10 +80,10 @@ extern unsigned int ota_program_offset;
 // #define BOARD_FLASH_MAC_START_ADDR              (0)
 // #endif
 #define APP_DATA_FLASH_ADDR 0x7F000
-#define LASER_BUG 1
+#define LASER_BUG 0
 #define CAT_STRING 0
 #define BLE_BALL 0
-#define FAQIUJI 0
+#define FAQIUJI 1
 
 #if LASER_BUG
 #ifndef BOARD_KEY_PIN
@@ -202,13 +202,13 @@ extern unsigned int ota_program_offset;
 // #endif
 
 #ifndef BOARD_KEY_PIN
-#define BOARD_KEY_PIN                           (TUYA_GPIO_NUM_16) // C0 按键
+// #define BOARD_KEY_PIN                           (TUYA_GPIO_NUM_16) // C0 按键
 
 #endif
 
 #if (BOARD_ENABLE_LOG)
 #ifndef BOARD_LOG_TX_PIN
-#define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_17) // C1 调试日志输出引脚
+// #define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_17) // C1 调试日志输出引脚
 
 #endif
 #endif
@@ -218,12 +218,20 @@ extern unsigned int ota_program_offset;
 #define NOR_FLASH_CCLK  TUYA_GPIO_NUM_31 // PD7
 #define NOR_FLASH_SDI   TUYA_GPIO_NUM_14 // PB6
 #define NOR_FLASH_SDO   TUYA_GPIO_NUM_15 // PB7
+#define NOR_FLASH_HOLD  TUYA_GPIO_NUM_27 // PD3
+#define NOR_FLASH_WP    TUYA_GPIO_NUM_12 // PB4
 
 #define SLAVE_MCU_TX TUYA_GPIO_NUM_9 //PB1 与控制外设的MCU通信
 #define SLAVE_MCU_RX TUYA_GPIO_NUM_0 //PA0 与控制外设的MCU通信
 
 #define ADC_AUDIO_IN  TUYA_GPIO_NUM_20 // PC4 ADC采样音频信号
 #define PWM_AUDIO_OUT TUYA_GPIO_NUM_18 // PC2 PWM输出音频信号
+#define SPK_CTRL      TUYA_GPIO_NUM_19 // PC3 音频芯片功放开关
+#define SPK_POWER_CON TUYA_GPIO_NUM_13 // PB5 音频芯片电源开关
+
+
+#define LED_G TUYA_GPIO_NUM_28 // 蓝牙指示灯绿色 PD4
+#define LED_B TUYA_GPIO_NUM_1  // 蓝牙指示灯蓝色 PA1
 
 #endif
 
