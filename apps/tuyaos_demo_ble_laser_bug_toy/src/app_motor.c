@@ -71,6 +71,9 @@ STATIC UINT8_T s_alt_phase = 0;
 STATIC UINT32_T s_alt_phase_elapsed_ms = 0;
 STATIC UINT16_T s_alt_laser_time_s = 60;
 STATIC UINT16_T s_alt_bug_time_s = 60;
+#if (APP_FACTORY_TEST == 1)
+STATIC BOOL_T s_factory_test_enabled = FALSE;
+#endif
 
 STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg);
 
@@ -260,6 +263,45 @@ STATIC UINT16_T app_motor_bug_pull_step_ms(VOID_T)
     return (UINT16_T)(BUG_PULL_STEP_MAX_MS - (((percent - 1) * range) / 99));
 }
 
+#if (APP_FACTORY_TEST == 1)
+STATIC UINT16_T app_motor_factory_test_tick(VOID_T)
+{
+    const motor_step_t *step = &s_bug_seq[s_seq_index];
+    UINT32_T duty = app_motor_duty_get();
+    UINT32_T m1_duty;
+    UINT32_T m2_duty;
+    UINT16_T duration_ms;
+
+    /* M1/M2 execute bug hunt while M3 and the laser execute laser chase. */
+    app_motor_pull_pair_duty_get(duty, step, &m1_duty, &m2_duty);
+    app_motor_pair_set(MOTOR_FOR_1, MOTOR_REV_1, step->m1_dir, m1_duty);
+    app_motor_pair_set(MOTOR_FOR_2, MOTOR_REV_2, step->m2_dir, m2_duty);
+    tal_pwm_duty_set(MOTOR_3, duty);
+    tal_gpio_write(LASER, TUYA_GPIO_LEVEL_HIGH);
+    s_motor_running = TRUE;
+
+    duration_ms = app_motor_bug_pull_step_ms();
+    s_seq_index++;
+    if (s_seq_index >= BUG_SEQ_STEPS) {
+        s_seq_index = 0;
+    }
+
+    return duration_ms;
+}
+
+STATIC VOID_T app_motor_factory_test_stop(VOID_T)
+{
+    if (s_motor_timer_id != NULL) {
+        tal_sw_timer_stop(s_motor_timer_id);
+    }
+    s_factory_test_enabled = FALSE;
+    s_motor_enabled = FALSE;
+    s_sleep_pending = FALSE;
+    app_motor_all_stop();
+    TAL_PR_INFO("[motor] factory test stopped");
+}
+#endif
+
 STATIC UINT16_T app_motor_bug_tick(VOID_T)
 {
     const motor_step_t *step;
@@ -286,6 +328,13 @@ STATIC UINT16_T app_motor_bug_tick(VOID_T)
 
 STATIC BOOL_T app_motor_pre_sleep(VOID_T)
 {
+#if (APP_FACTORY_TEST == 1)
+    if (s_factory_test_enabled) {
+        app_state_reset_work_cycle_for(WORK_PERIOD_MS);
+        return FALSE;
+    }
+#endif
+
     if (!s_motor_enabled || s_game_mode == GAME_MODE_SLEEP) {
         return TRUE;
     }
@@ -349,6 +398,17 @@ STATIC VOID_T app_motor_alternating_handler(VOID_T)
 STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg)
 {
     UINT16_T duration_ms;
+
+#if (APP_FACTORY_TEST == 1)
+    if (s_factory_test_enabled) {
+        duration_ms = app_motor_factory_test_tick();
+        if (duration_ms > 0) {
+            tal_sw_timer_start(s_motor_timer_id, duration_ms, TAL_TIMER_ONCE);
+        }
+        return;
+    }
+#endif
+
     if (!s_motor_enabled || s_game_mode == GAME_MODE_SLEEP) {
         app_motor_all_stop();
         return;
@@ -420,6 +480,9 @@ VOID_T app_motor_init(VOID_T)
     s_alt_phase_elapsed_ms = 0;
     s_alt_laser_time_s = 60;
     s_alt_bug_time_s = 60;
+#if (APP_FACTORY_TEST == 1)
+    s_factory_test_enabled = FALSE;
+#endif
     app_motor_all_stop();
     app_state_register_pre_sleep_cb(app_motor_pre_sleep);
 
@@ -557,6 +620,16 @@ UINT32_T app_motor_get_mode_timeout_ms(VOID_T)
 
 VOID_T app_motor_start(VOID_T)
 {
+#if (APP_FACTORY_TEST == 1)
+    if (s_factory_test_enabled) {
+        s_motor_enabled = TRUE;
+        if (s_motor_timer_id != NULL) {
+            app_motor_timer_handler(s_motor_timer_id, NULL);
+        }
+        return;
+    }
+#endif
+
     if (s_motor_enabled) {
         return;
     }
@@ -573,6 +646,13 @@ VOID_T app_motor_start(VOID_T)
 
 VOID_T app_motor_stop(VOID_T)
 {
+#if (APP_FACTORY_TEST == 1)
+    if (s_factory_test_enabled) {
+        app_motor_factory_test_stop();
+        return;
+    }
+#endif
+
     if (s_motor_timer_id != NULL) {
         tal_sw_timer_stop(s_motor_timer_id);
     }
@@ -585,3 +665,24 @@ BOOL_T app_motor_is_running(VOID_T)
 {
     return s_motor_running;
 }
+
+#if (APP_FACTORY_TEST == 1)
+BOOL_T app_motor_factory_test_toggle(VOID_T)
+{
+    if (s_factory_test_enabled) {
+        app_motor_factory_test_stop();
+        return FALSE;
+    }
+
+    s_factory_test_enabled = TRUE;
+    s_motor_enabled = TRUE;
+    s_game_mode = GAME_MODE_BUG_HUNT;
+    s_seq_index = 0;
+    s_bug_repeat_count = 0;
+    s_bug_pause_active = FALSE;
+    s_sleep_pending = FALSE;
+    app_motor_timer_handler(s_motor_timer_id, NULL);
+    TAL_PR_INFO("[motor] factory test started: laser chase + bug hunt");
+    return TRUE;
+}
+#endif

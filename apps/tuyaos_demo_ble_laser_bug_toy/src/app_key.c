@@ -11,6 +11,8 @@
  * 行为：
  *   短按（<3s 松开）-> 开关机（USB 插入时切换软件开关，否则切换低功耗模式）
  *   长按（>=3s 松开）-> 蓝牙恢复出厂设置
+ *   APP_FACTORY_TEST=1 时：按键确认按下 -> 同时运行激光追逐和虫子追逐，
+ *                          再次按键确认按下 -> 停止两种运动
  *
  * 算法说明：
  *   10ms 周期轮询 GPIO 电平，自稳定状态机处理去抖和长短按判定：
@@ -34,6 +36,7 @@
 
 #include "app_key.h"
 #include "app_state.h"
+#include "app_motor.h"
 
 /***********************************************************************
  ********************* constant ( macro and enum ) *********************
@@ -85,6 +88,11 @@ STATIC BOOL_T s_long_press_eligible = FALSE;
 /** 开机时刻的系统滴答（ms），用于屏蔽开机3s内的短按 */
 STATIC UINT32_T s_boot_tick_ms = 0;
 
+#if (APP_FACTORY_TEST == 1)
+/** 工厂测试模式下，本次按键动作已在确认按下时处理 */
+STATIC BOOL_T s_factory_test_handled = FALSE;
+#endif
+
 /***********************************************************************
  ********************* static functions *********************************
  **********************************************************************/
@@ -135,6 +143,14 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                     s_long_press_eligible = FALSE;
                     s_debounce_cnt = 0;
 
+#if (APP_FACTORY_TEST == 1)
+                    s_factory_test_handled = TRUE;
+                    app_motor_factory_test_toggle();
+                    app_state_set_power(TRUE);
+                    app_state_set_app_power(TRUE);
+                    TAL_PR_INFO("[key] factory test key press -> toggle motors");
+#endif
+
                     TAL_PR_DEBUG("[key] press confirmed");
                 }
             } else {
@@ -171,6 +187,11 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                     now_ms = tal_system_get_millisecond();
                     press_duration = now_ms - s_press_tick_ms;
 
+#if (APP_FACTORY_TEST == 1)
+                    if (s_factory_test_handled) {
+                        TAL_PR_DEBUG("[key] factory test key release");
+                    } else
+#endif
                     if (s_long_press_eligible || press_duration >= KEY_LONG_PRESS_MS) {
                         /* 长按松开 -> 进入配对模式 */
                         TAL_PR_INFO("[key] long press release (%dms) -> pairing",
@@ -204,6 +225,9 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                     s_key_state = KEY_STATE_IDLE;
                     s_debounce_cnt = 0;
                     s_long_press_eligible = FALSE;
+#if (APP_FACTORY_TEST == 1)
+                    s_factory_test_handled = FALSE;
+#endif
                 }
             } else {
                 /* 释放去抖中电平又变回 Low → 视为抖动，回退 PRESSED */
@@ -245,6 +269,9 @@ VOID_T app_key_init(VOID_T)
     s_debounce_cnt       = 0;
     s_press_tick_ms      = 0;
     s_long_press_eligible = FALSE;
+#if (APP_FACTORY_TEST == 1)
+    s_factory_test_handled = FALSE;
+#endif
     s_boot_tick_ms       = tal_system_get_millisecond();
 
     TAL_PR_INFO("[key] custom driver initialized (poll %dms), pin %d",

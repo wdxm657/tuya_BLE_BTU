@@ -9,6 +9,10 @@
 #include "tuya_cloud_types.h"
 #include "tal_pwm.h"
 
+#ifndef APP_FACTORY_TEST
+#define APP_FACTORY_TEST 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -47,6 +51,10 @@ UINT32_T app_motor_get_mode_timeout_ms(VOID_T);
 VOID_T app_motor_start(VOID_T);
 VOID_T app_motor_stop(VOID_T);
 BOOL_T app_motor_is_running(VOID_T);
+
+#if (APP_FACTORY_TEST == 1)
+BOOL_T app_motor_factory_test_toggle(VOID_T);
+#endif
 
 #ifdef __cplusplus
 }
