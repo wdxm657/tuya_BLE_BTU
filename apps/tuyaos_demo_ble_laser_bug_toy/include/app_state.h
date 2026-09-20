@@ -47,6 +47,8 @@ VOID_T app_state_reset_work_cycle_for(UINT32_T timeout_ms);
 VOID_T app_state_enter_sleep(VOID_T);
 VOID_T app_state_process(VOID_T);
 UINT8_T app_state_get_dp_enum(VOID_T);
+VOID_T app_state_set_factory_test(BOOL_T enabled);
+BOOL_T app_state_is_factory_test(VOID_T);
 
 VOID_T app_state_register_change_cb(VOID_T (*cb)(dev_state_t old_state, dev_state_t new_state));
 VOID_T app_state_register_power_cb(VOID_T (*on_cb)(VOID_T), VOID_T (*off_cb)(VOID_T));

@@ -16,6 +16,7 @@ STATIC BOOL_T s_app_powered = TRUE;
 STATIC BOOL_T s_charging = FALSE;
 STATIC BOOL_T s_charge_done = FALSE;
 STATIC BOOL_T s_low_voltage_lock = FALSE;
+STATIC BOOL_T s_factory_test = FALSE;
 STATIC TIMER_ID s_work_timer_id = NULL;
 STATIC BOOL_T s_run_active = FALSE;
 
@@ -100,7 +101,7 @@ STATIC VOID_T app_state_stop_cycle_timers(VOID_T)
 
 STATIC VOID_T app_state_work_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 {
-    if (!s_machine_powered || !s_app_powered || s_low_voltage_lock) {
+    if (s_factory_test || !s_machine_powered || !s_app_powered || s_low_voltage_lock) {
         return;
     }
     if (s_pre_sleep_cb != NULL && !s_pre_sleep_cb()) {
@@ -119,6 +120,7 @@ VOID_T app_state_init(VOID_T)
     s_charging = FALSE;
     s_charge_done = FALSE;
     s_low_voltage_lock = FALSE;
+    s_factory_test = FALSE;
     s_run_active = FALSE;
     if (tal_gpio_read(USB_DET, &level) != OPRT_OK) {
     }
@@ -257,6 +259,23 @@ BOOL_T app_state_is_low_voltage_locked(VOID_T)
     return s_low_voltage_lock;
 }
 
+VOID_T app_state_set_factory_test(BOOL_T enabled)
+{
+    s_factory_test = enabled;
+    TAL_PR_INFO("[state] factory test=%d", enabled);
+
+    if (enabled) {
+        app_state_stop_cycle_timers();
+    } else if (s_machine_powered && s_app_powered && !s_low_voltage_lock) {
+        app_state_start_work_timer(WORK_PERIOD_MS);
+    }
+}
+
+BOOL_T app_state_is_factory_test(VOID_T)
+{
+    return s_factory_test;
+}
+
 VOID_T app_state_reset_work_cycle(VOID_T)
 {
     if (!s_machine_powered || !s_app_powered || s_low_voltage_lock) {
@@ -277,7 +296,7 @@ VOID_T app_state_reset_work_cycle_for(UINT32_T timeout_ms)
 
 VOID_T app_state_enter_sleep(VOID_T)
 {
-    if (!s_machine_powered || !s_app_powered || s_low_voltage_lock) {
+    if (s_factory_test || !s_machine_powered || !s_app_powered || s_low_voltage_lock) {
         return;
     }
     if (s_pre_sleep_cb != NULL && !s_pre_sleep_cb()) {

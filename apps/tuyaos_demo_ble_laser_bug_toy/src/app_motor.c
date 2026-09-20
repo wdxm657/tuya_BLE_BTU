@@ -297,6 +297,7 @@ STATIC VOID_T app_motor_factory_test_stop(VOID_T)
     s_factory_test_enabled = FALSE;
     s_motor_enabled = FALSE;
     s_sleep_pending = FALSE;
+    app_state_set_factory_test(FALSE);
     app_motor_all_stop();
     TAL_PR_INFO("[motor] factory test stopped");
 }
@@ -675,6 +676,7 @@ BOOL_T app_motor_factory_test_toggle(VOID_T)
     }
 
     s_factory_test_enabled = TRUE;
+    app_state_set_factory_test(TRUE);
     s_motor_enabled = TRUE;
     s_game_mode = GAME_MODE_BUG_HUNT;
     s_seq_index = 0;
