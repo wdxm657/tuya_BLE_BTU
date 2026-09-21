@@ -12,6 +12,7 @@ extern "C" {
 #define DP_ID_SOUND_MODE   14
 #define DP_ID_SOUND        15
 #define DP_ID_PLAY         16
+#define DP_ID_VOLUME       30
 #define DP_ID_BATTERY      18
 #define DP_ID_FAULT        20
 #define DP_ID_MOVEMENT_LEVEL 22
@@ -32,6 +33,7 @@ extern UINT32_T  g_sn;
 
 OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size);
 OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T *buf, UINT32_T size);
+VOID_T app_dp_process_audio_events(VOID_T);
 
 #ifdef __cplusplus
 }

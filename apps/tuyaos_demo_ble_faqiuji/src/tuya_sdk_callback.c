@@ -292,8 +292,8 @@ STATIC VOID_T faqiuji_board_io_init(VOID_T)
     /* Keep the external flash writable and audio amplifier disabled at boot. */
     tal_gpio_init(NOR_FLASH_HOLD, &high_cfg);
     tal_gpio_init(NOR_FLASH_WP, &high_cfg);
-    tal_gpio_init(SPK_CTRL, &low_cfg);
-    tal_gpio_init(SPK_POWER_CON, &low_cfg);
+    tal_gpio_init(SPK_CTRL, &high_cfg);
+    tal_gpio_init(SPK_POWER_CON, &high_cfg);
     tal_gpio_init(LED_G, &low_cfg);
     // tal_gpio_init(LED_B, &low_cfg);
 }
@@ -415,6 +415,7 @@ OPERATE_RET tuya_main_loop(VOID_T)
     tuya_ble_main_tasks_exec();
 #endif
     faqiuji_audio_task();
+    app_dp_process_audio_events();
 //    tal_watchdog_refresh();
     
     return (tuya_ble_sleep_allowed_check() == TRUE);

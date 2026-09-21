@@ -24,7 +24,7 @@ extern "C" {
 //FIR - firmware, FVER - firmware version, HVER - hardware version
 #define TY_DEVICE_NAME        "TyOS"
 // #define TY_DEVICE_PID         "3aubjk7p" //oem no use
-#define TY_DEVICE_PID         "lsgwzi8s"
+#define TY_DEVICE_PID         "li6otjlw"
 
 #define SWITCH_TY 2
 

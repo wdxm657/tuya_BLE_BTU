@@ -52,11 +52,16 @@ STATIC UINT8_T app_sound_mode_to_file(CONST UINT8_T *data, UINT16_T len)
 
 STATIC VOID_T app_audio_stop_current(VOID_T)
 {
-    if (faqiuji_audio_is_recording()) {
-        faqiuji_audio_record_stop();
-    } else if (faqiuji_audio_is_playing()) {
+    if (faqiuji_audio_is_playing()) {
         faqiuji_audio_stop();
     }
+}
+
+STATIC UINT8_T app_dp_type(UINT8_T dp_id)
+{
+    if (dp_id == DP_ID_SOUND_MODE) return DT_ENUM;
+    if (dp_id == DP_ID_VOLUME) return DT_VALUE;
+    return DT_BOOL;
 }
 
 /***********************************************************************
@@ -82,25 +87,47 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
 
     switch (g_cmd.dp_id) {
         case DP_ID_SOUND_MODE:
+            TAL_PR_INFO("DP SOUND_MODE: len=%u type=%u first=%u",
+                        g_cmd.dp_data_len, g_cmd.dp_type,
+                        g_cmd.dp_data_len ? g_cmd.dp_data[0] : 0);
             app_audio_stop_current();
-            faqiuji_audio_play_start(app_sound_mode_to_file(g_cmd.dp_data, g_cmd.dp_data_len));
+            {
+                UINT8_T file_id = app_sound_mode_to_file(g_cmd.dp_data, g_cmd.dp_data_len);
+                OPERATE_RET audio_ret = faqiuji_audio_preview_start(file_id);
+                TAL_PR_INFO("DP SOUND_MODE: start file=%u ret=%d", file_id, audio_ret);
+            }
             break;
         case DP_ID_SOUND:
-            if (app_dp_is_true(g_cmd.dp_data, g_cmd.dp_data_len)) {
-                app_audio_stop_current();
-                faqiuji_audio_record_start(FAQIUJI_AUDIO_USER_RECORDING);
-            } else if (faqiuji_audio_is_recording()) {
-                faqiuji_audio_record_stop();
+            TAL_PR_ERR("DP SOUND: recording disabled in playback-only mode");
+            if (g_cmd.dp_data_len > 0) {
+                g_cmd.dp_data[0] = 0;
             }
             break;
         case DP_ID_PLAY:
             if (app_dp_is_true(g_cmd.dp_data, g_cmd.dp_data_len)) {
                 app_audio_stop_current();
-                faqiuji_audio_play_start(FAQIUJI_AUDIO_USER_RECORDING);
+                if (faqiuji_audio_play_start(FAQIUJI_AUDIO_USER_FILE_ID) != OPRT_OK) {
+                    g_cmd.dp_data[0] = 0;
+                }
             } else if (faqiuji_audio_is_playing()) {
                 faqiuji_audio_stop();
+                /* The command already reports false; consume the internal
+                 * event so it is not reported a second time. */
+                faqiuji_audio_take_play_finished();
             }
             break;
+        case DP_ID_VOLUME: {
+            UINT32_T volume;
+            if (g_cmd.dp_data_len != DT_VALUE_LEN) return OPRT_INVALID_PARM;
+            volume = ((UINT32_T)g_cmd.dp_data[0] << 24) |
+                     ((UINT32_T)g_cmd.dp_data[1] << 16) |
+                     ((UINT32_T)g_cmd.dp_data[2] << 8) |
+                     g_cmd.dp_data[3];
+            if (volume < 1) volume = 1;
+            if (volume > 100) volume = 100;
+            faqiuji_audio_set_volume((UINT8_T)volume);
+            break;
+        }
         default:
             break;
     }
@@ -113,7 +140,7 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
 
 OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T* buf, UINT32_T size)
 {
-    UINT8_T dp_type = g_cmd.dp_type;
+    UINT8_T dp_type = app_dp_type(dp_id);
     if (buf == NULL || size > sizeof(g_rsp.dp_data)) {
         return OPRT_INVALID_PARM;
     }
@@ -130,4 +157,13 @@ OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T* buf, UINT32_T size)
     TAL_PR_HEXDUMP_INFO("dp_rsp", (VOID_T*)&g_rsp, rsp_len);
 
     return tuya_ble_dp_data_send(g_sn++, DP_SEND_TYPE_ACTIVE, DP_SEND_FOR_CLOUD_PANEL, DP_SEND_WITHOUT_RESPONSE, (VOID_T*)&g_rsp, rsp_len);
+}
+
+VOID_T app_dp_process_audio_events(VOID_T)
+{
+    UINT8_T value = 0;
+
+    if (faqiuji_audio_take_play_finished()) {
+        app_dp_report(DP_ID_PLAY, &value, DT_BOOL_LEN);
+    }
 }

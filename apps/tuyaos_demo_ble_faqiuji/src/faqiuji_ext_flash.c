@@ -259,19 +259,37 @@ OPERATE_RET faqiuji_ext_flash_erase(UINT32_T addr, UINT32_T len)
 
 OPERATE_RET faqiuji_ext_flash_audio_erase(UINT8_T file_id)
 {
-    if (file_id >= FAQIUJI_AUDIO_SLOT_COUNT) return OPRT_INVALID_PARM;
-    return faqiuji_ext_flash_erase(FAQIUJI_AUDIO_BASE + file_id * FAQIUJI_AUDIO_SLOT_SIZE,
-                                   FAQIUJI_AUDIO_SLOT_SIZE);
+    if (file_id != FAQIUJI_AUDIO_USER_FILE_ID) return OPRT_INVALID_PARM;
+    return faqiuji_ext_flash_erase(FAQIUJI_AUDIO_USER_BASE, FAQIUJI_AUDIO_SLOT_SIZE);
 }
 
 OPERATE_RET faqiuji_ext_flash_audio_read(UINT8_T file_id, UINT32_T offset, UINT8_T *buf, UINT32_T len)
 {
-    if (file_id >= FAQIUJI_AUDIO_SLOT_COUNT || offset + len > FAQIUJI_AUDIO_SLOT_SIZE) return OPRT_INVALID_PARM;
-    return faqiuji_ext_flash_read(FAQIUJI_AUDIO_BASE + file_id * FAQIUJI_AUDIO_SLOT_SIZE + offset, buf, len);
+    UINT32_T base;
+    UINT32_T size;
+
+    if (file_id == FAQIUJI_AUDIO_FACTORY_SOUND_1) {
+        base = FAQIUJI_AUDIO_FACTORY_1_BASE;
+        size = FAQIUJI_AUDIO_FACTORY_1_SIZE;
+    } else if (file_id == FAQIUJI_AUDIO_FACTORY_SOUND_2) {
+        base = FAQIUJI_AUDIO_FACTORY_2_BASE;
+        size = FAQIUJI_AUDIO_FACTORY_2_SIZE;
+    } else if (file_id == FAQIUJI_AUDIO_USER_FILE_ID) {
+        base = FAQIUJI_AUDIO_USER_BASE;
+        size = FAQIUJI_AUDIO_SLOT_SIZE;
+    } else {
+        return OPRT_INVALID_PARM;
+    }
+
+    if (offset > size || len > size - offset) return OPRT_INVALID_PARM;
+    return faqiuji_ext_flash_read(base + offset, buf, len);
 }
 
 OPERATE_RET faqiuji_ext_flash_audio_write(UINT8_T file_id, UINT32_T offset, CONST UINT8_T *buf, UINT32_T len)
 {
-    if (file_id >= FAQIUJI_AUDIO_SLOT_COUNT || offset + len > FAQIUJI_AUDIO_SLOT_SIZE) return OPRT_INVALID_PARM;
-    return faqiuji_ext_flash_write(FAQIUJI_AUDIO_BASE + file_id * FAQIUJI_AUDIO_SLOT_SIZE + offset, buf, len);
+    if (file_id != FAQIUJI_AUDIO_USER_FILE_ID ||
+        offset > FAQIUJI_AUDIO_SLOT_SIZE || len > FAQIUJI_AUDIO_SLOT_SIZE - offset) {
+        return OPRT_INVALID_PARM;
+    }
+    return faqiuji_ext_flash_write(FAQIUJI_AUDIO_USER_BASE + offset, buf, len);
 }
