@@ -14,6 +14,8 @@
 #define FLASH_CMD_RDID 0x9F
 #define FLASH_SPI      TUYA_SPI_NUM_0
 #define FLASH_TEST_ADDR (FAQIUJI_FLASH_SIZE - FAQIUJI_FLASH_SECTOR)
+#define FLASH_FIXED_TEST_ADDR_0 0x000000UL
+#define FLASH_FIXED_TEST_ADDR_1 0x00000CUL
 
 STATIC BOOL_T sg_flash_ready = FALSE;
 
@@ -72,14 +74,45 @@ STATIC BOOL_T flash_jedec_id_valid(CONST UINT8_T *id)
            !(id[0] == 0xFF && id[1] == 0xFF && id[2] == 0xFF);
 }
 
+STATIC OPERATE_RET flash_check_fixed_data(UINT32_T addr, CONST UINT8_T *expect, UINT32_T len)
+{
+    UINT8_T actual[4] = {0};
+    OPERATE_RET ret;
+
+    if (expect == NULL || len == 0 || len > sizeof(actual)) return OPRT_INVALID_PARM;
+
+    ret = faqiuji_ext_flash_read(addr, actual, len);
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("GT25Q16 fixed self test read addr 0x%06x err: %d", addr, ret);
+        return ret;
+    }
+
+    if (memcmp(expect, actual, len) != 0) {
+        TAL_PR_HEXDUMP_INFO("GT25Q16 fixed self test expect", expect, len);
+        TAL_PR_HEXDUMP_INFO("GT25Q16 fixed self test actual", actual, len);
+        return OPRT_COM_ERROR;
+    }
+
+    TAL_PR_INFO("GT25Q16 fixed self test pass addr: 0x%06x", addr);
+    return OPRT_OK;
+}
+
 STATIC OPERATE_RET flash_power_on_self_test(VOID_T)
 {
+    CONST UINT8_T fixed_data_0[] = {0x1D, 0xFB, 0x65, 0xF9};
+    CONST UINT8_T fixed_data_1[] = {0x36, 0x04, 0x89, 0xFF};
     CONST UINT8_T test_pattern[] = {
         0x46, 0x41, 0x51, 0x49, 0x55, 0x4A, 0x49, 0x21,
         0xA5, 0x5A, 0xC3, 0x3C, 0x12, 0x34, 0x56, 0x78,
     };
     UINT8_T read_buf[sizeof(test_pattern)] = {0};
     OPERATE_RET ret;
+
+    ret = flash_check_fixed_data(FLASH_FIXED_TEST_ADDR_0, fixed_data_0, sizeof(fixed_data_0));
+    if (ret != OPRT_OK) return ret;
+
+    ret = flash_check_fixed_data(FLASH_FIXED_TEST_ADDR_1, fixed_data_1, sizeof(fixed_data_1));
+    if (ret != OPRT_OK) return ret;
 
     TAL_PR_INFO("GT25Q16 self test addr: 0x%06x", FLASH_TEST_ADDR);
 
