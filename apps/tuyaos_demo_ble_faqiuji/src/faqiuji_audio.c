@@ -16,10 +16,18 @@
 #define AUDIO_PLAY_BUFFER_SIZE 2048
 #define AUDIO_PWM_CH TUYA_PWM_NUM_0
 #define AUDIO_TIMER_CH TUYA_TIMER_NUM_0
-#define AUDIO_PWM_FREQUENCY 62500UL
+/*
+ * 48 MHz system clock gives a 4 MHz PWM clock after the SDK /12 divider.
+ * 31.25 kHz keeps the carrier above audible range while preserving 128 PWM
+ * duty steps, which is the best quality/resolution tradeoff for 8 kHz PCM on
+ * this plain-PWM output path.
+ */
+#define AUDIO_PWM_FREQUENCY 31250UL
 #define AUDIO_PWM_CLOCK (CLOCK_SYS_CLOCK_HZ / 12UL)
-#define AUDIO_SAMPLE_PERIOD_US 62
+#define AUDIO_SAMPLE_PERIOD_US 125
 #define AUDIO_PREVIEW_MAX_MS 20000UL
+#define SPK_CTRL_LOW_HOLD_MS 100UL
+#define SPK_CTRL_TOGGLE_DELAY_US 10UL
 
 typedef enum {
     AUDIO_STATE_IDLE = 0,
@@ -42,7 +50,7 @@ STATIC volatile UINT32_T sg_play_isr_count;
 STATIC volatile UINT32_T sg_play_isr_error_count;
 STATIC UINT32_T sg_play_last_log_count;
 STATIC FAQIUJI_AUDIO_PLAY_MODE_E sg_play_mode = AUDIO_PLAY_MODE_FULL;
-STATIC UINT8_T sg_volume = 100;
+STATIC UINT8_T sg_volume = 80;
 STATIC TIMER_ID sg_preview_timer = NULL;
 STATIC BOOL_T sg_play_finished_report = FALSE;
 STATIC FAQIUJI_AUDIO_STATE_E sg_audio_state = AUDIO_STATE_IDLE;
@@ -51,17 +59,47 @@ STATIC UINT32_T sg_play_offset = AUDIO_HEADER_SIZE;
 STATIC UINT32_T sg_play_data_start = AUDIO_HEADER_SIZE;
 STATIC UINT32_T sg_play_size = 0;
 STATIC UINT16_T sg_pwm_period_ticks = 0;
+STATIC volatile UINT32_T sg_pwm_quant_error;
 
 STATIC VOID_T faqiuji_audio_play_task(VOID_T);
 OPERATE_RET faqiuji_audio_stop(VOID_T);
 
 STATIC VOID_T faqiuji_audio_amp_on(VOID_T)
 {
-    TAL_PR_INFO("AUDIO AMP: power on pin=%d", SPK_POWER_CON);
+    /*
+     * The amplifier selects class-D anti-pop mode 4 when SPK_CTRL stays low
+     * for at least 100 ms, then toggles five times within 100 us and remains
+     * high. sleep_us() runs from RAM and is suitable for this short sequence.
+     */
+    TAL_PR_INFO("AUDIO AMP: prepare anti-pop mode 4");
     tal_gpio_write(SPK_POWER_CON, TUYA_GPIO_LEVEL_HIGH);
-    tkl_system_delay(2);
-    TAL_PR_INFO("AUDIO AMP: ctrl on pin=%d", SPK_CTRL);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
+    tkl_system_delay(SPK_CTRL_LOW_HOLD_MS);
+
+    // 5 times up down per 10us
     tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
+    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
+
+    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
+    TAL_PR_INFO("AUDIO AMP: anti-pop mode 4 selected");
 }
 
 STATIC VOID_T faqiuji_audio_amp_off(VOID_T)
@@ -132,7 +170,9 @@ STATIC _attribute_ram_code_ VOID_T faqiuji_audio_timer_cb(VOID_T *args)
     sample = (UINT16_T)sg_play_buffer[buffer_index][sg_play_sample_pos];
     sample |= (UINT16_T)sg_play_buffer[buffer_index][sg_play_sample_pos + 1] << 8;
     sample = (UINT16_T)(32768L + (((INT32_T)(INT16_T)sample * sg_volume) / 100));
-    duty_ticks = ((UINT32_T)sample * sg_pwm_period_ticks) / 65535UL;
+    duty_ticks = (UINT32_T)sample * sg_pwm_period_ticks + sg_pwm_quant_error;
+    sg_pwm_quant_error = duty_ticks % 65535UL;
+    duty_ticks /= 65535UL;
     pwm_set_cmp((pwm_id)AUDIO_PWM_CH, (UINT16_T)duty_ticks);
     sg_play_sample_pos += 2;
 }
@@ -158,7 +198,7 @@ OPERATE_RET faqiuji_audio_init(VOID_T)
     if (ret != OPRT_OK) return ret;
     TUYA_PWM_BASE_CFG_T pwm_cfg = {
         .frequency = AUDIO_PWM_FREQUENCY,
-        .duty = 50,
+        .duty = 0,
         .polarity = TUYA_PWM_POSITIVE,
     };
     /*
@@ -187,6 +227,7 @@ OPERATE_RET faqiuji_audio_init(VOID_T)
     sg_play_isr_count = 0;
     sg_play_isr_error_count = 0;
     sg_play_last_log_count = 0;
+    sg_pwm_quant_error = 0;
     TAL_PR_INFO("AUDIO INIT: done, amp pins power=%d ctrl=%d",
                 SPK_POWER_CON, SPK_CTRL);
     return OPRT_OK;
@@ -196,6 +237,8 @@ OPERATE_RET faqiuji_audio_init(VOID_T)
 STATIC OPERATE_RET faqiuji_audio_play_begin(UINT8_T file_id,
                                             FAQIUJI_AUDIO_PLAY_MODE_E mode)
 {
+    // faqiuji_audio_amp_on();
+    // return OPRT_OK;
     UINT8_T header[AUDIO_HEADER_SIZE];
     OPERATE_RET ret;
     TAL_PR_INFO("AUDIO PLAY: begin file=%d mode=%d state=%d",
@@ -236,6 +279,7 @@ STATIC OPERATE_RET faqiuji_audio_play_begin(UINT8_T file_id,
     sg_play_isr_count = 0;
     sg_play_isr_error_count = 0;
     sg_play_last_log_count = 0;
+    sg_pwm_quant_error = 0;
     TAL_PR_INFO("AUDIO PLAY: buffers reset offset=%u data_start=%u size=%u",
                 sg_play_offset, sg_play_data_start, sg_play_size);
     faqiuji_audio_play_task();
@@ -305,6 +349,7 @@ OPERATE_RET faqiuji_audio_stop(VOID_T)
         tkl_timer_stop(AUDIO_TIMER_CH);
         pwm_set_cmp((pwm_id)AUDIO_PWM_CH, 0);
         tal_pwm_stop(AUDIO_PWM_CH);
+        sg_pwm_quant_error = 0;
         faqiuji_audio_amp_off();
         if (sg_play_mode == AUDIO_PLAY_MODE_FULL) {
             sg_play_finished_report = TRUE;
@@ -333,6 +378,7 @@ STATIC VOID_T faqiuji_audio_play_task(VOID_T)
         sg_play_finished = FALSE;
         sg_play_refill_pending = FALSE;
         tal_pwm_stop(AUDIO_PWM_CH);
+        sg_pwm_quant_error = 0;
         faqiuji_audio_amp_off();
         sg_play_finished_report = TRUE;
         return;

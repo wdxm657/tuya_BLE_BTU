@@ -223,7 +223,7 @@ extern unsigned int ota_program_offset;
 
 // 已经使用了内置音频放大的C0,C1用数字音频 PC4 ADC采样暂时不用
 // #define ADC_AUDIO_IN  TUYA_GPIO_NUM_20 // PC4 ADC采样音频信号
-#define SPK_CTRL      TUYA_GPIO_NUM_19 // PC3 音频芯片功放开关
+#define SPK_CTRL      TUYA_GPIO_NUM_19 // PC3 音频芯片功放功能控制
 #define SPK_POWER_CON TUYA_GPIO_NUM_13 // PB5 音频芯片电源开关
 
 

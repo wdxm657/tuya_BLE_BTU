@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define FAQIUJI_AUDIO_SAMPLE_RATE 16000
+#define FAQIUJI_AUDIO_SAMPLE_RATE 8000
 #define FAQIUJI_AUDIO_CHANNELS    1
 #define FAQIUJI_AUDIO_BITS       16
 OPERATE_RET faqiuji_audio_init(VOID_T);

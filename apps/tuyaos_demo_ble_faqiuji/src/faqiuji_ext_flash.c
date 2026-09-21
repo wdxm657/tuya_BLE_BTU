@@ -184,7 +184,7 @@ OPERATE_RET faqiuji_ext_flash_init(VOID_T)
     }
 
     sg_flash_ready = TRUE;
-    ret = flash_power_on_self_test();
+    // ret = flash_power_on_self_test();
     if (ret != OPRT_OK) {
         sg_flash_ready = FALSE;
         return ret;
