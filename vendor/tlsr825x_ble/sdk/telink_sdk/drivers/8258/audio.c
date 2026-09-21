@@ -124,10 +124,10 @@ void audio_amic_init(AudioRate_Typedef Audio_Rate)
 	//PGA0 left  C0/C1 ON,
 	//PGA1 right C2/C3 OFF
 
-	SET_PGA_LEFT_P_AIN(PGA_AIN_C1);
+	SET_PGA_LEFT_P_AIN(PGA_AIN_C0);
 	SET_PGA_LEFT_N_AIN(PGA_AIN_C1);
-	SET_PGA_RIGHT_P_AIN(PGA_AIN_C0);
-	SET_PGA_RIGHT_N_AIN(PGA_AIN_C0);
+	// SET_PGA_RIGHT_P_AIN(PGA_AIN_C2);
+	// SET_PGA_RIGHT_N_AIN(PGA_AIN_C3);
 
 	//
 	adc_set_left_boost_bias(GAIN_STAGE_BIAS_PER75);

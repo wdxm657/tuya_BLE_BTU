@@ -208,7 +208,7 @@ extern unsigned int ota_program_offset;
 
 #if (BOARD_ENABLE_LOG)
 #ifndef BOARD_LOG_TX_PIN
-#define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_17) // C1 调试日志输出引脚
+#define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_28) // C4 调试日志输出引脚
 
 #endif
 #endif
@@ -221,17 +221,15 @@ extern unsigned int ota_program_offset;
 #define NOR_FLASH_HOLD  TUYA_GPIO_NUM_27 // PD3
 #define NOR_FLASH_WP    TUYA_GPIO_NUM_12 // PB4
 
-#define SLAVE_MCU_TX TUYA_GPIO_NUM_9 //PB1 与控制外设的MCU通信
-#define SLAVE_MCU_RX TUYA_GPIO_NUM_0 //PA0 与控制外设的MCU通信
-
-#define ADC_AUDIO_IN  TUYA_GPIO_NUM_20 // PC4 ADC采样音频信号
-#define PWM_AUDIO_OUT TUYA_GPIO_NUM_18 // PC2 PWM输出音频信号
+// 已经使用了内置音频放大的C0,C1用数字音频 PC4 ADC采样暂时不用
+// #define ADC_AUDIO_IN  TUYA_GPIO_NUM_20 // PC4 ADC采样音频信号
 #define SPK_CTRL      TUYA_GPIO_NUM_19 // PC3 音频芯片功放开关
 #define SPK_POWER_CON TUYA_GPIO_NUM_13 // PB5 音频芯片电源开关
 
 
-#define LED_G TUYA_GPIO_NUM_28 // 蓝牙指示灯绿色 PD4
-#define LED_B TUYA_GPIO_NUM_1  // 蓝牙指示灯蓝色 PA1
+#define LED_G TUYA_GPIO_NUM_1   // 蓝牙指示灯绿色 PD4
+// LED IO暂时给调试日志输出使用
+// #define LED_B TUYA_GPIO_NUM_28  // 蓝牙指示灯蓝色 PA1
 
 #endif
 

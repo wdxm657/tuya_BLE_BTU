@@ -94,6 +94,7 @@ STATIC UINT32_T get_u32(CONST UINT8_T *p)
 OPERATE_RET faqiuji_audio_init(VOID_T)
 {
     OPERATE_RET ret = faqiuji_ext_flash_init();
+    if (ret != OPRT_OK) return ret;
     TUYA_PWM_BASE_CFG_T pwm_cfg = {
         .frequency = 62500,
         .duty = 50,
