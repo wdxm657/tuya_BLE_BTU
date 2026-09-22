@@ -20,6 +20,9 @@ UINT8_T faqiuji_audio_get_volume(VOID_T);
 BOOL_T faqiuji_audio_take_play_finished(VOID_T);
 VOID_T faqiuji_audio_task(VOID_T);
 BOOL_T faqiuji_audio_is_playing(VOID_T);
+OPERATE_RET faqiuji_audio_record_start(UINT8_T file_id);
+OPERATE_RET faqiuji_audio_record_stop(VOID_T);
+BOOL_T faqiuji_audio_is_recording(VOID_T);
 
 #ifdef __cplusplus
 }

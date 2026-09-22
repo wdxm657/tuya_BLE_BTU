@@ -59,7 +59,7 @@ STATIC OPERATE_RET flash_write_enable(VOID_T)
 
     ret = flash_read_status(&status);
     if (ret != OPRT_OK) return ret;
-    TAL_PR_DEBUG("GT25Q16 WREN status: 0x%02x", status);
+    // TAL_PR_DEBUG("GT25Q16 WREN status: 0x%02x", status);
     if ((status & 0x02) == 0) {
         TAL_PR_ERR("GT25Q16 WREN rejected, status: 0x%02x", status);
         return OPRT_COM_ERROR;
@@ -222,7 +222,7 @@ OPERATE_RET faqiuji_ext_flash_write(UINT32_T addr, CONST UINT8_T *buf, UINT32_T 
         if (ret != OPRT_OK) return ret;
         ret = flash_read_status(&status);
         if (ret != OPRT_OK) return ret;
-        TAL_PR_DEBUG("GT25Q16 page program status: 0x%02x", status);
+        // TAL_PR_DEBUG("GT25Q16 page program status: 0x%02x", status);
         ret = flash_wait_ready();
         if (ret != OPRT_OK) return ret;
         addr += part;

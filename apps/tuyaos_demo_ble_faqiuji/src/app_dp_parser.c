@@ -55,6 +55,9 @@ STATIC VOID_T app_audio_stop_current(VOID_T)
     if (faqiuji_audio_is_playing()) {
         faqiuji_audio_stop();
     }
+    if (faqiuji_audio_is_recording()) {
+        faqiuji_audio_record_stop();
+    }
 }
 
 STATIC UINT8_T app_dp_type(UINT8_T dp_id)
@@ -98,13 +101,29 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             }
             break;
         case DP_ID_SOUND:
-            TAL_PR_ERR("DP SOUND: recording disabled in playback-only mode");
-            if (g_cmd.dp_data_len > 0) {
-                g_cmd.dp_data[0] = 0;
+            if (g_cmd.dp_data_len != DT_BOOL_LEN) {
+                return OPRT_INVALID_PARM;
+            }
+            if (app_dp_is_true(g_cmd.dp_data, g_cmd.dp_data_len)) {
+                if (faqiuji_audio_is_playing()) {
+                    faqiuji_audio_stop();
+                }
+                if (!faqiuji_audio_is_recording()) {
+                    if (faqiuji_audio_record_start(FAQIUJI_AUDIO_USER_FILE_ID) != OPRT_OK) {
+                        g_cmd.dp_data[0] = 0;
+                    }
+                }
+            } else if (faqiuji_audio_is_recording()) {
+                if (faqiuji_audio_record_stop() != OPRT_OK) {
+                    g_cmd.dp_data[0] = 1;
+                }
             }
             break;
         case DP_ID_PLAY:
             if (app_dp_is_true(g_cmd.dp_data, g_cmd.dp_data_len)) {
+                if (faqiuji_audio_is_recording()) {
+                    faqiuji_audio_record_stop();
+                }
                 app_audio_stop_current();
                 if (faqiuji_audio_play_start(FAQIUJI_AUDIO_USER_FILE_ID) != OPRT_OK) {
                     g_cmd.dp_data[0] = 0;

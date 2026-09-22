@@ -10,10 +10,24 @@
 #include "pwm.h"
 #include "faqiuji_audio.h"
 #include "faqiuji_ext_flash.h"
+#include "audio.h"
+#include "adc.h"
+#include "dfifo.h"
 
 #define AUDIO_MAGIC 0x55415146UL
 #define AUDIO_HEADER_SIZE 8
 #define AUDIO_PLAY_BUFFER_SIZE 2048
+#define AUDIO_CAPTURE_BUFFER_SIZE 4096
+#define AUDIO_CAPTURE_BUFFER_SAMPLES (AUDIO_CAPTURE_BUFFER_SIZE / sizeof(UINT16_T))
+#define AUDIO_CAPTURE_CHUNK_SIZE 256
+/*
+ * The SDK's audio_amic_init(AUDIO_8K) path produces 16 kHz samples on this
+ * chip (its 8 kHz branch selects the 16 kHz CIC setting). Store every other
+ * sample so the Flash file is unambiguously 8 kHz PCM.
+ */
+#define AUDIO_CAPTURE_INPUT_CHUNK_SAMPLES (AUDIO_CAPTURE_CHUNK_SIZE / sizeof(UINT16_T))
+#define AUDIO_CAPTURE_INPUT_RATE 16000UL
+#define AUDIO_CAPTURE_LOG_INTERVAL_MS 1000
 #define AUDIO_PWM_CH TUYA_PWM_NUM_0
 #define AUDIO_TIMER_CH TUYA_TIMER_NUM_0
 /*
@@ -32,6 +46,7 @@
 typedef enum {
     AUDIO_STATE_IDLE = 0,
     AUDIO_STATE_PLAY,
+    AUDIO_STATE_RECORD,
 } FAQIUJI_AUDIO_STATE_E;
 
 typedef enum {
@@ -60,8 +75,27 @@ STATIC UINT32_T sg_play_data_start = AUDIO_HEADER_SIZE;
 STATIC UINT32_T sg_play_size = 0;
 STATIC UINT16_T sg_pwm_period_ticks = 0;
 STATIC volatile UINT32_T sg_pwm_quant_error;
+/*
+ * DFIFO writes 16-bit samples.  Keep this buffer typed as 16-bit and use
+ * get_mic_wr_ptr(), which is the SDK's sample-index view of the DFIFO pointer.
+ */
+STATIC UINT16_T sg_capture_buffer[AUDIO_CAPTURE_BUFFER_SAMPLES];
+STATIC UINT8_T sg_capture_write_buffer[AUDIO_CAPTURE_CHUNK_SIZE];
+STATIC UINT16_T sg_capture_read_sample;
+STATIC UINT8_T sg_capture_decimation_phase;
+STATIC UINT32_T sg_capture_flash_offset;
+STATIC UINT32_T sg_capture_pcm_bytes;
+STATIC UINT32_T sg_capture_sample_count;
+STATIC UINT32_T sg_capture_input_sample_count;
+STATIC UINT32_T sg_capture_flash_bytes;
+STATIC UINT32_T sg_capture_overruns;
+STATIC UINT32_T sg_capture_last_log_ms;
+STATIC UINT32_T sg_capture_last_log_samples;
+STATIC UINT32_T sg_capture_last_log_input_samples;
+STATIC UINT32_T sg_capture_last_log_flash_bytes;
 
 STATIC VOID_T faqiuji_audio_play_task(VOID_T);
+STATIC VOID_T faqiuji_audio_record_task(VOID_T);
 OPERATE_RET faqiuji_audio_stop(VOID_T);
 
 STATIC VOID_T faqiuji_audio_amp_on(VOID_T)
@@ -201,10 +235,6 @@ OPERATE_RET faqiuji_audio_init(VOID_T)
         .duty = 0,
         .polarity = TUYA_PWM_POSITIVE,
     };
-    /*
-     * Playback-only path. AMIC and DFIFO are intentionally not initialized:
-     * audio data comes from the external Flash.
-     */
     ret = tal_pwm_init(AUDIO_PWM_CH, &pwm_cfg);
     TAL_PR_INFO("AUDIO INIT: PWM init ch=%d freq=%d ret=%d",
                 AUDIO_PWM_CH, pwm_cfg.frequency, ret);
@@ -231,6 +261,239 @@ OPERATE_RET faqiuji_audio_init(VOID_T)
     TAL_PR_INFO("AUDIO INIT: done, amp pins power=%d ctrl=%d",
                 SPK_POWER_CON, SPK_CTRL);
     return OPRT_OK;
+}
+
+STATIC VOID_T faqiuji_audio_capture_stop(VOID_T)
+{
+    reg_dfifo_mode &= (UINT8_T)~FLD_AUD_DFIFO0_IN;
+    audio_stop();
+}
+
+STATIC UINT16_T faqiuji_audio_capture_write_ptr(VOID_T)
+{
+    return (UINT16_T)(get_mic_wr_ptr() &
+                      (AUDIO_CAPTURE_BUFFER_SAMPLES - 1));
+}
+
+STATIC UINT16_T faqiuji_audio_capture_read_ptr(VOID_T)
+{
+    return sg_capture_read_sample;
+}
+
+STATIC UINT16_T faqiuji_audio_capture_available(VOID_T)
+{
+    UINT16_T write_ptr = faqiuji_audio_capture_write_ptr();
+    UINT16_T read_ptr = faqiuji_audio_capture_read_ptr();
+    return (UINT16_T)((write_ptr - read_ptr) &
+                      (AUDIO_CAPTURE_BUFFER_SAMPLES - 1));
+}
+
+STATIC OPERATE_RET faqiuji_audio_capture_flush(BOOL_T force)
+{
+    UINT16_T available;
+    UINT16_T read_ptr;
+    UINT16_T first;
+    UINT16_T count_input_samples;
+    UINT16_T count_output_samples;
+    UINT16_T count_bytes;
+    UINT16_T input_index;
+    UINT16_T output_index;
+    UINT32_T write_addr;
+    OPERATE_RET ret;
+
+    available = faqiuji_audio_capture_available();
+    if (!force && available < AUDIO_CAPTURE_INPUT_CHUNK_SAMPLES) {
+        return OPRT_OK;
+    }
+    if (available == 0) return OPRT_OK;
+
+    count_input_samples = available;
+    if (count_input_samples > AUDIO_CAPTURE_INPUT_CHUNK_SAMPLES) {
+        count_input_samples = AUDIO_CAPTURE_INPUT_CHUNK_SAMPLES;
+    }
+
+    read_ptr = faqiuji_audio_capture_read_ptr();
+    first = (UINT16_T)(AUDIO_CAPTURE_BUFFER_SAMPLES - read_ptr);
+    if (first > count_input_samples) first = count_input_samples;
+
+    /*
+     * Convert the 16 kHz DFIFO stream to 8 kHz PCM while copying. Keeping
+     * the phase across chunks prevents a boundary from duplicating or
+     * dropping an extra sample.
+     */
+    output_index = 0;
+    for (input_index = 0; input_index < count_input_samples; input_index++) {
+        UINT16_T sample_index = (UINT16_T)(
+            input_index < first ? read_ptr + input_index :
+            input_index - first);
+        UINT16_T sample = sg_capture_buffer[sample_index &
+                                            (AUDIO_CAPTURE_BUFFER_SAMPLES - 1)];
+        if (sg_capture_decimation_phase == 0) {
+            sg_capture_write_buffer[output_index * 2] = (UINT8_T)sample;
+            sg_capture_write_buffer[output_index * 2 + 1] =
+                (UINT8_T)(sample >> 8);
+            output_index++;
+        }
+        sg_capture_decimation_phase ^= 1;
+    }
+    count_output_samples = output_index;
+    count_bytes = (UINT16_T)(count_output_samples * sizeof(UINT16_T));
+
+    write_addr = AUDIO_HEADER_SIZE + sg_capture_flash_offset;
+    if (write_addr + count_bytes > FAQIUJI_AUDIO_SLOT_SIZE) {
+        TAL_PR_ERR("AUDIO RECORD: flash full offset=%u count=%u",
+                   sg_capture_flash_offset, count_bytes);
+        return OPRT_COM_ERROR;
+    }
+
+    if (count_bytes == 0) {
+        sg_capture_read_sample = (UINT16_T)(
+            (read_ptr + count_input_samples) &
+            (AUDIO_CAPTURE_BUFFER_SAMPLES - 1));
+        sg_capture_input_sample_count += count_input_samples;
+        return OPRT_OK;
+    }
+
+    ret = faqiuji_ext_flash_audio_write(FAQIUJI_AUDIO_USER_FILE_ID,
+                                        write_addr, sg_capture_write_buffer,
+                                        count_bytes);
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("AUDIO RECORD: flash write failed offset=%u count=%u ret=%d",
+                   sg_capture_flash_offset, count_bytes, ret);
+        return ret;
+    }
+
+    sg_capture_read_sample = (UINT16_T)(
+        (read_ptr + count_input_samples) &
+        (AUDIO_CAPTURE_BUFFER_SAMPLES - 1));
+    sg_capture_flash_offset += count_bytes;
+    sg_capture_pcm_bytes += count_bytes;
+    sg_capture_flash_bytes += count_bytes;
+    sg_capture_sample_count += count_output_samples;
+    sg_capture_input_sample_count += count_input_samples;
+    return OPRT_OK;
+}
+
+STATIC VOID_T faqiuji_audio_record_log(BOOL_T final)
+{
+    UINT32_T now = tkl_system_get_millisecond();
+    UINT32_T elapsed = now - sg_capture_last_log_ms;
+    UINT32_T samples = sg_capture_sample_count - sg_capture_last_log_samples;
+    UINT32_T input_samples =
+        sg_capture_input_sample_count - sg_capture_last_log_input_samples;
+    UINT32_T flash_bytes = sg_capture_flash_bytes - sg_capture_last_log_flash_bytes;
+    UINT16_T available = faqiuji_audio_capture_available();
+    UINT16_T raw_wptr = reg_dfifo0_wptr;
+    UINT16_T raw_rptr = reg_dfifo0_rptr;
+
+    if (!final && elapsed < AUDIO_CAPTURE_LOG_INTERVAL_MS) return;
+    if (elapsed == 0) elapsed = 1;
+    TAL_PR_INFO("AUDIO RECORD: %s elapsed=%ums sample=%u/s input=%u/s "
+                "flash=%uB/s "
+                "backlog=%u/%u total_samples=%u total_bytes=%u overruns=%u "
+                "raw_wptr=%u raw_rptr=%u wr_sample=%u rd_sample=%u "
+                "dfifo_mode=0x%02x ain=0x%02x dec=0x%02x",
+                final ? "STOP_RATE" : "RATE", elapsed,
+                (samples * 1000UL) / elapsed,
+                (input_samples * 1000UL) / elapsed,
+                (flash_bytes * 1000UL) / elapsed,
+                available, AUDIO_CAPTURE_BUFFER_SAMPLES,
+                sg_capture_sample_count, sg_capture_pcm_bytes,
+                sg_capture_overruns, raw_wptr, raw_rptr,
+                faqiuji_audio_capture_write_ptr(),
+                faqiuji_audio_capture_read_ptr(),
+                reg_dfifo_mode, reg_dfifo_ain, reg_dfifo_dec_ratio);
+    sg_capture_last_log_ms = now;
+    sg_capture_last_log_samples = sg_capture_sample_count;
+    sg_capture_last_log_input_samples = sg_capture_input_sample_count;
+    sg_capture_last_log_flash_bytes = sg_capture_flash_bytes;
+}
+
+OPERATE_RET faqiuji_audio_record_start(UINT8_T file_id)
+{
+    UINT8_T header[AUDIO_HEADER_SIZE];
+    OPERATE_RET ret;
+
+    if (file_id != FAQIUJI_AUDIO_USER_FILE_ID ||
+        sg_audio_state != AUDIO_STATE_IDLE) {
+        return OPRT_INVALID_PARM;
+    }
+    ret = faqiuji_ext_flash_audio_erase(file_id);
+    if (ret != OPRT_OK) return ret;
+
+    put_u32(header, AUDIO_MAGIC);
+    put_u32(&header[4], 0);
+    ret = faqiuji_ext_flash_audio_write(file_id, 0, header, sizeof(header));
+    if (ret != OPRT_OK) return ret;
+
+    /*
+     * record_stop() powers the SAR ADC down. Re-enable its source clock and
+     * restore the DFIFO buffer on every new recording, including re-records.
+     */
+    adc_enable_clk_24m_to_sar_adc(1);
+    audio_config_mic_buf(sg_capture_buffer, AUDIO_CAPTURE_BUFFER_SIZE);
+    audio_amic_init(AUDIO_8K);
+    sg_capture_read_sample = get_mic_wr_ptr() &
+                             (AUDIO_CAPTURE_BUFFER_SAMPLES - 1);
+
+    sg_capture_flash_offset = 0;
+    sg_capture_pcm_bytes = 0;
+    sg_capture_sample_count = 0;
+    sg_capture_input_sample_count = 0;
+    sg_capture_flash_bytes = 0;
+    sg_capture_overruns = 0;
+    sg_capture_last_log_ms = tkl_system_get_millisecond();
+    sg_capture_last_log_samples = 0;
+    sg_capture_last_log_input_samples = 0;
+    sg_capture_last_log_flash_bytes = 0;
+    sg_capture_decimation_phase = 0;
+    sg_audio_state = AUDIO_STATE_RECORD;
+
+    TAL_PR_INFO("AUDIO RECORD: START file=%u format=%uk/%ubit/mono "
+                "input=%uk->stored=%uk "
+                "buffer=%uB/%usamples chunk=%uB flash_base=0x%06x "
+                "dfifo_addr=0x%04x dfifo_size=0x%04x mode=0x%02x "
+                "ain=0x%02x dec=0x%02x",
+                file_id, FAQIUJI_AUDIO_SAMPLE_RATE / 1000,
+                FAQIUJI_AUDIO_BITS, AUDIO_CAPTURE_INPUT_RATE / 1000,
+                FAQIUJI_AUDIO_SAMPLE_RATE / 1000,
+                AUDIO_CAPTURE_BUFFER_SIZE,
+                AUDIO_CAPTURE_BUFFER_SAMPLES, AUDIO_CAPTURE_CHUNK_SIZE,
+                FAQIUJI_AUDIO_USER_BASE, reg_dfifo0_addr, reg_dfifo0_size,
+                reg_dfifo_mode, reg_dfifo_ain, reg_dfifo_dec_ratio);
+    return OPRT_OK;
+}
+
+OPERATE_RET faqiuji_audio_record_stop(VOID_T)
+{
+    UINT8_T header[AUDIO_HEADER_SIZE];
+    OPERATE_RET ret = OPRT_OK;
+
+    if (sg_audio_state != AUDIO_STATE_RECORD) return OPRT_INVALID_PARM;
+
+    faqiuji_audio_record_task();
+    faqiuji_audio_capture_stop();
+    while (faqiuji_audio_capture_available() != 0) {
+        ret = faqiuji_audio_capture_flush(TRUE);
+        if (ret != OPRT_OK) break;
+    }
+
+    put_u32(header, AUDIO_MAGIC);
+    put_u32(&header[4], sg_capture_pcm_bytes);
+    if (ret == OPRT_OK) {
+        ret = faqiuji_ext_flash_audio_write(FAQIUJI_AUDIO_USER_FILE_ID,
+                                            0, header, sizeof(header));
+    }
+    sg_audio_state = AUDIO_STATE_IDLE;
+    faqiuji_audio_record_log(TRUE);
+    TAL_PR_INFO("AUDIO RECORD: STOP ret=%d bytes=%u samples=%u",
+                ret, sg_capture_pcm_bytes, sg_capture_sample_count);
+    return ret;
+}
+
+BOOL_T faqiuji_audio_is_recording(VOID_T)
+{
+    return sg_audio_state == AUDIO_STATE_RECORD;
 }
 
 /* Load one audio source into the double buffer and start the PCM stream. */
@@ -416,6 +679,10 @@ STATIC VOID_T faqiuji_audio_play_task(VOID_T)
 
 VOID_T faqiuji_audio_task(VOID_T)
 {
+    if (sg_audio_state == AUDIO_STATE_RECORD) {
+        faqiuji_audio_record_task();
+        return;
+    }
     if (sg_audio_state == AUDIO_STATE_PLAY &&
         sg_play_isr_count - sg_play_last_log_count >= 8000) {
         sg_play_last_log_count = sg_play_isr_count;
@@ -434,6 +701,26 @@ VOID_T faqiuji_audio_task(VOID_T)
         sg_play_finished_report = TRUE;
     }
     if (sg_audio_state == AUDIO_STATE_PLAY) faqiuji_audio_play_task();
+}
+
+STATIC VOID_T faqiuji_audio_record_task(VOID_T)
+{
+    UINT16_T available;
+
+    available = faqiuji_audio_capture_available();
+    if (available >= AUDIO_CAPTURE_BUFFER_SAMPLES -
+                    AUDIO_CAPTURE_INPUT_CHUNK_SAMPLES) {
+        sg_capture_overruns++;
+        TAL_PR_ERR("AUDIO RECORD: capture backlog/overrun available=%u "
+                   "wptr=%u rptr=%u overruns=%u",
+                   available, faqiuji_audio_capture_write_ptr(),
+                   faqiuji_audio_capture_read_ptr(), sg_capture_overruns);
+    }
+
+    if (faqiuji_audio_capture_flush(FALSE) != OPRT_OK) {
+        return;
+    }
+    faqiuji_audio_record_log(FALSE);
 }
 
 BOOL_T faqiuji_audio_is_playing(VOID_T) { return sg_audio_state == AUDIO_STATE_PLAY; }

@@ -388,6 +388,7 @@ OPERATE_RET tuya_init_last(VOID_T)
     /* ---- DP 定时上报定时器 ---- */
     tal_sw_timer_create(dp_report_timeout_handler, NULL, &s_dp_report_timer_id);
     tal_sw_timer_start(s_dp_report_timer_id, 1000, TAL_TIMER_CYCLE);
+    // tuya_ble_device_unbind();
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
     // if (tal_oled_init() == OPRT_OK) {

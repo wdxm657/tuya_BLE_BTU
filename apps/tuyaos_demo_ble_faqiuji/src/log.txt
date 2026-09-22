@@ -1,0 +1,24 @@
+[09-22 14:48:53 ty I][app_dp_parser.c:89] dp_cmd 5:
+0f 01 01 00 01                                          ...
+
+[09-22 14:48:53 ty I][faqiuji_audio.c:463] AUDIO RECORD: START file=2 format=8k/16bit/mono input=16k->stored=8k buffer=4096B/2048samples chunk=256B flash_base=0x18e000 dfifo_addr=0x60dc dfifo_size=0x00ff mode=0x01 ain=0x19 dec=0x32
+[09-22 14:48:53 ty I][app_dp_parser.c:176] dp_rsp 5:
+0f 01 00 01 01                                          ...
+
+[09-22 14:48:55 ty I][app_dp_parser.c:89] dp_cmd 5:
+0f 01 01 00 01                                          ...
+
+[09-22 14:48:55 ty I][app_dp_parser.c:176] dp_rsp 5:
+0f 01 00 01 01                                          ...
+
+[09-22 14:48:56 ty I][faqiuji_audio.c:405] AUDIO RECORD: RATE elapsed=1000ms sample=7936/s input=15872/s flash=15872B/s backlog=122/2048 total_samples=7936 total_bytes=15872 overruns=0 raw_wptr=3316 raw_rptr=0 wr_sample=1658 rd_sample=1536 dfifo_mode=0x01 ain=0x19 dec=0x32
+[09-22 14:48:57 ty I][faqiuji_audio.c:405] AUDIO RECORD: RATE elapsed=1000ms sample=8000/s input=16000/s flash=16000B/s backlog=122/2048 total_samples=15936 total_bytes=31872 overruns=0 raw_wptr=2548 raw_rptr=0 wr_sample=1274 rd_sample=1152 dfifo_mode=0x01 ain=0x19 dec=0x32
+[09-22 14:48:58 ty I][faqiuji_audio.c:405] AUDIO RECORD: RATE elapsed=1000ms sample=8000/s input=16000/s flash=16000B/s backlog=122/2048 total_samples=23936 total_bytes=47872 overruns=0 raw_wptr=1780 raw_rptr=0 wr_sample=890 rd_sample=768 dfifo_mode=0x01 ain=0x19 dec=0x32
+[09-22 14:48:59 ty I][app_dp_parser.c:89] dp_cmd 5:
+0f 01 01 00 00                                          ..
+
+[09-22 14:48:59 ty I][faqiuji_audio.c:405] AUDIO RECORD: STOP_RATE elapsed=763ms sample=8072/s input=16144/s flash=16144B/s backlog=0/2048 total_samples=30095 total_bytes=60190 overruns=0 raw_wptr=1596 raw_rptr=0 wr_sample=798 rd_sample=798 dfifo_mode=0x00 ain=0x19 dec=0x32
+[09-22 14:48:59 ty I][faqiuji_audio.c:490] AUDIO RECORD: STOP ret=0 bytes=60190 samples=30095
+[09-22 14:48:59 ty I][app_dp_parser.c:176] dp_rsp 5:
+0f 01 00 01 00                                          ..
+
