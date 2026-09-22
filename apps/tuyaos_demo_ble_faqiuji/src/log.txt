@@ -1,24 +1,34 @@
-[09-22 14:48:53 ty I][app_dp_parser.c:89] dp_cmd 5:
+[09-22 17:06:55 ty I][app_dp_parser.c:89] dp_cmd 5:
 0f 01 01 00 01                                          ...
 
-[09-22 14:48:53 ty I][faqiuji_audio.c:463] AUDIO RECORD: START file=2 format=8k/16bit/mono input=16k->stored=8k buffer=4096B/2048samples chunk=256B flash_base=0x18e000 dfifo_addr=0x60dc dfifo_size=0x00ff mode=0x01 ain=0x19 dec=0x32
-[09-22 14:48:53 ty I][app_dp_parser.c:176] dp_rsp 5:
+[09-22 17:06:55 ty I][faqiuji_audio.c:454] AUDIO RECORD: ADC init pin=PC4 channel=8 width=14 vref=1200mV ret=0
+[09-22 17:06:55 ty I][faqiuji_audio.c:464] AUDIO RECORD: ADC calibration samples=32 center=9mV
+[09-22 17:06:55 ty I][faqiuji_audio.c:497] AUDIO RECORD: START file=2 format=8k/16bit/mono source=ADC/PC4 adc_rate=8000Hz buffer=4096B/2048samples chunk=256B flash_base=0x18e000 center=9mV gain=64
+[09-22 17:06:55 ty I][faqiuji_audio.c:501] AUDIO RECORD: ADC timer start period_us=125 rate=8000 ret=0
+[09-22 17:06:55 ty I][app_dp_parser.c:195] dp_rsp 5:
 0f 01 00 01 01                                          ...
 
-[09-22 14:48:55 ty I][app_dp_parser.c:89] dp_cmd 5:
-0f 01 01 00 01                                          ...
-
-[09-22 14:48:55 ty I][app_dp_parser.c:176] dp_rsp 5:
-0f 01 00 01 01                                          ...
-
-[09-22 14:48:56 ty I][faqiuji_audio.c:405] AUDIO RECORD: RATE elapsed=1000ms sample=7936/s input=15872/s flash=15872B/s backlog=122/2048 total_samples=7936 total_bytes=15872 overruns=0 raw_wptr=3316 raw_rptr=0 wr_sample=1658 rd_sample=1536 dfifo_mode=0x01 ain=0x19 dec=0x32
-[09-22 14:48:57 ty I][faqiuji_audio.c:405] AUDIO RECORD: RATE elapsed=1000ms sample=8000/s input=16000/s flash=16000B/s backlog=122/2048 total_samples=15936 total_bytes=31872 overruns=0 raw_wptr=2548 raw_rptr=0 wr_sample=1274 rd_sample=1152 dfifo_mode=0x01 ain=0x19 dec=0x32
-[09-22 14:48:58 ty I][faqiuji_audio.c:405] AUDIO RECORD: RATE elapsed=1000ms sample=8000/s input=16000/s flash=16000B/s backlog=122/2048 total_samples=23936 total_bytes=47872 overruns=0 raw_wptr=1780 raw_rptr=0 wr_sample=890 rd_sample=768 dfifo_mode=0x01 ain=0x19 dec=0x32
-[09-22 14:48:59 ty I][app_dp_parser.c:89] dp_cmd 5:
+[09-22 17:06:57 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6272/s input=6304/s flash=12544B/s backlog=32/2048 total_samples=6272 total_bytes=12544 overruns=0 wr_sample=160 rd_sample=128 adc_mv=9 adc_min=4 adc_max=133 adc_avg=10 center=9 adc_errors=0
+[09-22 17:06:58 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6400/s input=6464/s flash=12800B/s backlog=96/2048 total_samples=12672 total_bytes=25344 overruns=1025 wr_sample=480 rd_sample=384 adc_mv=9 adc_min=4 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:06:59 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6528/s input=6456/s flash=13056B/s backlog=24/2048 total_samples=19200 total_bytes=38400 overruns=2571 wr_sample=792 rd_sample=768 adc_mv=8 adc_min=4 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:00 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6400/s input=6464/s flash=12800B/s backlog=88/2048 total_samples=25600 total_bytes=51200 overruns=4110 wr_sample=1112 rd_sample=1024 adc_mv=11 adc_min=4 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:01 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6528/s input=6440/s flash=13056B/s backlog=0/2048 total_samples=32128 total_bytes=64256 overruns=5664 wr_sample=1408 rd_sample=1408 adc_mv=8 adc_min=4 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:02 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6400/s input=6456/s flash=12800B/s backlog=56/2048 total_samples=38528 total_bytes=77056 overruns=7207 wr_sample=1720 rd_sample=1664 adc_mv=6 adc_min=4 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:03 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6400/s input=6464/s flash=12800B/s backlog=120/2048 total_samples=44928 total_bytes=89856 overruns=8749 wr_sample=2040 rd_sample=1920 adc_mv=10 adc_min=4 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:04 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6528/s input=6440/s flash=13056B/s backlog=32/2048 total_samples=51456 total_bytes=102912 overruns=10306 wr_sample=288 rd_sample=256 adc_mv=8 adc_min=4 adc_max=133 adc_avg=10 center=9 adc_errors=0
+[09-22 17:07:05 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6400/s input=6456/s flash=12800B/s backlog=88/2048 total_samples=57856 total_bytes=115712 overruns=11847 wr_sample=600 rd_sample=512 adc_mv=6 adc_min=4 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:06 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1001ms sample=6521/s input=6449/s flash=13042B/s backlog=16/2048 total_samples=64384 total_bytes=128768 overruns=13399 wr_sample=912 rd_sample=896 adc_mv=5 adc_min=3 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:07 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6400/s input=6464/s flash=12800B/s backlog=80/2048 total_samples=70784 total_bytes=141568 overruns=14941 wr_sample=1232 rd_sample=1152 adc_mv=10 adc_min=3 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:08 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1001ms sample=6521/s input=6449/s flash=13042B/s backlog=8/2048 total_samples=77312 total_bytes=154624 overruns=16488 wr_sample=1544 rd_sample=1536 adc_mv=11 adc_min=3 adc_max=133 adc_avg=10 center=9 adc_errors=0
+[09-22 17:07:09 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6400/s input=6464/s flash=12800B/s backlog=72/2048 total_samples=83712 total_bytes=167424 overruns=18028 wr_sample=1864 rd_sample=1792 adc_mv=12 adc_min=3 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:10 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1001ms sample=6521/s input=6449/s flash=13042B/s backlog=0/2048 total_samples=90240 total_bytes=180480 overruns=19576 wr_sample=128 rd_sample=128 adc_mv=9 adc_min=3 adc_max=133 adc_avg=10 center=9 adc_errors=0
+[09-22 17:07:11 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6400/s input=6456/s flash=12800B/s backlog=56/2048 total_samples=96640 total_bytes=193280 overruns=21123 wr_sample=440 rd_sample=384 adc_mv=9 adc_min=3 adc_max=133 adc_avg=10 center=9 adc_errors=0
+[09-22 17:07:12 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1001ms sample=6393/s input=6449/s flash=12787B/s backlog=112/2048 total_samples=103040 total_bytes=206080 overruns=22671 wr_sample=752 rd_sample=640 adc_mv=6 adc_min=3 adc_max=133 adc_avg=11 center=9 adc_errors=0
+[09-22 17:07:13 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6528/s input=6448/s flash=13056B/s backlog=32/2048 total_samples=109568 total_bytes=219136 overruns=24226 wr_sample=1056 rd_sample=1024 adc_mv=8 adc_min=3 adc_max=133 adc_avg=10 center=9 adc_errors=0
+[09-22 17:07:14 ty I][faqiuji_audio.c:409] AUDIO RECORD: RATE elapsed=1000ms sample=6400/s input=6456/s flash=12800B/s backlog=88/2048 total_samples=115968 total_bytes=231936 overruns=25774 wr_sample=1368 rd_sample=1280 adc_mv=9 adc_min=3 adc_max=133 adc_avg=10 center=9 adc_errors=0
+[09-22 17:07:15 ty I][app_dp_parser.c:89] dp_cmd 5:
 0f 01 01 00 00                                          ..
 
-[09-22 14:48:59 ty I][faqiuji_audio.c:405] AUDIO RECORD: STOP_RATE elapsed=763ms sample=8072/s input=16144/s flash=16144B/s backlog=0/2048 total_samples=30095 total_bytes=60190 overruns=0 raw_wptr=1596 raw_rptr=0 wr_sample=798 rd_sample=798 dfifo_mode=0x00 ain=0x19 dec=0x32
-[09-22 14:48:59 ty I][faqiuji_audio.c:490] AUDIO RECORD: STOP ret=0 bytes=60190 samples=30095
-[09-22 14:48:59 ty I][app_dp_parser.c:176] dp_rsp 5:
-0f 01 00 01 00                                          ..
-
+[09-22 17:07:15 ty I][faqiuji_audio.c:409] AUDIO RECORD: STOP_RATE elapsed=533ms sample=6709/s input=6544/s flash=13418B/s backlog=0/2048 total_samples=119544 total_bytes=239088 overruns=26460 wr_sample=760 rd_sample=760 adc_mv=10 adc_min=3 adc_max=133 adc_avg=10 center=9 adc_errors=0
+[09-22 17:07:15 ty I][faqiuji_audio.c:539] AUDIO RECORD: STOP ret=0 bytes=239088 samples=119544
+[09-22 17:07:15 ty I][faqiuji_audio.c:543] AUDIO RECORD: HEADER verify_ret=0 magic=0x55415146 size=239088
