@@ -38,10 +38,10 @@
  */
 #define AUDIO_PWM_FREQUENCY 31250UL
 #define AUDIO_PWM_CLOCK (CLOCK_SYS_CLOCK_HZ / 12UL)
-#define AUDIO_SAMPLE_PERIOD_US 125
+#define AUDIO_RECORD_SAMPLE_PERIOD_US 125
+/* Factory PCM files are also 8 kHz, so they must use the same output rate. */
+#define AUDIO_FACTORY_SAMPLE_PERIOD_US 125
 #define AUDIO_PREVIEW_MAX_MS 20000UL
-#define SPK_CTRL_LOW_HOLD_MS 100UL
-#define SPK_CTRL_TOGGLE_DELAY_US 10UL
 
 typedef enum {
     AUDIO_STATE_IDLE = 0,
@@ -73,6 +73,7 @@ STATIC UINT8_T sg_file_id = 0;
 STATIC UINT32_T sg_play_offset = AUDIO_HEADER_SIZE;
 STATIC UINT32_T sg_play_data_start = AUDIO_HEADER_SIZE;
 STATIC UINT32_T sg_play_size = 0;
+STATIC UINT16_T sg_play_sample_period_us = AUDIO_RECORD_SAMPLE_PERIOD_US;
 STATIC UINT16_T sg_pwm_period_ticks = 0;
 STATIC volatile UINT32_T sg_pwm_quant_error;
 /*
@@ -82,7 +83,9 @@ STATIC volatile UINT32_T sg_pwm_quant_error;
 STATIC UINT16_T sg_capture_buffer[AUDIO_CAPTURE_BUFFER_SAMPLES];
 STATIC UINT8_T sg_capture_write_buffer[AUDIO_CAPTURE_CHUNK_SIZE];
 STATIC UINT16_T sg_capture_read_sample;
+/* Keep one input sample so 16 kHz -> 8 kHz uses a 2-tap averaging filter. */
 STATIC UINT8_T sg_capture_decimation_phase;
+STATIC INT16_T sg_capture_decimation_prev;
 STATIC UINT32_T sg_capture_flash_offset;
 STATIC UINT32_T sg_capture_pcm_bytes;
 STATIC UINT32_T sg_capture_sample_count;
@@ -101,39 +104,14 @@ OPERATE_RET faqiuji_audio_stop(VOID_T);
 STATIC VOID_T faqiuji_audio_amp_on(VOID_T)
 {
     /*
-     * The amplifier selects class-D anti-pop mode 4 when SPK_CTRL stays low
-     * for at least 100 ms, then toggles five times within 100 us and remains
-     * high. sleep_us() runs from RAM and is suitable for this short sequence.
+     * Keep the playback power-up sequence identical to the known-good
+     * hardware path. The recording path does not exercise these pins.
      */
-    TAL_PR_INFO("AUDIO AMP: prepare anti-pop mode 4");
+    TAL_PR_INFO("AUDIO AMP: power on pin=%d", SPK_POWER_CON);
     tal_gpio_write(SPK_POWER_CON, TUYA_GPIO_LEVEL_HIGH);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
-    tkl_system_delay(SPK_CTRL_LOW_HOLD_MS);
-
-    // 5 times up down per 10us
+    tkl_system_delay(2);
+    TAL_PR_INFO("AUDIO AMP: ctrl on pin=%d", SPK_CTRL);
     tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_LOW);
-    sleep_us(SPK_CTRL_TOGGLE_DELAY_US);
-
-    tal_gpio_write(SPK_CTRL, TUYA_GPIO_LEVEL_HIGH);
-    TAL_PR_INFO("AUDIO AMP: anti-pop mode 4 selected");
 }
 
 STATIC VOID_T faqiuji_audio_amp_off(VOID_T)
@@ -241,7 +219,7 @@ OPERATE_RET faqiuji_audio_init(VOID_T)
     if (ret != OPRT_OK) return ret;
     sg_pwm_period_ticks = (UINT16_T)(AUDIO_PWM_CLOCK / AUDIO_PWM_FREQUENCY);
     TAL_PR_INFO("AUDIO INIT: playback only, pwm_period_ticks=%u sample_period_us=%u",
-                sg_pwm_period_ticks, AUDIO_SAMPLE_PERIOD_US);
+                sg_pwm_period_ticks, AUDIO_RECORD_SAMPLE_PERIOD_US);
     ret = tkl_timer_init(AUDIO_TIMER_CH, &(TUYA_TIMER_BASE_CFG_T) {
         .mode = TUYA_TIMER_MODE_PERIOD,
         .cb = faqiuji_audio_timer_cb,
@@ -317,24 +295,31 @@ STATIC OPERATE_RET faqiuji_audio_capture_flush(BOOL_T force)
     if (first > count_input_samples) first = count_input_samples;
 
     /*
-     * Convert the 16 kHz DFIFO stream to 8 kHz PCM while copying. Keeping
-     * the phase across chunks prevents a boundary from duplicating or
-     * dropping an extra sample.
+     * Convert the 16 kHz DFIFO stream to 8 kHz PCM with a 2-tap low-pass
+     * filter. Keeping both the phase and previous sample across chunks
+     * prevents block-boundary clicks and reduces high-frequency alias noise.
      */
     output_index = 0;
     for (input_index = 0; input_index < count_input_samples; input_index++) {
         UINT16_T sample_index = (UINT16_T)(
             input_index < first ? read_ptr + input_index :
             input_index - first);
-        UINT16_T sample = sg_capture_buffer[sample_index &
-                                            (AUDIO_CAPTURE_BUFFER_SAMPLES - 1)];
+        INT16_T sample = (INT16_T)sg_capture_buffer[
+            sample_index & (AUDIO_CAPTURE_BUFFER_SAMPLES - 1)];
         if (sg_capture_decimation_phase == 0) {
-            sg_capture_write_buffer[output_index * 2] = (UINT8_T)sample;
+            sg_capture_decimation_prev = sample;
+            sg_capture_decimation_phase = 1;
+        } else {
+            INT32_T filtered_sample =
+                ((INT32_T)sg_capture_decimation_prev + sample) / 2;
+            UINT16_T pcm_sample = (UINT16_T)(INT16_T)filtered_sample;
+            sg_capture_write_buffer[output_index * 2] =
+                (UINT8_T)pcm_sample;
             sg_capture_write_buffer[output_index * 2 + 1] =
-                (UINT8_T)(sample >> 8);
+                (UINT8_T)(pcm_sample >> 8);
             output_index++;
+            sg_capture_decimation_phase = 0;
         }
-        sg_capture_decimation_phase ^= 1;
     }
     count_output_samples = output_index;
     count_bytes = (UINT16_T)(count_output_samples * sizeof(UINT16_T));
@@ -422,7 +407,12 @@ OPERATE_RET faqiuji_audio_record_start(UINT8_T file_id)
     if (ret != OPRT_OK) return ret;
 
     put_u32(header, AUDIO_MAGIC);
-    put_u32(&header[4], 0);
+    /*
+     * NOR Flash can only change bits from 1 to 0 without another erase.
+     * Leave the size field erased while recording so the final size can be
+     * committed at stop time.
+     */
+    put_u32(&header[4], 0xFFFFFFFFUL);
     ret = faqiuji_ext_flash_audio_write(file_id, 0, header, sizeof(header));
     if (ret != OPRT_OK) return ret;
 
@@ -447,6 +437,7 @@ OPERATE_RET faqiuji_audio_record_start(UINT8_T file_id)
     sg_capture_last_log_input_samples = 0;
     sg_capture_last_log_flash_bytes = 0;
     sg_capture_decimation_phase = 0;
+    sg_capture_decimation_prev = 0;
     sg_audio_state = AUDIO_STATE_RECORD;
 
     TAL_PR_INFO("AUDIO RECORD: START file=%u format=%uk/%ubit/mono "
@@ -467,7 +458,9 @@ OPERATE_RET faqiuji_audio_record_start(UINT8_T file_id)
 OPERATE_RET faqiuji_audio_record_stop(VOID_T)
 {
     UINT8_T header[AUDIO_HEADER_SIZE];
+    UINT8_T header_bk[AUDIO_HEADER_SIZE];
     OPERATE_RET ret = OPRT_OK;
+    OPERATE_RET verify_ret;
 
     if (sg_audio_state != AUDIO_STATE_RECORD) return OPRT_INVALID_PARM;
 
@@ -488,6 +481,13 @@ OPERATE_RET faqiuji_audio_record_stop(VOID_T)
     faqiuji_audio_record_log(TRUE);
     TAL_PR_INFO("AUDIO RECORD: STOP ret=%d bytes=%u samples=%u",
                 ret, sg_capture_pcm_bytes, sg_capture_sample_count);
+    verify_ret = faqiuji_ext_flash_audio_read(FAQIUJI_AUDIO_USER_FILE_ID, 0,
+                                              header_bk, sizeof(header_bk));
+    TAL_PR_INFO("AUDIO RECORD: HEADER verify_ret=%d magic=0x%08x size=%u",
+                verify_ret, get_u32(header_bk), get_u32(&header_bk[4]));
+    if (ret == OPRT_OK && verify_ret != OPRT_OK) {
+        ret = verify_ret;
+    }
     return ret;
 }
 
@@ -517,6 +517,7 @@ STATIC OPERATE_RET faqiuji_audio_play_begin(UINT8_T file_id,
         sg_play_data_start = 0;
         sg_play_size = (file_id == FAQIUJI_AUDIO_FACTORY_SOUND_1) ?
                        FAQIUJI_AUDIO_FACTORY_1_SIZE : FAQIUJI_AUDIO_FACTORY_2_SIZE;
+        sg_play_sample_period_us = AUDIO_FACTORY_SAMPLE_PERIOD_US;
         TAL_PR_INFO("AUDIO PLAY: factory file=%d size=%u", file_id, sg_play_size);
     } else {
         ret = faqiuji_ext_flash_audio_read(file_id, 0, header, sizeof(header));
@@ -529,6 +530,7 @@ STATIC OPERATE_RET faqiuji_audio_play_begin(UINT8_T file_id,
         }
         sg_play_data_start = AUDIO_HEADER_SIZE;
         sg_play_size = get_u32(&header[4]);
+        sg_play_sample_period_us = AUDIO_RECORD_SAMPLE_PERIOD_US;
     }
     sg_file_id = file_id;
     sg_play_mode = mode;
@@ -539,6 +541,7 @@ STATIC OPERATE_RET faqiuji_audio_play_begin(UINT8_T file_id,
     sg_play_sample_pos = 0;
     sg_play_refill_pending = FALSE;
     sg_play_finished = FALSE;
+    sg_play_finished_report = FALSE;
     sg_play_isr_count = 0;
     sg_play_isr_error_count = 0;
     sg_play_last_log_count = 0;
@@ -555,17 +558,21 @@ STATIC OPERATE_RET faqiuji_audio_play_begin(UINT8_T file_id,
     }
     if (sg_play_buffer_len[0] == 0) {
         TAL_PR_ERR("AUDIO PLAY: buffer0 empty, abort");
+        sg_play_buffer_len[1] = 0;
         return OPRT_COM_ERROR;
     }
     sg_audio_state = AUDIO_STATE_PLAY;
     TAL_PR_INFO("AUDIO PLAY: state PLAY, amp on begin");
     faqiuji_audio_amp_on();
-    TAL_PR_INFO("AUDIO PLAY: amp on done, timer start period_us=%d",
-                AUDIO_SAMPLE_PERIOD_US);
-    ret = tkl_timer_start(AUDIO_TIMER_CH, AUDIO_SAMPLE_PERIOD_US);
+    TAL_PR_INFO("AUDIO PLAY: amp on done, timer start period_us=%u rate=%u",
+                sg_play_sample_period_us,
+                1000000UL / sg_play_sample_period_us);
+    ret = tkl_timer_start(AUDIO_TIMER_CH, sg_play_sample_period_us);
     TAL_PR_INFO("AUDIO PLAY: timer start ret=%d", ret);
     if (ret != OPRT_OK) {
         sg_audio_state = AUDIO_STATE_IDLE;
+        sg_play_buffer_len[0] = 0;
+        sg_play_buffer_len[1] = 0;
         faqiuji_audio_amp_off();
         return ret;
     }
@@ -575,6 +582,15 @@ STATIC OPERATE_RET faqiuji_audio_play_begin(UINT8_T file_id,
         ret = tal_sw_timer_start(sg_preview_timer, AUDIO_PREVIEW_MAX_MS, TAL_TIMER_ONCE);
         TAL_PR_INFO("AUDIO PLAY: preview timer start ms=%u ret=%d",
                     AUDIO_PREVIEW_MAX_MS, ret);
+        if (ret != OPRT_OK) {
+            tkl_timer_stop(AUDIO_TIMER_CH);
+            tal_pwm_stop(AUDIO_PWM_CH);
+            faqiuji_audio_amp_off();
+            sg_audio_state = AUDIO_STATE_IDLE;
+            sg_play_buffer_len[0] = 0;
+            sg_play_buffer_len[1] = 0;
+            return ret;
+        }
     }
     TAL_PR_INFO("AUDIO PLAY: start complete");
     return OPRT_OK;

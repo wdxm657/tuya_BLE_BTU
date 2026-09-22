@@ -120,19 +120,38 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             }
             break;
         case DP_ID_PLAY:
+            TAL_PR_INFO("DP PLAY: len=%u type=%u value=%u recording=%d playing=%d",
+                        g_cmd.dp_data_len, g_cmd.dp_type,
+                        g_cmd.dp_data_len ? g_cmd.dp_data[0] : 0,
+                        faqiuji_audio_is_recording(),
+                        faqiuji_audio_is_playing());
+            if (g_cmd.dp_data_len != DT_BOOL_LEN) {
+                TAL_PR_ERR("DP PLAY: invalid data length=%u", g_cmd.dp_data_len);
+                return OPRT_INVALID_PARM;
+            }
             if (app_dp_is_true(g_cmd.dp_data, g_cmd.dp_data_len)) {
                 if (faqiuji_audio_is_recording()) {
-                    faqiuji_audio_record_stop();
+                    OPERATE_RET stop_ret = faqiuji_audio_record_stop();
+                    TAL_PR_INFO("DP PLAY: stop recording ret=%d", stop_ret);
                 }
                 app_audio_stop_current();
-                if (faqiuji_audio_play_start(FAQIUJI_AUDIO_USER_FILE_ID) != OPRT_OK) {
-                    g_cmd.dp_data[0] = 0;
+                {
+                    OPERATE_RET play_ret =
+                        faqiuji_audio_play_start(FAQIUJI_AUDIO_USER_FILE_ID);
+                    TAL_PR_INFO("DP PLAY: start user recording file=%u ret=%d",
+                                FAQIUJI_AUDIO_USER_FILE_ID, play_ret);
+                    if (play_ret != OPRT_OK) {
+                        g_cmd.dp_data[0] = 0;
+                    }
                 }
             } else if (faqiuji_audio_is_playing()) {
-                faqiuji_audio_stop();
+                OPERATE_RET stop_ret = faqiuji_audio_stop();
+                TAL_PR_INFO("DP PLAY: stop playback ret=%d", stop_ret);
                 /* The command already reports false; consume the internal
                  * event so it is not reported a second time. */
                 faqiuji_audio_take_play_finished();
+            } else {
+                TAL_PR_INFO("DP PLAY: already stopped");
             }
             break;
         case DP_ID_VOLUME: {
