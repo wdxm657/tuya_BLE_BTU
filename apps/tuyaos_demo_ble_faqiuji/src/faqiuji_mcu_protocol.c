@@ -145,3 +145,25 @@ OPERATE_RET faqiuji_mcu_launch(UINT8_T speed, UINT8_T angle, UINT16_T interval_m
     UINT8_T payload[4] = {speed, angle, (UINT8_T)interval_ms, (UINT8_T)(interval_ms >> 8)};
     return faqiuji_mcu_send(FAQIUJI_MCU_CMD_LAUNCH, payload, sizeof(payload));
 }
+
+OPERATE_RET faqiuji_mcu_launch_mode(UINT8_T mode)
+{
+    return faqiuji_mcu_send(FAQIUJI_MCU_CMD_LAUNCH, &mode, 1);
+}
+
+OPERATE_RET faqiuji_mcu_config_set(UINT8_T mode, UINT16_T max_count,
+                                   UINT16_T standby_min)
+{
+    UINT8_T payload[5] = {
+        mode, (UINT8_T)max_count, (UINT8_T)(max_count >> 8),
+        (UINT8_T)standby_min, (UINT8_T)(standby_min >> 8)
+    };
+    return faqiuji_mcu_send(FAQIUJI_MCU_CMD_CONFIG_SET, payload,
+                            sizeof(payload));
+}
+
+OPERATE_RET faqiuji_mcu_control_set(BOOL_T enabled)
+{
+    UINT8_T payload = enabled ? 1U : 0U;
+    return faqiuji_mcu_send(FAQIUJI_MCU_CMD_CONTROL_SET, &payload, 1);
+}

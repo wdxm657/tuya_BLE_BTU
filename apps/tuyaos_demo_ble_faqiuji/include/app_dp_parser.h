@@ -17,6 +17,8 @@ extern "C" {
 #define DP_ID_FAULT        20
 #define DP_ID_MOVEMENT_LEVEL 22
 #define DP_ID_WORK_STATE    26
+#define DP_ID_AUTO_TEASE_TIME 28
+#define DP_ID_STANDBY_TEASE_TIME 29
 
 #pragma pack(1)
 typedef struct {

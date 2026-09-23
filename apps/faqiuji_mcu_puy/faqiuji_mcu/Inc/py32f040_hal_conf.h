@@ -45,14 +45,14 @@
   */
 #define HAL_MODULE_ENABLED  
 #define HAL_RCC_MODULE_ENABLED
-/* #define HAL_ADC_MODULE_ENABLED */
+#define HAL_ADC_MODULE_ENABLED
 /* #define HAL_CRC_MODULE_ENABLED */
 /* #define HAL_COMP_MODULE_ENABLED */
 #define HAL_FLASH_MODULE_ENABLED
 #define HAL_GPIO_MODULE_ENABLED
 /* #define HAL_IWDG_MODULE_ENABLED */
 /* #define HAL_WWDG_MODULE_ENABLED */
-/* #define HAL_TIM_MODULE_ENABLED */
+#define HAL_TIM_MODULE_ENABLED
 #define HAL_DMA_MODULE_ENABLED
 /* #define HAL_LPTIM_MODULE_ENABLED */
 #define HAL_PWR_MODULE_ENABLED
@@ -274,4 +274,3 @@
 #endif /* __PY32F040_HAL_CONF_H */
 
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/
-

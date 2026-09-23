@@ -19,8 +19,24 @@ typedef enum
   FAQIUJI_CMD_STOP       = 0x11,
   FAQIUJI_CMD_STATUS_GET = 0x12,
   FAQIUJI_CMD_PARAM_SET  = 0x13,
+  FAQIUJI_CMD_CONFIG_SET  = 0x14,
+  FAQIUJI_CMD_CONTROL_SET = 0x15,
   FAQIUJI_CMD_KEY_EVENT  = 0x20,
+  FAQIUJI_CMD_STATUS_EVENT = 0x21,
 } FAQIUJI_CMD_E;
+
+typedef enum
+{
+  FAQIUJI_EVENT_KEY = 0x01U,
+  FAQIUJI_EVENT_USB = 0x02U,
+  FAQIUJI_EVENT_CHARGE = 0x03U,
+  FAQIUJI_EVENT_BATTERY = 0x04U,
+  FAQIUJI_EVENT_BALL = 0x05U,
+  FAQIUJI_EVENT_RADAR = 0x06U,
+  FAQIUJI_EVENT_TEMPERATURE = 0x07U,
+  FAQIUJI_EVENT_WORK = 0x08U,
+  FAQIUJI_EVENT_COUNT = 0x09U,
+} FAQIUJI_EVENT_TYPE_E;
 
 typedef enum
 {
@@ -50,6 +66,9 @@ void faqiuji_protocol_input(uint8_t value);
 void faqiuji_protocol_send(uint8_t cmd, uint8_t seq,
                            const uint8_t *payload, uint8_t len);
 void faqiuji_protocol_key_event(uint8_t pressed);
+void faqiuji_protocol_status_event(FAQIUJI_EVENT_TYPE_E type,
+                                   const uint8_t *data,
+                                   uint8_t len);
 
 #ifdef __cplusplus
 }

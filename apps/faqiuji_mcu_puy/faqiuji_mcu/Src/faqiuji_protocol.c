@@ -1,5 +1,7 @@
 #include "faqiuji_protocol.h"
 #include "gpio_config.h"
+#include "faqiuji_launcher.h"
+#include "faqiuji_device.h"
 
 #include <string.h>
 
@@ -78,7 +80,16 @@ static void faqiuji_protocol_handle_frame(void)
       break;
 
     case FAQIUJI_CMD_LAUNCH:
-      if (frame->len != 4U) {
+      if (frame->len == 1U) {
+        if (frame->payload[0] > FAQIUJI_LAUNCH_MODE_RANDOM) {
+          status = FAQIUJI_STATUS_BAD_PAYLOAD;
+        } else if (faqiuji_launcher_start(
+                     (FAQIUJI_LAUNCH_MODE_E)frame->payload[0]) == 0U) {
+          status = FAQIUJI_STATUS_BUSY;
+        } else {
+          sg_protocol.work_state = FAQIUJI_WORK_RUNNING;
+        }
+      } else if (frame->len != 4U) {
         status = FAQIUJI_STATUS_BAD_LENGTH;
       } else {
         sg_protocol.speed = frame->payload[0];
@@ -94,6 +105,7 @@ static void faqiuji_protocol_handle_frame(void)
       if (frame->len != 0U) {
         status = FAQIUJI_STATUS_BAD_LENGTH;
       } else {
+        faqiuji_launcher_stop();
         sg_protocol.work_state = FAQIUJI_WORK_STOPPED;
       }
       faqiuji_protocol_reply(frame->cmd, frame->seq, (FAQIUJI_STATUS_E)status);
@@ -124,6 +136,28 @@ static void faqiuji_protocol_handle_frame(void)
         sg_protocol.angle = frame->payload[1];
         sg_protocol.interval_ms = (uint16_t)frame->payload[2] |
                                   ((uint16_t)frame->payload[3] << 8U);
+      }
+      faqiuji_protocol_reply(frame->cmd, frame->seq, (FAQIUJI_STATUS_E)status);
+      break;
+
+    case FAQIUJI_CMD_CONFIG_SET:
+      if (frame->len != 5U || frame->payload[0] > FAQIUJI_LAUNCH_MODE_RANDOM) {
+        status = FAQIUJI_STATUS_BAD_PAYLOAD;
+      } else {
+        uint16_t max_count = (uint16_t)frame->payload[1] |
+                             ((uint16_t)frame->payload[2] << 8U);
+        uint16_t standby_min = (uint16_t)frame->payload[3] |
+                               ((uint16_t)frame->payload[4] << 8U);
+        faqiuji_device_set_config(frame->payload[0], max_count, standby_min);
+      }
+      faqiuji_protocol_reply(frame->cmd, frame->seq, (FAQIUJI_STATUS_E)status);
+      break;
+
+    case FAQIUJI_CMD_CONTROL_SET:
+      if (frame->len != 1U) {
+        status = FAQIUJI_STATUS_BAD_LENGTH;
+      } else {
+        faqiuji_device_set_enabled(frame->payload[0] != 0U);
       }
       faqiuji_protocol_reply(frame->cmd, frame->seq, (FAQIUJI_STATUS_E)status);
       break;
@@ -260,11 +294,26 @@ void faqiuji_protocol_send(uint8_t cmd, uint8_t seq,
 void faqiuji_protocol_key_event(uint8_t pressed)
 {
   uint8_t payload = pressed ? 1U : 0U;
-  static int flag = 0;
   if (sg_protocol.huart == NULL) {
     return;
   }
   HAL_GPIO_WritePin(GPIOA,  LED_HIGH, pressed? GPIO_PIN_RESET : GPIO_PIN_SET);
 
   faqiuji_protocol_send(FAQIUJI_CMD_KEY_EVENT, ++sg_event_seq, &payload, 1U);
+}
+
+void faqiuji_protocol_status_event(FAQIUJI_EVENT_TYPE_E type,
+                                   const uint8_t *data, uint8_t len)
+{
+  uint8_t payload[FAQIUJI_MAX_PAYLOAD];
+
+  if (len > (FAQIUJI_MAX_PAYLOAD - 1U)) {
+    return;
+  }
+  payload[0] = (uint8_t)type;
+  if (len != 0U && data != NULL) {
+    memcpy(&payload[1], data, len);
+  }
+  faqiuji_protocol_send(FAQIUJI_CMD_STATUS_EVENT, ++sg_event_seq,
+                        payload, (uint8_t)(len + 1U));
 }

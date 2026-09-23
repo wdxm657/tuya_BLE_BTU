@@ -22,7 +22,7 @@
             "attr": 1664,
             "code": "mode",
             "defaultValue": "",
-            "desc": "active：好动模式\nsimple：一般模式\nmild：温和模式",
+            "desc": "active：固定10米\nsimple：固定20米\nmild：随机3-20米",
             "editPermission": true,
             "extContent": "",
             "iconname": "icon-dp_mode",

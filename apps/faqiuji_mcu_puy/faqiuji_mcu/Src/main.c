@@ -1,6 +1,10 @@
 #include "main.h"
 #include "faqiuji_protocol.h"
+#include "faqiuji_launcher.h"
+#include "faqiuji_device.h"
 #include "gpio_config.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 UART_HandleTypeDef UartHandle;
 static uint8_t uart_rx_byte;
@@ -20,42 +24,47 @@ static void APP_UartService(void)
   }
 }
 
-static void APP_KeyTask(void)
+static void APP_KeyTask(void *argument)
 {
-  static uint32_t last_sample_tick;
   static uint8_t raw_state;
   static uint8_t stable_state;
   static uint8_t stable_count;
   static uint8_t initialized;
   uint8_t pressed;
+  (void)argument;
 
-  if ((HAL_GetTick() - last_sample_tick) < 10U) {
-    return;
+  for (;;) {
+    pressed = (HAL_GPIO_ReadPin(GPIOC, KEY) == GPIO_PIN_RESET) ? 1U : 0U;
+
+    if (!initialized) {
+      raw_state = pressed;
+      stable_state = pressed;
+      initialized = 1U;
+      stable_count = 0U;
+    } else if (pressed != raw_state) {
+      raw_state = pressed;
+      stable_count = 1U;
+    } else if (stable_count > 0U && stable_count < 3U) {
+      stable_count++;
+    }
+
+    if (stable_count >= 3U && stable_state != raw_state) {
+      stable_state = raw_state;
+      stable_count = 0U;
+      faqiuji_protocol_key_event(stable_state);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10U));
   }
-  last_sample_tick = HAL_GetTick();
+}
 
-  pressed = (HAL_GPIO_ReadPin(GPIOC, KEY) == GPIO_PIN_RESET) ? 1U : 0U;
-
-  if (!initialized) {
-    raw_state = pressed;
-    stable_state = pressed;
-    initialized = 1U;
-    stable_count = 0U;
-  } else if (pressed != raw_state) {
-    raw_state = pressed;
-    stable_count = 1U;
-  } else if (stable_count > 0U && stable_count < 3U) {
-    stable_count++;
+static void APP_UartTask(void *argument)
+{
+  (void)argument;
+  for (;;) {
+    APP_UartService();
+    vTaskDelay(pdMS_TO_TICKS(1U));
   }
-
-  if (stable_count >= 3U && stable_state != raw_state) {
-    stable_state = raw_state;
-    stable_count = 0U;
-    faqiuji_protocol_key_event(stable_state);
-  }
-
-  HAL_GPIO_WritePin(GPIOA, LED_LOW,
-                    stable_state ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
 
 static void APP_GpioInit(void)
@@ -82,7 +91,7 @@ static void APP_GpioInit(void)
   HAL_GPIO_WritePin(GPIOB,  LED_G , GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOB,  LED_R , GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOA, MOTOR_PWM | IE_PWM , GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOB, CHARGE_EN ,GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, CHARGE_EN ,GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOC, DCT_CON | IR_CON, GPIO_PIN_RESET);
 
   gpio.Mode = GPIO_MODE_INPUT;
@@ -107,7 +116,7 @@ static void APP_GpioInit(void)
   gpio.Pin = NTC_CON;
   gpio.Mode = GPIO_MODE_OUTPUT_PP;
   HAL_GPIO_Init(GPIOB, &gpio);
-  HAL_GPIO_WritePin(GPIOB, NTC_CON, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, NTC_CON, GPIO_PIN_SET);
 }
 
 static void APP_UartInit(void)
@@ -138,14 +147,20 @@ static void APP_SystemClockConfig(void);
 int main(void)
 {
   HAL_Init();
-  // APP_SystemClockConfig();
+  APP_SystemClockConfig();
   APP_GpioInit();
   APP_UartInit();
-
-  while (1) {
-    APP_KeyTask();
-    APP_UartService();
+  if (faqiuji_launcher_init() != HAL_OK) {
+    APP_ErrorHandler();
   }
+  faqiuji_device_init();
+
+  (void)xTaskCreate(APP_UartTask, "uart", 256, NULL, 3, NULL);
+  (void)xTaskCreate(APP_KeyTask, "key", 192, NULL, 2, NULL);
+  (void)xTaskCreate(faqiuji_launcher_task, "launch", 256, NULL, 2, NULL);
+  (void)xTaskCreate(faqiuji_device_task, "device", 256, NULL, 2, NULL);
+  vTaskStartScheduler();
+  APP_ErrorHandler();
 }
 
 
@@ -162,7 +177,7 @@ static void APP_SystemClockConfig(void)
   /* Configure clock source: HSE/HSI/LSE/LSI */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE | RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_LSI | RCC_OSCILLATORTYPE_LSE;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;                                                       /* Enable HSI */
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_24MHz;                               /* Configure HSI output clock as 24MHz */
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_8MHz;                                /* Configure HSI output clock as 8MHz */
   RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;                                                       /* HSI not divided */
   RCC_OscInitStruct.HSEState = RCC_HSE_OFF;                                                      /* Disable HSE */
   /*RCC_OscInitStruct.HSEFreq = RCC_HSE_16_32MHz;*/

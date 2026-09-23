@@ -42,6 +42,7 @@ extern "C" {
 #include "py32f040xx_Start_Kit.h"
 
 /* Private includes ----------------------------------------------------------*/
+#include "gpio_config.h"
 /* Private defines -----------------------------------------------------------*/
 /* Exported variables prototypes ---------------------------------------------*/
 extern UART_HandleTypeDef UartHandle;

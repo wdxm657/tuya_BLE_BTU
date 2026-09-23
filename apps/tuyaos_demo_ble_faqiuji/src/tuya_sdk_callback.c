@@ -253,15 +253,68 @@ STATIC VOID_T tuya_uart_irq_rx_cb(TUYA_UART_NUM_E port_id, VOID_T *buff, UINT16_
 
 STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
 {
-    UINT8_T pressed;
+    UINT8_T event_type;
+    UINT8_T value;
+    UINT16_T value16;
+    UINT8_T work_state;
 
-    if (frame == NULL || frame->len < 1 ||
-        frame->cmd != FAQIUJI_MCU_CMD_KEY_EVENT) {
+    if (frame == NULL || frame->len == 0) {
         return;
     }
 
-    pressed = frame->payload[0] ? 1 : 0;
-    TAL_PR_INFO("MCU KEY: %d", pressed);
+    TAL_PR_INFO("MCU FRAME: cmd=0x%02x seq=%u len=%u",
+                frame->cmd, frame->seq, frame->len);
+
+    if (frame->cmd == FAQIUJI_MCU_CMD_KEY_EVENT) {
+        value = frame->payload[0] ? 1U : 0U;
+        TAL_PR_INFO("MCU KEY: %d", value);
+        return;
+    }
+
+    if (frame->cmd != FAQIUJI_MCU_CMD_STATUS_EVENT) {
+        return;
+    }
+
+    event_type = frame->payload[0];
+    value = frame->len > 1U ? frame->payload[1] : 0U;
+    switch (event_type) {
+        case FAQIUJI_MCU_EVENT_USB:
+            TAL_PR_INFO("MCU USB: %d", value);
+            break;
+        case FAQIUJI_MCU_EVENT_CHARGE:
+            TAL_PR_INFO("MCU CHARGE: %d", value);
+            break;
+        case FAQIUJI_MCU_EVENT_BATTERY:
+            TAL_PR_INFO("MCU BATTERY: %d%%", value);
+            app_dp_report(DP_ID_BATTERY, &value, 1U);
+            break;
+        case FAQIUJI_MCU_EVENT_BALL:
+            TAL_PR_INFO("MCU BALL: %d", value);
+            break;
+        case FAQIUJI_MCU_EVENT_RADAR:
+            TAL_PR_INFO("MCU RADAR: %d", value);
+            break;
+        case FAQIUJI_MCU_EVENT_TEMPERATURE:
+            value16 = frame->len >= 3U ?
+                      ((UINT16_T)frame->payload[1] |
+                       ((UINT16_T)frame->payload[2] << 8U)) : 0U;
+            TAL_PR_INFO("MCU NTC RAW: %u", value16);
+            break;
+        case FAQIUJI_MCU_EVENT_WORK:
+            work_state = value;
+            TAL_PR_INFO("MCU WORK STATE: %d", work_state);
+            app_dp_report(DP_ID_WORK_STATE, &work_state, 1U);
+            break;
+        case FAQIUJI_MCU_EVENT_COUNT:
+            value16 = frame->len >= 3U ?
+                      ((UINT16_T)frame->payload[1] |
+                       ((UINT16_T)frame->payload[2] << 8U)) : 0U;
+            TAL_PR_INFO("MCU LAUNCH COUNT: %u", value16);
+            break;
+        default:
+            TAL_PR_WARN("MCU EVENT UNKNOWN: %u", event_type);
+            break;
+    }
 }
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
@@ -401,7 +454,6 @@ OPERATE_RET tuya_init_last(VOID_T)
     /* ---- DP 定时上报定时器 ---- */
     tal_sw_timer_create(dp_report_timeout_handler, NULL, &s_dp_report_timer_id);
     tal_sw_timer_start(s_dp_report_timer_id, 1000, TAL_TIMER_CYCLE);
-    // tuya_ble_device_unbind();
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
     // if (tal_oled_init() == OPRT_OK) {

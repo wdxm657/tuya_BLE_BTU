@@ -19,6 +19,7 @@
 
 #include "app_dp_parser.h"
 #include "faqiuji_audio.h"
+#include "faqiuji_mcu_protocol.h"
 
 /***********************************************************************
  ********************* constant ( macro and enum ) *********************
@@ -36,6 +37,9 @@
 demo_dp_t g_cmd = {0};
 demo_dp_t g_rsp = {0};
 UINT32_T  g_sn  = 0;
+STATIC UINT8_T sg_launch_mode = 0U;
+STATIC UINT16_T sg_auto_tease_count = 20U;
+STATIC UINT16_T sg_standby_tease_min = 20U;
 
 STATIC BOOL_T app_dp_is_true(CONST UINT8_T *data, UINT16_T len)
 {
@@ -50,6 +54,29 @@ STATIC UINT8_T app_sound_mode_to_file(CONST UINT8_T *data, UINT16_T len)
     return FAQIUJI_AUDIO_FACTORY_SOUND_1;
 }
 
+STATIC UINT8_T app_mode_to_launch_mode(CONST UINT8_T *data, UINT16_T len)
+{
+    if (len == 1U && data[0] == 0U) {
+        return 0U;
+    }
+    if (len == 1U && data[0] == 1U) {
+        return 1U;
+    }
+    if (len == 1U && data[0] == 2U) {
+        return 2U;
+    }
+    if (len >= 6U && memcmp(data, "active", 6U) == 0) {
+        return 0U;
+    }
+    if (len >= 6U && memcmp(data, "simple", 6U) == 0) {
+        return 1U;
+    }
+    if (len >= 4U && memcmp(data, "mild", 4U) == 0) {
+        return 2U;
+    }
+    return 0xFFU;
+}
+
 STATIC VOID_T app_audio_stop_current(VOID_T)
 {
     if (faqiuji_audio_is_playing()) {
@@ -62,8 +89,11 @@ STATIC VOID_T app_audio_stop_current(VOID_T)
 
 STATIC UINT8_T app_dp_type(UINT8_T dp_id)
 {
+    if (dp_id == DP_ID_MODE) return DT_ENUM;
     if (dp_id == DP_ID_SOUND_MODE) return DT_ENUM;
     if (dp_id == DP_ID_VOLUME) return DT_VALUE;
+    if (dp_id == DP_ID_AUTO_TEASE_TIME ||
+        dp_id == DP_ID_STANDBY_TEASE_TIME) return DT_VALUE;
     return DT_BOOL;
 }
 
@@ -89,6 +119,62 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
     TAL_PR_HEXDUMP_INFO("dp_cmd", (VOID_T*)&g_cmd, (g_cmd.dp_data_len + 4));
 
     switch (g_cmd.dp_id) {
+        case DP_ID_SWITCH:
+            if (g_cmd.dp_data_len != DT_BOOL_LEN) {
+                return OPRT_INVALID_PARM;
+            }
+            /* The switch business is reserved for a later implementation. */
+            break;
+        case DP_ID_MODE: {
+            UINT8_T launch_mode = app_mode_to_launch_mode(g_cmd.dp_data,
+                                                            g_cmd.dp_data_len);
+            if (launch_mode > 2U) {
+                TAL_PR_ERR("DP MODE: unsupported value");
+                return OPRT_INVALID_PARM;
+            }
+            sg_launch_mode = launch_mode;
+            TAL_PR_INFO("DP MODE: configure launch mode=%u", launch_mode);
+            if (faqiuji_mcu_config_set(sg_launch_mode,
+                                       sg_auto_tease_count,
+                                       sg_standby_tease_min) != OPRT_OK) {
+                return OPRT_COM_ERROR;
+            }
+            break;
+        }
+        case DP_ID_AUTO_TEASE_TIME: {
+            UINT32_T count;
+            if (g_cmd.dp_data_len != DT_VALUE_LEN) return OPRT_INVALID_PARM;
+            count = ((UINT32_T)g_cmd.dp_data[0] << 24) |
+                    ((UINT32_T)g_cmd.dp_data[1] << 16) |
+                    ((UINT32_T)g_cmd.dp_data[2] << 8) |
+                    g_cmd.dp_data[3];
+            if (count < 10U) count = 10U;
+            if (count > 90U) count = 90U;
+            sg_auto_tease_count = (UINT16_T)count;
+            if (faqiuji_mcu_config_set(sg_launch_mode,
+                                       sg_auto_tease_count,
+                                       sg_standby_tease_min) != OPRT_OK) {
+                return OPRT_COM_ERROR;
+            }
+            break;
+        }
+        case DP_ID_STANDBY_TEASE_TIME: {
+            UINT32_T minutes;
+            if (g_cmd.dp_data_len != DT_VALUE_LEN) return OPRT_INVALID_PARM;
+            minutes = ((UINT32_T)g_cmd.dp_data[0] << 24) |
+                      ((UINT32_T)g_cmd.dp_data[1] << 16) |
+                      ((UINT32_T)g_cmd.dp_data[2] << 8) |
+                      g_cmd.dp_data[3];
+            if (minutes < 10U) minutes = 10U;
+            if (minutes > 30U) minutes = 30U;
+            sg_standby_tease_min = (UINT16_T)minutes;
+            if (faqiuji_mcu_config_set(sg_launch_mode,
+                                       sg_auto_tease_count,
+                                       sg_standby_tease_min) != OPRT_OK) {
+                return OPRT_COM_ERROR;
+            }
+            break;
+        }
         case DP_ID_SOUND_MODE:
             TAL_PR_INFO("DP SOUND_MODE: len=%u type=%u first=%u",
                         g_cmd.dp_data_len, g_cmd.dp_type,

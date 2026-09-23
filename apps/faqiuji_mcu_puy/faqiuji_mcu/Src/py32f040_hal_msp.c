@@ -81,4 +81,47 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
   }
 }
 
+void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
+{
+  GPIO_InitTypeDef gpio = {0};
+
+  if (htim->Instance == TIM2) {
+    __HAL_RCC_TIM2_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+
+    gpio.Pin = MOTOR_PWM;
+    gpio.Mode = GPIO_MODE_AF_PP;
+    gpio.Pull = GPIO_NOPULL;
+    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio.Alternate = GPIO_AF2_TIM2;
+    HAL_GPIO_Init(GPIOA, &gpio);
+  }
+}
+
+void HAL_TIM_PWM_MspDeInit(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM2) {
+    HAL_GPIO_DeInit(GPIOA, MOTOR_PWM);
+    __HAL_RCC_TIM2_CLK_DISABLE();
+  }
+}
+
+void HAL_ADC_MspInit(ADC_HandleTypeDef *hadc)
+{
+  if (hadc->Instance == ADC1) {
+    __HAL_RCC_ADC_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    {
+      GPIO_InitTypeDef gpio = {0};
+      gpio.Mode = GPIO_MODE_ANALOG;
+      gpio.Pull = GPIO_NOPULL;
+      gpio.Pin = AD_BAT | AD_I_SHUNT;
+      HAL_GPIO_Init(GPIOA, &gpio);
+      gpio.Pin = AD_NTC;
+      HAL_GPIO_Init(GPIOB, &gpio);
+    }
+  }
+}
+
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/
