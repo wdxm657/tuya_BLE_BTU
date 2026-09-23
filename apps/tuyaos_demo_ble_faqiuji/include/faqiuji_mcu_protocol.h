@@ -17,6 +17,7 @@ typedef enum {
     FAQIUJI_MCU_CMD_STOP       = 0x11,
     FAQIUJI_MCU_CMD_STATUS_GET = 0x12,
     FAQIUJI_MCU_CMD_PARAM_SET  = 0x13,
+    FAQIUJI_MCU_CMD_KEY_EVENT  = 0x20,
 } FAQIUJI_MCU_CMD_E;
 
 typedef struct {

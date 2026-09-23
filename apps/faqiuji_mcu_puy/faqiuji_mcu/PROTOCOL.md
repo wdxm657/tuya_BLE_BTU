@@ -21,8 +21,12 @@ CRC 为 Modbus/IBM CRC16，初值 `0xFFFF`，多项式 `0xA001`，校验范围�
 | `0x11` STOP | 空 | `0x91` | `STATUS` |
 | `0x12` STATUS_GET | 空 | `0x92` | `STATUS, work_state, speed, angle, interval_lo, interval_hi` |
 | `0x13` PARAM_SET | `speed, angle, interval_lo, interval_hi` | `0x93` | `STATUS` |
+| `0x20` KEY_EVENT | `pressed` | 无 | 按键状态变化主动上报 |
 
 应答命令为请求命令加 `0x80`，应答中的 `SEQ` 原样返回。
+
+`KEY_EVENT` 的 `PAYLOAD` 长度为 1：`0x00` 表示松开，`0x01` 表示按下；
+该事件没有应答，仅在按键状态稳定变化时由控制单片机主动发送。
 
 状态码：
 

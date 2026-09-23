@@ -19,6 +19,7 @@ typedef enum
   FAQIUJI_CMD_STOP       = 0x11,
   FAQIUJI_CMD_STATUS_GET = 0x12,
   FAQIUJI_CMD_PARAM_SET  = 0x13,
+  FAQIUJI_CMD_KEY_EVENT  = 0x20,
 } FAQIUJI_CMD_E;
 
 typedef enum
@@ -48,6 +49,7 @@ void faqiuji_protocol_init(UART_HandleTypeDef *huart);
 void faqiuji_protocol_input(uint8_t value);
 void faqiuji_protocol_send(uint8_t cmd, uint8_t seq,
                            const uint8_t *payload, uint8_t len);
+void faqiuji_protocol_key_event(uint8_t pressed);
 
 #ifdef __cplusplus
 }

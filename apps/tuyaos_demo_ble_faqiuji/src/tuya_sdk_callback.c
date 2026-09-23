@@ -251,6 +251,19 @@ STATIC VOID_T tuya_uart_irq_rx_cb(TUYA_UART_NUM_E port_id, VOID_T *buff, UINT16_
     }
 }
 
+STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
+{
+    UINT8_T pressed;
+
+    if (frame == NULL || frame->len < 1 ||
+        frame->cmd != FAQIUJI_MCU_CMD_KEY_EVENT) {
+        return;
+    }
+
+    pressed = frame->payload[0] ? 1 : 0;
+    TAL_PR_INFO("MCU KEY: %d", pressed);
+}
+
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 
 STATIC VOID_T tuya_pre_sleep_cb(VOID_T)
@@ -375,7 +388,7 @@ OPERATE_RET tuya_init_last(VOID_T)
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
 
     tuya_ble_protocol_init();
-    faqiuji_mcu_protocol_init(NULL);
+    faqiuji_mcu_protocol_init(faqiuji_mcu_frame_cb);
 
     tal_uart_rx_reg_irq_cb(TUYA_UART_NUM_0, tuya_uart_irq_rx_cb);
 
@@ -418,7 +431,6 @@ OPERATE_RET tuya_main_loop(VOID_T)
     faqiuji_audio_task();
     app_dp_process_audio_events();
 //    tal_watchdog_refresh();
-    
     return (tuya_ble_sleep_allowed_check() == TRUE);
 }
 

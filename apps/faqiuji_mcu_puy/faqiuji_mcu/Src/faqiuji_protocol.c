@@ -1,4 +1,5 @@
 #include "faqiuji_protocol.h"
+#include "gpio_config.h"
 
 #include <string.h>
 
@@ -21,10 +22,6 @@ typedef struct
   FAQIUJI_FRAME_T frame;
   uint8_t payload_pos;
   uint8_t crc_low;
-  uint8_t tx_buffer[7U + FAQIUJI_MAX_PAYLOAD];
-  uint8_t pending_tx[7U + FAQIUJI_MAX_PAYLOAD];
-  uint16_t pending_tx_len;
-  uint8_t pending_tx_valid;
   uint8_t work_state;
   uint8_t speed;
   uint8_t angle;
@@ -32,6 +29,7 @@ typedef struct
 } FAQIUJI_PROTOCOL_CTX_T;
 
 static FAQIUJI_PROTOCOL_CTX_T sg_protocol;
+static uint8_t sg_event_seq;
 
 static uint16_t faqiuji_crc16(const uint8_t *data, uint16_t len)
 {
@@ -67,12 +65,15 @@ static void faqiuji_protocol_handle_frame(void)
 {
   const FAQIUJI_FRAME_T *frame = &sg_protocol.frame;
   uint8_t status = FAQIUJI_STATUS_OK;
-
+  static int flag = 0;
   switch (frame->cmd) {
     case FAQIUJI_CMD_PING:
       if (frame->len != 0U) {
         status = FAQIUJI_STATUS_BAD_LENGTH;
       }
+      flag = !flag;
+      HAL_GPIO_WritePin(GPIOA,  LED_MIDDLE, flag? GPIO_PIN_RESET : GPIO_PIN_SET);
+
       faqiuji_protocol_reply(frame->cmd, frame->seq, (FAQIUJI_STATUS_E)status);
       break;
 
@@ -163,6 +164,7 @@ void faqiuji_protocol_init(UART_HandleTypeDef *huart)
   sg_protocol.huart = huart;
   sg_protocol.state = FAQIUJI_RX_WAIT_HEAD;
   sg_protocol.work_state = FAQIUJI_WORK_STOPPED;
+  sg_event_seq = 0U;
 }
 
 void faqiuji_protocol_input(uint8_t value)
@@ -229,15 +231,14 @@ void faqiuji_protocol_input(uint8_t value)
 void faqiuji_protocol_send(uint8_t cmd, uint8_t seq,
                            const uint8_t *payload, uint8_t len)
 {
+  uint8_t tx[7U + FAQIUJI_MAX_PAYLOAD];
   uint16_t crc;
-  uint8_t *tx;
 
   if (sg_protocol.huart == NULL || len > FAQIUJI_MAX_PAYLOAD ||
       (len != 0U && payload == NULL)) {
     return;
   }
 
-  tx = sg_protocol.tx_buffer;
   tx[0] = FAQIUJI_FRAME_HEAD;
   tx[1] = FAQIUJI_FRAME_VERSION;
   tx[2] = cmd;
@@ -250,25 +251,20 @@ void faqiuji_protocol_send(uint8_t cmd, uint8_t seq,
   crc = faqiuji_crc16(&tx[1], (uint16_t)(4U + len));
   tx[5U + len] = (uint8_t)crc;
   tx[6U + len] = (uint8_t)(crc >> 8U);
-  sg_protocol.pending_tx_len = (uint16_t)(7U + len);
 
-  if (HAL_UART_Transmit_IT(sg_protocol.huart, tx,
-                           sg_protocol.pending_tx_len) == HAL_OK) {
-    sg_protocol.pending_tx_valid = 0U;
-  } else {
-    memcpy(sg_protocol.pending_tx, tx, sg_protocol.pending_tx_len);
-    sg_protocol.pending_tx_valid = 1U;
-  }
+  /* All protocol sends are serialized in the main loop. */
+  (void)HAL_UART_Transmit(sg_protocol.huart, tx, (uint16_t)(7U + len),
+                          100U);
 }
 
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+void faqiuji_protocol_key_event(uint8_t pressed)
 {
-  if (huart == sg_protocol.huart) {
-    if (sg_protocol.pending_tx_valid) {
-      if (HAL_UART_Transmit_IT(sg_protocol.huart, sg_protocol.pending_tx,
-                               sg_protocol.pending_tx_len) == HAL_OK) {
-        sg_protocol.pending_tx_valid = 0U;
-      }
-    }
+  uint8_t payload = pressed ? 1U : 0U;
+  static int flag = 0;
+  if (sg_protocol.huart == NULL) {
+    return;
   }
+  HAL_GPIO_WritePin(GPIOA,  LED_HIGH, pressed? GPIO_PIN_RESET : GPIO_PIN_SET);
+
+  faqiuji_protocol_send(FAQIUJI_CMD_KEY_EVENT, ++sg_event_seq, &payload, 1U);
 }

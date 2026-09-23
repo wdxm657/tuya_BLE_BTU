@@ -72,11 +72,12 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
     GPIO_InitStruct.Alternate = GPIO_AF9_USART1;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+    GPIO_InitStruct.Alternate = GPIO_AF9_USART1;
     GPIO_InitStruct.Pin = GPIO_PIN_9;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-    /* Enable USART3/USART4 interrupt */
-    HAL_NVIC_SetPriority(USART3_4_IRQn, 0, 1);
-    HAL_NVIC_EnableIRQ(USART3_4_IRQn);
+    /* Enable USART1 interrupt */
+    HAL_NVIC_SetPriority(USART1_IRQn, 0, 1);
+    HAL_NVIC_EnableIRQ(USART1_IRQn);
   }
 }
 
