@@ -1,165 +1,122 @@
-/**
-  ******************************************************************************
-  * @file    main.c
-  * @author  MCU Application Team
-  * @brief   Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by Puya under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2016 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  */
-
-/* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "faqiuji_protocol.h"
+#include "gpio_config.h"
 
-/* Private define ------------------------------------------------------------*/
-#define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
-#define TXSTARTMESSAGESIZE    (COUNTOF(aTxStartMessage) - 1)
-#define TXENDMESSAGESIZE      (COUNTOF(aTxEndMessage) - 1)
-
-/* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef UartHandle;
-uint8_t aTxStartMessage[] = "\r\n UART Hyperterminal communication based on IT\r\n Enter 12 characters using keyboard :\r\n";
-uint8_t aTxEndMessage[] = "\r\n Example Finished\r\n";
-uint8_t aRxBuffer[12] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+static uint8_t uart_rx_byte;
 
-/* Private user code ---------------------------------------------------------*/
-/* Private macro -------------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-
-/**
-  * @brief  Main program
-  * @retval int
-  */
-int main(void)
+static void APP_GpioInit(void)
 {
-  /* Reset of all peripherals, Initializes the Systick */
-  HAL_Init();
-  
-  /* Initialize USART */
-  UartHandle.Instance          = USART2;
-  UartHandle.Init.BaudRate     = 115200;
-  UartHandle.Init.WordLength   = UART_WORDLENGTH_8B;
-  UartHandle.Init.StopBits     = UART_STOPBITS_1;
-  UartHandle.Init.Parity       = UART_PARITY_NONE;
-  UartHandle.Init.HwFlowCtl    = UART_HWCONTROL_NONE;
-  UartHandle.Init.Mode         = UART_MODE_TX_RX;
+  GPIO_InitTypeDef gpio = {0};
+
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOF_CLK_ENABLE();
+
+  gpio.Mode = GPIO_MODE_OUTPUT_PP;
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Speed = GPIO_SPEED_FREQ_LOW;
+
+  gpio.Pin = MOTOR_PWM | LED_LOW | LED_MIDDLE | LED_HIGH | IE_PWM;
+  HAL_GPIO_Init(GPIOA, &gpio);
+  gpio.Pin = CHARGE_EN | LED_G | LED_R;
+  HAL_GPIO_Init(GPIOB, &gpio);
+  gpio.Pin = DCT_CON | IR_CON;
+  HAL_GPIO_Init(GPIOC, &gpio);
+
+  HAL_GPIO_WritePin(GPIOA, MOTOR_PWM | LED_LOW | LED_MIDDLE |
+                    LED_HIGH | IE_PWM, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, CHARGE_EN | LED_G | LED_R,
+                    GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, DCT_CON | IR_CON, GPIO_PIN_RESET);
+
+  gpio.Mode = GPIO_MODE_INPUT;
+  gpio.Pull = GPIO_PULLUP;
+  gpio.Pin = KEY;
+  HAL_GPIO_Init(GPIOC, &gpio);
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Pin = CHARGE_STATE;
+  HAL_GPIO_Init(GPIOB, &gpio);
+  gpio.Pin = USB_DET;
+  HAL_GPIO_Init(GPIOF, &gpio);
+  gpio.Pull = GPIO_PULLUP;
+  gpio.Pin = LEIDA_IN_O | IR;
+  HAL_GPIO_Init(GPIOA, &gpio);
+
+  gpio.Mode = GPIO_MODE_ANALOG;
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Pin = AD_I_SHUNT | AD_BAT;
+  HAL_GPIO_Init(GPIOA, &gpio);
+  gpio.Pin = AD_NTC;
+  HAL_GPIO_Init(GPIOB, &gpio);
+  gpio.Pin = NTC_CON;
+  gpio.Mode = GPIO_MODE_OUTPUT_PP;
+  HAL_GPIO_Init(GPIOB, &gpio);
+  HAL_GPIO_WritePin(GPIOB, NTC_CON, GPIO_PIN_RESET);
+}
+
+static void APP_UartInit(void)
+{
+  UartHandle.Instance = USART1;
+  UartHandle.Init.BaudRate = 9600;
+  UartHandle.Init.WordLength = UART_WORDLENGTH_8B;
+  UartHandle.Init.StopBits = UART_STOPBITS_1;
+  UartHandle.Init.Parity = UART_PARITY_NONE;
+  UartHandle.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  UartHandle.Init.Mode = UART_MODE_TX_RX;
   UartHandle.Init.OverSampling = UART_OVERSAMPLING_16;
   UartHandle.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  HAL_UART_Init(&UartHandle);
 
-  /* Start the transmission process */
-  if(HAL_UART_Transmit_IT(&UartHandle, (uint8_t*)aTxStartMessage, TXSTARTMESSAGESIZE)!= HAL_OK)
-  {
-    /* Transfer error in transmission process */
+  if (HAL_UART_Init(&UartHandle) != HAL_OK) {
     APP_ErrorHandler();
   }
 
-  /* Put UART peripheral in reception process */
-  if(HAL_UART_Receive_IT(&UartHandle, (uint8_t *)aRxBuffer, 12) != HAL_OK)
-  {
-    /* Transfer error in reception process */
+  faqiuji_protocol_init(&UartHandle);
+  if (HAL_UART_Receive_IT(&UartHandle, &uart_rx_byte, 1U) != HAL_OK) {
     APP_ErrorHandler();
-  }
-
-  /* Wait for the end of the transfer */
-  while (HAL_UART_GetState(&UartHandle) != HAL_UART_STATE_READY)
-  {
-  }
-
-  /* Send the received Buffer */
-  if(HAL_UART_Transmit_IT(&UartHandle, (uint8_t*)aRxBuffer, 12)!= HAL_OK)
-  {
-    /* Transfer error in transmission process */
-    APP_ErrorHandler();
-  }
-
-  /* Wait for the end of the transfer */
-  while (HAL_UART_GetState(&UartHandle) != HAL_UART_STATE_READY)
-  {
-  }
-
-  /* Send the End Message */
-  if(HAL_UART_Transmit_IT(&UartHandle, (uint8_t*)aTxEndMessage, TXENDMESSAGESIZE)!= HAL_OK)
-  {
-    /* Transfer error in transmission process */
-    APP_ErrorHandler();
-  }
-
-  /* Wait for the end of the transfer */
-  while (HAL_UART_GetState(&UartHandle) != HAL_UART_STATE_READY)
-  {
-  }
-
-  /* Turn on LED if test passes then enter infinite loop */
-  BSP_LED_On(LED_GREEN);
-
-  /* Infinite loop */
-  while (1)
-  {
   }
 }
 
-/**
-  * @brief  USART error handler callback
-  * @param  huart：USART handle
-  * @retval None
-  */
+int main(void)
+{
+  HAL_Init();
+  APP_GpioInit();
+  APP_UartInit();
+
+  while (1) {
+  }
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart == &UartHandle) {
+    faqiuji_protocol_input(uart_rx_byte);
+    if (HAL_UART_Receive_IT(&UartHandle, &uart_rx_byte, 1U) != HAL_OK) {
+      APP_ErrorHandler();
+    }
+  }
+}
+
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
-  /* Turn LED off: Transfer error in reception/transmission process */
-  BSP_LED_Off(LED_GREEN);
+  if (huart == &UartHandle) {
+    (void)HAL_UART_Receive_IT(&UartHandle, &uart_rx_byte, 1U);
+  }
 }
 
-/**
-  * @brief  Error handling function
-  * @param  None
-  * @retval None
-  */
 void APP_ErrorHandler(void)
 {
-  /* Infinite loop */
-  while (1)
-  {
+  __disable_irq();
+  while (1) {
   }
 }
 
-#ifdef  USE_FULL_ASSERT
-/**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file：Pointer to the source file name
-  * @param  line：assert_param error line source number
-  * @retval None
-  */
+#ifdef USE_FULL_ASSERT
 void assert_failed(uint8_t *file, uint32_t line)
 {
-  /* User can add His own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* Infinite loop */
-  while (1)
-  {
-  }
+  (void)file;
+  (void)line;
+  APP_ErrorHandler();
 }
-#endif /* USE_FULL_ASSERT */
-
-/************************ (C) COPYRIGHT Puya *****END OF FILE******************/
+#endif

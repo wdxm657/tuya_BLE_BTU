@@ -21,5 +21,6 @@
 1=PY32F040xB
 [User]
 0=../Src/main.c
-1=../Src/py32f040_hal_msp.c
-2=../Src/py32f040_it.c
+1=../Src/faqiuji_protocol.c
+2=../Src/py32f040_hal_msp.c
+3=../Src/py32f040_it.c

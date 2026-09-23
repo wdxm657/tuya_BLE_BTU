@@ -405,6 +405,11 @@
               <FilePath>..\Src\main.c</FilePath>
             </File>
             <File>
+              <FileName>faqiuji_protocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Src\faqiuji_protocol.c</FilePath>
+            </File>
+            <File>
               <FileName>py32f040_hal_msp.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Src\py32f040_hal_msp.c</FilePath>
