@@ -415,6 +415,11 @@
               <FilePath>..\Src\faqiuji_launcher.c</FilePath>
             </File>
             <File>
+              <FileName>faqiuji_device.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Src\faqiuji_device.c</FilePath>
+            </File>
+            <File>
               <FileName>py32f040_hal_msp.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Src\py32f040_hal_msp.c</FilePath>
@@ -548,6 +553,16 @@
               <FileName>py32f040_hal_cortex.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\resource\PY32F040_Firmware_V1.1.3\Drivers\PY32F040_HAL_Driver\src\py32f040_hal_cortex.c</FilePath>
+            </File>
+            <File>
+              <FileName>py32f040_hal_adc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\resource\PY32F040_Firmware_V1.1.3\Drivers\PY32F040_HAL_Driver\src\py32f040_hal_adc.c</FilePath>
+            </File>
+            <File>
+              <FileName>py32f040_hal_adc_ex.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\resource\PY32F040_Firmware_V1.1.3\Drivers\PY32F040_HAL_Driver\src\py32f040_hal_adc_ex.c</FilePath>
             </File>
           </Files>
         </Group>

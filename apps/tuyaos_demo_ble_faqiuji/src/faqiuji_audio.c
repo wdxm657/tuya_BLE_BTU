@@ -16,10 +16,10 @@
 
 #define AUDIO_MAGIC 0x55415146UL
 #define AUDIO_HEADER_SIZE 8
-#define AUDIO_PLAY_BUFFER_SIZE 2048
-#define AUDIO_CAPTURE_BUFFER_SIZE 4096
+#define AUDIO_PLAY_BUFFER_SIZE 1024
+#define AUDIO_CAPTURE_BUFFER_SIZE 2048
 #define AUDIO_CAPTURE_BUFFER_SAMPLES (AUDIO_CAPTURE_BUFFER_SIZE / sizeof(UINT16_T))
-#define AUDIO_CAPTURE_CHUNK_SIZE 256
+#define AUDIO_CAPTURE_CHUNK_SIZE 128
 /*
  * The SDK's audio_amic_init(AUDIO_8K) path produces 16 kHz samples on this
  * chip (its 8 kHz branch selects the 16 kHz CIC setting). Store every other

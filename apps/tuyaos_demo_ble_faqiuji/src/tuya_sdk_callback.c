@@ -304,6 +304,7 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
             work_state = value;
             TAL_PR_INFO("MCU WORK STATE: %d", work_state);
             app_dp_report(DP_ID_WORK_STATE, &work_state, 1U);
+            app_dp_set_work_state(work_state);
             break;
         case FAQIUJI_MCU_EVENT_COUNT:
             value16 = frame->len >= 3U ?

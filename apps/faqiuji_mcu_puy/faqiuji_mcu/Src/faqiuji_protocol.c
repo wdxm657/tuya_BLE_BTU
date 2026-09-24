@@ -297,8 +297,6 @@ void faqiuji_protocol_key_event(uint8_t pressed)
   if (sg_protocol.huart == NULL) {
     return;
   }
-  HAL_GPIO_WritePin(GPIOA,  LED_HIGH, pressed? GPIO_PIN_RESET : GPIO_PIN_SET);
-
   faqiuji_protocol_send(FAQIUJI_CMD_KEY_EVENT, ++sg_event_seq, &payload, 1U);
 }
 

@@ -13,6 +13,7 @@
 
 #include "tal_log.h"
 #include "tal_util.h"
+#include "tkl_system.h"
 
 #include "tuya_ble_api.h"
 #include "tuya_ble_mutli_tsf_protocol.h"
@@ -40,6 +41,15 @@ UINT32_T  g_sn  = 0;
 STATIC UINT8_T sg_launch_mode = 0U;
 STATIC UINT16_T sg_auto_tease_count = 20U;
 STATIC UINT16_T sg_standby_tease_min = 20U;
+STATIC UINT32_T sg_record_start_ms;
+STATIC BOOL_T sg_sleep_audio_active;
+STATIC UINT8_T sg_sleep_audio_phase;
+STATIC UINT32_T sg_sleep_phase_start_ms;
+STATIC UINT8_T sg_comfort_sound_file = FAQIUJI_AUDIO_FACTORY_SOUND_1;
+
+#define FAQIUJI_SLEEP_AUDIO_PHASE_MS 600000UL
+#define FAQIUJI_AUDIO_SLEEP_OWNER     0U
+#define FAQIUJI_AUDIO_SLEEP_COMFORT   1U
 
 STATIC BOOL_T app_dp_is_true(CONST UINT8_T *data, UINT16_T len)
 {
@@ -52,6 +62,19 @@ STATIC UINT8_T app_sound_mode_to_file(CONST UINT8_T *data, UINT16_T len)
     if (len == 1 && data[0] == 1) return FAQIUJI_AUDIO_FACTORY_SOUND_2;
     if (len >= 7 && memcmp(data, "sound_2", 7) == 0) return FAQIUJI_AUDIO_FACTORY_SOUND_2;
     return FAQIUJI_AUDIO_FACTORY_SOUND_1;
+}
+
+STATIC OPERATE_RET app_sleep_audio_start(VOID_T)
+{
+    UINT8_T file_id = (sg_sleep_audio_phase == FAQIUJI_AUDIO_SLEEP_OWNER) ?
+                      FAQIUJI_AUDIO_USER_FILE_ID : sg_comfort_sound_file;
+    OPERATE_RET ret = faqiuji_audio_play_start(file_id);
+
+    if (ret != OPRT_OK && sg_sleep_audio_phase == FAQIUJI_AUDIO_SLEEP_OWNER) {
+        sg_sleep_audio_phase = FAQIUJI_AUDIO_SLEEP_COMFORT;
+        ret = faqiuji_audio_play_start(sg_comfort_sound_file);
+    }
+    return ret;
 }
 
 STATIC UINT8_T app_mode_to_launch_mode(CONST UINT8_T *data, UINT16_T len)
@@ -182,6 +205,7 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             app_audio_stop_current();
             {
                 UINT8_T file_id = app_sound_mode_to_file(g_cmd.dp_data, g_cmd.dp_data_len);
+                sg_comfort_sound_file = file_id;
                 OPERATE_RET audio_ret = faqiuji_audio_preview_start(file_id);
                 TAL_PR_INFO("DP SOUND_MODE: start file=%u ret=%d", file_id, audio_ret);
             }
@@ -197,6 +221,8 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
                 if (!faqiuji_audio_is_recording()) {
                     if (faqiuji_audio_record_start(FAQIUJI_AUDIO_USER_FILE_ID) != OPRT_OK) {
                         g_cmd.dp_data[0] = 0;
+                    } else {
+                        sg_record_start_ms = tkl_system_get_millisecond();
                     }
                 }
             } else if (faqiuji_audio_is_recording()) {
@@ -286,8 +312,55 @@ OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T* buf, UINT32_T size)
 VOID_T app_dp_process_audio_events(VOID_T)
 {
     UINT8_T value = 0;
+    UINT32_T now = tkl_system_get_millisecond();
+
+    if (faqiuji_audio_is_recording() &&
+        (now - sg_record_start_ms) >= 10000UL) {
+        if (faqiuji_audio_record_stop() == OPRT_OK) {
+            app_dp_report(DP_ID_SOUND, &value, DT_BOOL_LEN);
+        }
+    }
 
     if (faqiuji_audio_take_play_finished()) {
-        app_dp_report(DP_ID_PLAY, &value, DT_BOOL_LEN);
+        if (!sg_sleep_audio_active) {
+            app_dp_report(DP_ID_PLAY, &value, DT_BOOL_LEN);
+        }
+    }
+
+    if (!sg_sleep_audio_active) {
+        return;
+    }
+    if ((now - sg_sleep_phase_start_ms) < FAQIUJI_SLEEP_AUDIO_PHASE_MS) {
+        return;
+    }
+
+    sg_sleep_phase_start_ms = now;
+    if (sg_sleep_audio_phase == FAQIUJI_AUDIO_SLEEP_OWNER) {
+        faqiuji_audio_stop();
+        sg_sleep_audio_phase = FAQIUJI_AUDIO_SLEEP_COMFORT;
+        (void)app_sleep_audio_start();
+    } else {
+        faqiuji_audio_stop();
+        (void)app_sleep_audio_start();
+    }
+}
+
+VOID_T app_dp_set_work_state(UINT8_T work_state)
+{
+    if (work_state == 1U) {
+        if (!sg_sleep_audio_active) {
+            sg_sleep_audio_active = TRUE;
+            sg_sleep_audio_phase = FAQIUJI_AUDIO_SLEEP_OWNER;
+            sg_sleep_phase_start_ms = tkl_system_get_millisecond();
+            (void)app_sleep_audio_start();
+        }
+    } else if (work_state == 0U || work_state == 2U ||
+               work_state == 3U) {
+        if (sg_sleep_audio_active) {
+            sg_sleep_audio_active = FALSE;
+            if (faqiuji_audio_is_playing()) {
+                (void)faqiuji_audio_stop();
+            }
+        }
     }
 }

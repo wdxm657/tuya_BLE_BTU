@@ -158,7 +158,11 @@ int main(void)
   (void)xTaskCreate(APP_UartTask, "uart", 256, NULL, 3, NULL);
   (void)xTaskCreate(APP_KeyTask, "key", 192, NULL, 2, NULL);
   (void)xTaskCreate(faqiuji_launcher_task, "launch", 256, NULL, 2, NULL);
-  (void)xTaskCreate(faqiuji_device_task, "device", 256, NULL, 2, NULL);
+  (void)xTaskCreate(faqiuji_device_sensor_task, "sensor", 256, NULL, 3, NULL);
+  // (void)xTaskCreate(faqiuji_device_power_task, "power", 256, NULL, 2, NULL);
+  (void)xTaskCreate(faqiuji_device_ir_task, "ir", 192, NULL, 2, NULL);
+  (void)xTaskCreate(faqiuji_device_led_task, "led", 192, NULL, 1, NULL);
+  (void)xTaskCreate(faqiuji_device_control_task, "control", 256, NULL, 2, NULL);
   vTaskStartScheduler();
   APP_ErrorHandler();
 }

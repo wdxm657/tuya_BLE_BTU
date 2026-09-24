@@ -95,6 +95,16 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
     gpio.Speed = GPIO_SPEED_FREQ_HIGH;
     gpio.Alternate = GPIO_AF2_TIM2;
     HAL_GPIO_Init(GPIOA, &gpio);
+  } else if (htim->Instance == TIM1) {
+    __HAL_RCC_TIM1_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+
+    gpio.Pin = IE_PWM;
+    gpio.Mode = GPIO_MODE_AF_PP;
+    gpio.Pull = GPIO_NOPULL;
+    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio.Alternate = GPIO_AF2_TIM1;
+    HAL_GPIO_Init(GPIOA, &gpio);
   }
 }
 
@@ -103,13 +113,24 @@ void HAL_TIM_PWM_MspDeInit(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM2) {
     HAL_GPIO_DeInit(GPIOA, MOTOR_PWM);
     __HAL_RCC_TIM2_CLK_DISABLE();
+  } else if (htim->Instance == TIM1) {
+    HAL_GPIO_DeInit(GPIOA, IE_PWM);
+    __HAL_RCC_TIM1_CLK_DISABLE();
   }
 }
 
 void HAL_ADC_MspInit(ADC_HandleTypeDef *hadc)
 {
   if (hadc->Instance == ADC1) {
+    RCC_PeriphCLKInitTypeDef clock_config = {0};
+
     __HAL_RCC_ADC_CLK_ENABLE();
+    clock_config.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+    clock_config.ADCClockSelection = RCC_ADCCLKSOURCE_PCLK_DIV4;
+    if (HAL_RCCEx_PeriphCLKConfig(&clock_config) != HAL_OK) {
+      APP_ErrorHandler();
+    }
+
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     {
