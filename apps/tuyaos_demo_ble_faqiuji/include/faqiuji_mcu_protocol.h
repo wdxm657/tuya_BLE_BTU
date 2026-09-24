@@ -42,10 +42,9 @@ typedef struct {
     UINT8_T payload[FAQIUJI_MCU_MAX_PAYLOAD];
 } FAQIUJI_MCU_FRAME_T;
 
-typedef VOID_T (*FAQIUJI_MCU_FRAME_CB)(CONST FAQIUJI_MCU_FRAME_T *frame);
-
-OPERATE_RET faqiuji_mcu_protocol_init(FAQIUJI_MCU_FRAME_CB cb);
+OPERATE_RET faqiuji_mcu_protocol_init(VOID_T);
 VOID_T faqiuji_mcu_protocol_input(CONST UINT8_T *data, UINT16_T len);
+VOID_T faqiuji_mcu_protocol_process(VOID_T);
 OPERATE_RET faqiuji_mcu_send(UINT8_T cmd, CONST UINT8_T *payload, UINT8_T len);
 OPERATE_RET faqiuji_mcu_ping(VOID_T);
 OPERATE_RET faqiuji_mcu_launch(UINT8_T speed, UINT8_T angle, UINT16_T interval_ms);

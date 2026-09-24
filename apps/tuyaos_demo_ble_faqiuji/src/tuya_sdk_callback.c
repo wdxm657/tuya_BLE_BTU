@@ -251,73 +251,6 @@ STATIC VOID_T tuya_uart_irq_rx_cb(TUYA_UART_NUM_E port_id, VOID_T *buff, UINT16_
     }
 }
 
-STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
-{
-    UINT8_T event_type;
-    UINT8_T value;
-    UINT16_T value16;
-    UINT8_T work_state;
-
-    if (frame == NULL || frame->len == 0) {
-        return;
-    }
-
-    TAL_PR_INFO("MCU FRAME: cmd=0x%02x seq=%u len=%u",
-                frame->cmd, frame->seq, frame->len);
-
-    if (frame->cmd == FAQIUJI_MCU_CMD_KEY_EVENT) {
-        value = frame->payload[0] ? 1U : 0U;
-        TAL_PR_INFO("MCU KEY: %d", value);
-        return;
-    }
-
-    if (frame->cmd != FAQIUJI_MCU_CMD_STATUS_EVENT) {
-        return;
-    }
-
-    event_type = frame->payload[0];
-    value = frame->len > 1U ? frame->payload[1] : 0U;
-    switch (event_type) {
-        case FAQIUJI_MCU_EVENT_USB:
-            TAL_PR_INFO("MCU USB: %d", value);
-            break;
-        case FAQIUJI_MCU_EVENT_CHARGE:
-            TAL_PR_INFO("MCU CHARGE: %d", value);
-            break;
-        case FAQIUJI_MCU_EVENT_BATTERY:
-            TAL_PR_INFO("MCU BATTERY: %d%%", value);
-            app_dp_report(DP_ID_BATTERY, &value, 1U);
-            break;
-        case FAQIUJI_MCU_EVENT_BALL:
-            TAL_PR_INFO("MCU BALL: %d", value);
-            break;
-        case FAQIUJI_MCU_EVENT_RADAR:
-            TAL_PR_INFO("MCU RADAR: %d", value);
-            break;
-        case FAQIUJI_MCU_EVENT_TEMPERATURE:
-            value16 = frame->len >= 3U ?
-                      ((UINT16_T)frame->payload[1] |
-                       ((UINT16_T)frame->payload[2] << 8U)) : 0U;
-            TAL_PR_INFO("MCU NTC RAW: %u", value16);
-            break;
-        case FAQIUJI_MCU_EVENT_WORK:
-            work_state = value;
-            TAL_PR_INFO("MCU WORK STATE: %d", work_state);
-            app_dp_report(DP_ID_WORK_STATE, &work_state, 1U);
-            app_dp_set_work_state(work_state);
-            break;
-        case FAQIUJI_MCU_EVENT_COUNT:
-            value16 = frame->len >= 3U ?
-                      ((UINT16_T)frame->payload[1] |
-                       ((UINT16_T)frame->payload[2] << 8U)) : 0U;
-            TAL_PR_INFO("MCU LAUNCH COUNT: %u", value16);
-            break;
-        default:
-            TAL_PR_WARN("MCU EVENT UNKNOWN: %u", event_type);
-            break;
-    }
-}
-
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 
 STATIC VOID_T tuya_pre_sleep_cb(VOID_T)
@@ -442,8 +375,6 @@ OPERATE_RET tuya_init_last(VOID_T)
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
 
     tuya_ble_protocol_init();
-    faqiuji_mcu_protocol_init(faqiuji_mcu_frame_cb);
-
     tal_uart_rx_reg_irq_cb(TUYA_UART_NUM_0, tuya_uart_irq_rx_cb);
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
@@ -481,6 +412,7 @@ OPERATE_RET tuya_main_loop(VOID_T)
 #if !TUYA_BLE_USE_OS
     tuya_ble_main_tasks_exec();
 #endif
+    faqiuji_mcu_protocol_process();
     faqiuji_audio_task();
     app_dp_process_audio_events();
 //    tal_watchdog_refresh();
