@@ -23,7 +23,7 @@ demo_dp_t g_rsp = {0};
 UINT32_T g_sn = 0;
 
 #define APP_DP_FLASH_MAGIC       (0x4C425047UL)
-#define APP_DP_FLASH_VERSION     (1U)
+#define APP_DP_FLASH_VERSION     (2U)
 #define APP_DP_FLASH_ERASE_SIZE  (0x1000U)
 
 #pragma pack(1)
@@ -34,6 +34,9 @@ typedef struct {
     UINT16_T alt_laser_time;
     UINT16_T alt_bug_time;
     UINT8_T  stepless_percent;
+    UINT8_T  alt_bug_speed;
+    UINT8_T  alt_laser_speed;
+    UINT8_T  alt_game_rounds;
     UINT8_T  battery_percent;
 } app_dp_flash_data_t;
 #pragma pack()
@@ -49,6 +52,9 @@ STATIC OPERATE_RET app_dp_persistent_write(VOID_T)
     data.alt_laser_time = app_motor_get_alt_laser_time();
     data.alt_bug_time = app_motor_get_alt_bug_time();
     data.stepless_percent = app_motor_get_stepless_percent();
+    data.alt_bug_speed = app_motor_get_alt_bug_speed();
+    data.alt_laser_speed = app_motor_get_alt_laser_speed();
+    data.alt_game_rounds = app_motor_get_alt_game_rounds();
     data.battery_percent = app_battery_get_percent();
 
     ret = tal_flash_erase(USER_FLASH_ADDR_LASER_BUG, APP_DP_FLASH_ERASE_SIZE);
@@ -86,6 +92,9 @@ OPERATE_RET app_dp_load_persistent(VOID_T)
         data.alt_laser_time > 180 ||
         data.alt_bug_time > 180 ||
         data.stepless_percent > 100 ||
+        data.alt_bug_speed < 1 || data.alt_bug_speed > 100 ||
+        data.alt_laser_speed < 1 || data.alt_laser_speed > 100 ||
+        data.alt_game_rounds < 1 || data.alt_game_rounds > 5 ||
         data.battery_percent > 100) {
         TAL_PR_INFO("[dp] persistent data not found, use defaults");
         return OPRT_OK;
@@ -95,10 +104,15 @@ OPERATE_RET app_dp_load_persistent(VOID_T)
     app_motor_set_alt_laser_time(data.alt_laser_time);
     app_motor_set_alt_bug_time(data.alt_bug_time);
     app_motor_set_stepless_percent(data.stepless_percent);
+    app_motor_set_alt_bug_speed(data.alt_bug_speed);
+    app_motor_set_alt_laser_speed(data.alt_laser_speed);
+    app_motor_set_alt_game_rounds(data.alt_game_rounds);
     app_battery_set_percent(data.battery_percent);
-    TAL_PR_INFO("[dp] persistent data restored: mode=%d, laser=%d, bug=%d, speed=%d, battery=%d",
+    TAL_PR_INFO("[dp] persistent data restored: mode=%d, laser=%d, bug=%d, speed=%d, alt_bug_speed=%d, alt_laser_speed=%d, rounds=%d, battery=%d",
                 data.mode, data.alt_laser_time, data.alt_bug_time,
-                data.stepless_percent, data.battery_percent);
+                data.stepless_percent, data.alt_bug_speed,
+                data.alt_laser_speed, data.alt_game_rounds,
+                data.battery_percent);
     return OPRT_OK;
 }
 
@@ -172,6 +186,29 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         app_dp_reset_state_for_mode();
         break;
     }
+    case DP_ID_ALT_BUG_SPEED:
+    case DP_ID_ALT_LASER_SPEED: {
+        UINT32_T percent;
+
+        if (g_cmd.dp_data_len < DT_VALUE_LEN) {
+            return OPRT_INVALID_PARM;
+        }
+        percent = app_dp_get_value(g_cmd.dp_data);
+        if (percent < 1) {
+            percent = 1;
+        }
+        if (percent > 100) {
+            percent = 100;
+        }
+        app_dp_set_value(g_cmd.dp_data, percent);
+        if (g_cmd.dp_id == DP_ID_ALT_BUG_SPEED) {
+            app_motor_set_alt_bug_speed((UINT8_T)percent);
+        } else {
+            app_motor_set_alt_laser_speed((UINT8_T)percent);
+        }
+        app_dp_persistent_write();
+        break;
+    }
     case DP_ID_ALT_BUG_TIME: {
         UINT32_T seconds;
 
@@ -188,19 +225,39 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         app_dp_reset_state_for_mode();
         break;
     }
-    case DP_ID_STEPLESS_CONTROL: {
+    case DP_ID_STEPLESS_CONTROL:
+    {
         UINT32_T percent;
 
         if (g_cmd.dp_data_len < DT_VALUE_LEN) {
             return OPRT_INVALID_PARM;
         }
         percent = app_dp_get_value(g_cmd.dp_data);
+        if (percent < 1) {
+            percent = 1;
+        }
         if (percent > 100) {
             percent = 100;
         }
         app_dp_set_value(g_cmd.dp_data, percent);
         app_motor_set_stepless_percent((UINT8_T)percent);
         app_dp_persistent_write();
+        break;
+    }
+    case DP_ID_ALT_GAME_ROUNDS: {
+        UINT8_T enum_index;
+
+        if (g_cmd.dp_data_len < DT_ENUM_LEN) {
+            return OPRT_INVALID_PARM;
+        }
+        enum_index = g_cmd.dp_data[0];
+        if (enum_index > 4) {
+            enum_index = 4;
+        }
+        g_cmd.dp_data[0] = enum_index;
+        app_motor_set_alt_game_rounds((UINT8_T)(enum_index + 1));
+        app_dp_persistent_write();
+        app_dp_reset_state_for_mode();
         break;
     }
     default:
@@ -225,11 +282,14 @@ OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T *buf, UINT32_T size)
         break;
     case DP_ID_MODE:
     case DP_ID_WORK_STATE:
+    case DP_ID_ALT_GAME_ROUNDS:
         g_rsp.dp_type = DT_ENUM;
         g_rsp.dp_data_len = DT_ENUM_LEN;
         memcpy(g_rsp.dp_data, buf, DT_ENUM_LEN);
         break;
     case DP_ID_BATTERY:
+    case DP_ID_ALT_BUG_SPEED:
+    case DP_ID_ALT_LASER_SPEED:
     case DP_ID_ALT_LASER_TIME:
     case DP_ID_ALT_BUG_TIME:
     case DP_ID_STEPLESS_CONTROL:
@@ -273,4 +333,13 @@ VOID_T app_dp_report_all(VOID_T)
 
     app_dp_set_value(value_buf, app_motor_get_stepless_percent());
     app_dp_report(DP_ID_STEPLESS_CONTROL, value_buf, DT_VALUE_LEN);
+
+    app_dp_set_value(value_buf, app_motor_get_alt_bug_speed());
+    app_dp_report(DP_ID_ALT_BUG_SPEED, value_buf, DT_VALUE_LEN);
+
+    app_dp_set_value(value_buf, app_motor_get_alt_laser_speed());
+    app_dp_report(DP_ID_ALT_LASER_SPEED, value_buf, DT_VALUE_LEN);
+
+    enum_buf[0] = app_motor_get_alt_game_rounds() - 1;
+    app_dp_report(DP_ID_ALT_GAME_ROUNDS, enum_buf, DT_ENUM_LEN);
 }

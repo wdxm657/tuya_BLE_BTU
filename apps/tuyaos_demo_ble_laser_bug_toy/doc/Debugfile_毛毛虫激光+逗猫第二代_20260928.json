@@ -1,0 +1,216 @@
+{
+    "Pro_Key": "unafzjk7",
+    "Dp_Data": [
+        {
+            "attr": 1664,
+            "code": "switch",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_power2",
+            "id": 1,
+            "mode": "rw",
+            "name": "开关",
+            "property": {
+                "type": "bool"
+            },
+            "subType": "bool",
+            "type": "obj"
+        },
+        {
+            "attr": 1664,
+            "code": "mode",
+            "defaultValue": "",
+            "desc": "active：好动模式\nsimple：一般模式\nmild：温和模式",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_mode",
+            "id": 4,
+            "mode": "rw",
+            "name": "工作模式",
+            "property": {
+                "range": [
+                    "active",
+                    "simple",
+                    "mild"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "x_control",
+            "defaultValue": "1",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_mode",
+            "id": 7,
+            "mode": "rw",
+            "name": "昆虫速度",
+            "property": {
+                "max": 100,
+                "min": 1,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": ""
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "y_control",
+            "defaultValue": "1",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_mode",
+            "id": 8,
+            "mode": "rw",
+            "name": "光斑速度",
+            "property": {
+                "max": 100,
+                "min": 1,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": ""
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "battery_percentage",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_battery",
+            "id": 18,
+            "mode": "ro",
+            "name": "电池电量",
+            "property": {
+                "max": 100,
+                "min": 0,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": "%"
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1664,
+            "code": "work_state",
+            "defaultValue": "work",
+            "desc": "work：逗宠中\nstandby：待机中",
+            "editPermission": true,
+            "extContent": "",
+            "id": 26,
+            "mode": "ro",
+            "name": "工作状态",
+            "property": {
+                "range": [
+                    "work",
+                    "standby"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "auto_tease_time",
+            "defaultValue": "10",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "id": 28,
+            "mode": "rw",
+            "name": "每个循环激光追逐持续时长",
+            "property": {
+                "max": 180,
+                "min": 10,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": "second"
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "standby_tease_time",
+            "defaultValue": "10",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "id": 29,
+            "mode": "rw",
+            "name": "每个循环捕捉昆虫持续时长",
+            "property": {
+                "max": 180,
+                "min": 10,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": "second"
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "stepless_control",
+            "defaultValue": "1",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "id": 30,
+            "mode": "rw",
+            "name": "速度控制",
+            "property": {
+                "max": 100,
+                "min": 1,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": ""
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "backlight_enum",
+            "defaultValue": "1",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "id": 35,
+            "mode": "rw",
+            "name": "交替游戏次数",
+            "property": {
+                "range": [
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                    "5"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
+            "type": "obj"
+        }
+    ]
+}

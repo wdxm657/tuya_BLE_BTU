@@ -145,6 +145,9 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     static UINT8_T s_last_switch  = 0xFF;
     static UINT8_T s_last_mode    = 0xFF;
     static UINT8_T s_last_stepless = 0xFF;
+    static UINT8_T s_last_alt_bug_speed = 0xFF;
+    static UINT8_T s_last_alt_laser_speed = 0xFF;
+    static UINT8_T s_last_alt_game_rounds = 0xFF;
     static UINT8_T s_last_work_state = 0xFF;
     static UINT16_T s_last_alt_laser_time = 0xFFFF;
     static UINT16_T s_last_alt_bug_time = 0xFFFF;
@@ -195,6 +198,39 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
             buf[3] = stepless;
             app_dp_report(DP_ID_STEPLESS_CONTROL, buf, DT_VALUE_LEN);
             TAL_PR_DEBUG("[dp] stepless report: %d", stepless);
+        }
+    }
+
+    /* 交替模式昆虫速度 */
+    {
+        UINT8_T speed = app_motor_get_alt_bug_speed();
+        if (speed != s_last_alt_bug_speed) {
+            s_last_alt_bug_speed = speed;
+            memset(buf, 0, DT_VALUE_LEN);
+            buf[3] = speed;
+            app_dp_report(DP_ID_ALT_BUG_SPEED, buf, DT_VALUE_LEN);
+        }
+    }
+
+    /* 交替模式光斑速度 */
+    {
+        UINT8_T speed = app_motor_get_alt_laser_speed();
+        if (speed != s_last_alt_laser_speed) {
+            s_last_alt_laser_speed = speed;
+            memset(buf, 0, DT_VALUE_LEN);
+            buf[3] = speed;
+            app_dp_report(DP_ID_ALT_LASER_SPEED, buf, DT_VALUE_LEN);
+        }
+    }
+
+    /* 交替游戏次数 */
+    {
+        UINT8_T rounds = app_motor_get_alt_game_rounds();
+        if (rounds != s_last_alt_game_rounds) {
+            s_last_alt_game_rounds = rounds;
+            memset(buf, 0, DT_ENUM_LEN);
+            buf[0] = rounds - 1;
+            app_dp_report(DP_ID_ALT_GAME_ROUNDS, buf, DT_ENUM_LEN);
         }
     }
 

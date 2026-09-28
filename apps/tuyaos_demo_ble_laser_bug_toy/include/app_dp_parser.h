@@ -14,11 +14,14 @@ extern "C" {
 
 #define DP_ID_SWITCH           1   /* bool rw: App on/off */
 #define DP_ID_MODE             4   /* enum rw: active/simple/mild */
+#define DP_ID_ALT_BUG_SPEED    7   /* value rw: alternating bug speed 1~100 */
+#define DP_ID_ALT_LASER_SPEED  8   /* value rw: alternating laser speed 1~100 */
 #define DP_ID_BATTERY         18   /* value ro: 0~100 */
 #define DP_ID_WORK_STATE      26   /* enum ro: standby/charging/charge_done */
 #define DP_ID_ALT_LASER_TIME  28   /* value rw: alternating laser chase seconds */
 #define DP_ID_ALT_BUG_TIME    29   /* value rw: alternating bug hunt seconds */
 #define DP_ID_STEPLESS_CONTROL 30  /* value rw: speed 0~100 maps to PWM duty 40~80 */
+#define DP_ID_ALT_GAME_ROUNDS 35   /* enum rw: alternating game rounds 1~5 */
 
 #pragma pack(1)
 typedef struct {
