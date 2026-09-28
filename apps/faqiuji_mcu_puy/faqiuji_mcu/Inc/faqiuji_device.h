@@ -8,6 +8,8 @@ extern "C" {
 #endif
 
 void faqiuji_device_init(void);
+void APP_AdcConfig(void);
+void APP_TimConfig(void);
 void faqiuji_device_sensor_task(void *argument);
 void faqiuji_device_power_task(void *argument);
 void faqiuji_device_led_task(void *argument);

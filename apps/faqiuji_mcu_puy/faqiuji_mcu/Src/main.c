@@ -80,19 +80,19 @@ static void APP_GpioInit(void)
   gpio.Pull = GPIO_NOPULL;
   gpio.Speed = GPIO_SPEED_FREQ_LOW;
 
-  gpio.Pin = MOTOR_PWM | LED_LOW | LED_MIDDLE | LED_HIGH | IE_PWM;
+  gpio.Pin = MOTOR_PWM | LED_LOW | LED_MIDDLE | LED_HIGH | IE_PWM | IR_CON;
   HAL_GPIO_Init(GPIOA, &gpio);
   gpio.Pin = CHARGE_EN | LED_G | LED_R;
   HAL_GPIO_Init(GPIOB, &gpio);
-  gpio.Pin = DCT_CON | IR_CON;
+  gpio.Pin = DCT_CON;
   HAL_GPIO_Init(GPIOC, &gpio);
 
   HAL_GPIO_WritePin(GPIOA,  LED_LOW  | LED_MIDDLE | LED_HIGH, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, MOTOR_PWM | IE_PWM | IR_CON, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOB,  LED_G , GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOB,  LED_R , GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOA, MOTOR_PWM | IE_PWM , GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOB, CHARGE_EN ,GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOC, DCT_CON | IR_CON, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, DCT_CON, GPIO_PIN_RESET);
 
   gpio.Mode = GPIO_MODE_INPUT;
   gpio.Pull = GPIO_PULLUP;
@@ -107,14 +107,9 @@ static void APP_GpioInit(void)
   gpio.Pin = LEIDA_IN_O | IR;
   HAL_GPIO_Init(GPIOA, &gpio);
 
-  gpio.Mode = GPIO_MODE_ANALOG;
-  gpio.Pull = GPIO_NOPULL;
-  gpio.Pin = AD_I_SHUNT | AD_BAT;
-  HAL_GPIO_Init(GPIOA, &gpio);
-  gpio.Pin = AD_NTC;
-  HAL_GPIO_Init(GPIOB, &gpio);
-  gpio.Pin = NTC_CON;
   gpio.Mode = GPIO_MODE_OUTPUT_PP;
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Pin = NTC_CON;
   HAL_GPIO_Init(GPIOB, &gpio);
   HAL_GPIO_WritePin(GPIOB, NTC_CON, GPIO_PIN_SET);
 }
@@ -142,6 +137,7 @@ static void APP_UartInit(void)
     APP_ErrorHandler();
   }
 }
+
 static void APP_SystemClockConfig(void);
 
 int main(void)
@@ -153,6 +149,9 @@ int main(void)
   if (faqiuji_launcher_init() != HAL_OK) {
     APP_ErrorHandler();
   }
+
+  APP_AdcConfig();
+  APP_TimConfig();
   faqiuji_device_init();
 
   (void)xTaskCreate(APP_UartTask, "uart", 256, NULL, 3, NULL);
@@ -167,43 +166,42 @@ int main(void)
   APP_ErrorHandler();
 }
 
-
 /**
-  * @brief   System clock configuration function
-  * @param   None
-  * @retval  None
+  * @brief  System clock configuration function.
+  * @param  None
+  * @retval None
   */
 static void APP_SystemClockConfig(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /* Configure clock source: HSE/HSI/LSE/LSI */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE | RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_LSI | RCC_OSCILLATORTYPE_LSE;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;                                                       /* Enable HSI */
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_8MHz;                                /* Configure HSI output clock as 8MHz */
-  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;                                                       /* HSI not divided */
-  RCC_OscInitStruct.HSEState = RCC_HSE_OFF;                                                      /* Disable HSE */
+  /* Oscillator configuration */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE | RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_LSI | RCC_OSCILLATORTYPE_LSE; /* Select oscillator HSE, HSI, LSI, LSE */
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;                          /* Enable HSI */
+  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;                          /* HSI 1 frequency division */
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_8MHz;  /* Configure HSI clock at 8MHz */
+  RCC_OscInitStruct.HSEState = RCC_HSE_OFF;                         /* Close HSE */
   /*RCC_OscInitStruct.HSEFreq = RCC_HSE_16_32MHz;*/
-  RCC_OscInitStruct.LSIState = RCC_LSI_OFF;                                                      /* Disable LSI */
-  RCC_OscInitStruct.LSEState = RCC_LSE_OFF;                                                      /* Disable LSE */
+  RCC_OscInitStruct.LSIState = RCC_LSI_OFF;                         /* Close LSI */
+  RCC_OscInitStruct.LSEState = RCC_LSE_OFF;                         /* Close LSE */
   /*RCC_OscInitStruct.LSEDriver = RCC_LSEDRIVE_MEDIUM;*/
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_OFF;                                                  /* Disable PLL */
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_OFF;                     /* Close PLL */
   /*RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_NONE;*/
   /*RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL2;*/
-
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)                                           /* Initialize RCC oscillators */
+  /* Configure oscillator */
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     APP_ErrorHandler();
   }
 
-  /* Initialize CPU, AHB, and APB bus clocks */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1; /* RCC system clock types */
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSISYS;                                      /* SYSCLK source is HSI */
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;                                             /* AHB clock not divided */
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;                                              /* APB clock not divided */
-
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)                        /* Initialize RCC system clock */
+  /* Clock source configuration */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1; /* Choose to configure clock HCLK, SYSCLK, PCLK1 */
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSISYS; /* Select HSI as the system clock */
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;     /* AHB clock 1 division */
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;      /* APB clock 1 division */
+  /* Configure clock source */
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     APP_ErrorHandler();
   }

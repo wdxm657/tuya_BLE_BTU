@@ -6,15 +6,12 @@
 #include "task.h"
 #include "py32f040_hal_adc.h"
 
-#define FAQIUJI_ADC_VDD_MV                 3300U
+#define FAQIUJI_ADC_VREF_MV                2140U
 #define FAQIUJI_ADC_FULL_SCALE             4095U
 #define FAQIUJI_BATTERY_DIVIDER_RATIO      2U
 #define FAQIUJI_BATTERY_LOW_PERCENT        20U
 #define FAQIUJI_BATTERY_FULL_PERCENT       90U
-#define FAQIUJI_NTC_OVERHEAT_RAW           3800U
-#define FAQIUJI_NTC_RECOVER_RAW            3500U
 
-static ADC_HandleTypeDef sg_adc;
 static TIM_HandleTypeDef sg_ie_tim;
 static volatile uint8_t sg_mode;
 static volatile uint8_t sg_enabled = 1U;
@@ -24,7 +21,6 @@ static volatile uint8_t sg_charge_last;
 static volatile uint16_t sg_max_count = 20U;
 static volatile uint16_t sg_count;
 static volatile uint16_t sg_standby_min = 20U;
-static volatile uint8_t sg_charge_blocked;
 static volatile uint16_t sg_battery_percent;
 static volatile uint8_t sg_charging;
 static volatile uint8_t sg_ball_trigger;
@@ -36,38 +32,102 @@ static volatile uint8_t sg_led_phase;
 static volatile uint32_t sg_ie_tick;
 static volatile uint8_t sg_ie_enabled;
 
-static uint16_t faqiuji_adc_read(uint32_t channel)
+ADC_HandleTypeDef        AdcHandle;
+TIM_HandleTypeDef        TimHandle;
+TIM_MasterConfigTypeDef  sMasterConfig;
+/**
+  * @brief  ADC Configuration Function
+  * @param  None
+  * @retval None
+  */
+void APP_AdcConfig(void)
 {
-  ADC_ChannelConfTypeDef config = {0};
-  uint32_t sum = 0U;
-  uint8_t i;
+  ADC_ChannelConfTypeDef sConfig = {0};
 
-  config.Channel = channel;
-  config.Rank = ADC_REGULAR_RANK_1;
-  /* Match the PY32 ADC_TempSensor example for high-impedance sources. */
-  config.SamplingTime = ADC_SAMPLETIME_239CYCLES_5;
-  if (HAL_ADC_ConfigChannel(&sg_adc, &config) != HAL_OK) {
-    return 0U;
+  AdcHandle.Instance = ADC1;
+
+  AdcHandle.Init.Resolution            = ADC_RESOLUTION_12B;             /* 12-bit resolution for converted data */
+  AdcHandle.Init.DataAlign             = ADC_DATAALIGN_RIGHT;            /* Right-alignment for converted data */
+  AdcHandle.Init.ScanConvMode          = ADC_SCAN_DISABLE;               /* Scan mode off */
+  AdcHandle.Init.ContinuousConvMode    = DISABLE;                        /* Single mode */
+  AdcHandle.Init.NbrOfConversion       = 1;                              /* Number of conversion channels 1 */
+  AdcHandle.Init.DiscontinuousConvMode = DISABLE;                        /* Discontinuous mode not enabled */
+  AdcHandle.Init.NbrOfDiscConversion   = 1;                              /* Discontinuous mode short sequence length is 1 */
+  AdcHandle.Init.ExternalTrigConv      = ADC_EXTERNALTRIGCONV_T15_TRGO;  /* TIM15 TRGO triggered */
+  /* ADC initialization */
+  if (HAL_ADC_Init(&AdcHandle) != HAL_OK)
+  {
+    APP_ErrorHandler();
   }
-  for (i = 0U; i < 4U; ++i) {
-    if (HAL_ADC_Start(&sg_adc) == HAL_OK &&
-        HAL_ADC_PollForConversion(&sg_adc, 10U) == HAL_OK) {
-      sum += HAL_ADC_GetValue(&sg_adc);
-    }
-    (void)HAL_ADC_Stop(&sg_adc);
+
+  /* Configure VrefBuf 2.14V */
+  HAL_ADC_ConfigVrefBuf(&AdcHandle,ADC_VREFBUF_2P14V);
+
+  sConfig.Channel      = ADC_CHANNEL_7;
+  sConfig.Rank         = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_28CYCLES_5;
+  /* ADC channel configuration */
+  if (HAL_ADC_ConfigChannel(&AdcHandle, &sConfig) != HAL_OK)
+  {
+    APP_ErrorHandler();
   }
-  return (uint16_t)(sum / 4U);
+
+  /* ADC calibration */
+  if(HAL_ADCEx_Calibration_Start(&AdcHandle) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+
+/*  if(HAL_ADCEx_Calibration_GetStatus(&AdcHandle) != HAL_ADCCALIBOK)   */
+/*  {                                                                   */
+/*    APP_ErrorHandler();                                               */
+/*  }                                                                   */
+
+    /* ADC Enable Conversion */
+    HAL_ADC_Start(&AdcHandle);
 }
 
-static uint8_t faqiuji_battery_percent(uint16_t raw)
+/**
+  * @brief  TIM Configuration Function
+  * @param  None
+  * @retval None
+  */
+void APP_TimConfig(void)
 {
-  uint32_t mv = ((uint32_t)raw * FAQIUJI_ADC_VDD_MV *
-                 FAQIUJI_BATTERY_DIVIDER_RATIO) /
-                FAQIUJI_ADC_FULL_SCALE;
+  TimHandle.Instance = TIM15;                                         /* TIM15 */
+  TimHandle.Init.Period            = 8000 - 1;                        /* Period = 8000-1 */
+  TimHandle.Init.Prescaler         = 1000 - 1;                        /* Prescaler = 1000-1 */
+  TimHandle.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;          /* ClockDivision = 0 */
+  TimHandle.Init.CounterMode       = TIM_COUNTERMODE_UP;              /* Counter direction = Up */
+  TimHandle.Init.RepetitionCounter = 0;                               /* Repetition = 0 */
+  TimHandle.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;  /* Auto-reload register not buffered */
+  if (HAL_TIM_Base_Init(&TimHandle) != HAL_OK)                        /* Initialize TIM15 */
+  {
+    APP_ErrorHandler();
+  }
 
-  if (mv >= 4200U) return 100U;
-  if (mv <= 3250U) return 0U;
-  return (uint8_t)(((mv - 3250U) * 100U) / (4200U - 3250U));
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;                /* Select Update Event as Trigger Source */
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;        /* Master/Slave mode has no effect */
+  HAL_TIMEx_MasterConfigSynchronization(&TimHandle, &sMasterConfig);  /* Configure TIM15*/
+  if (HAL_TIM_Base_Start(&TimHandle) != HAL_OK)                       /* TIM15 start */
+  {
+    APP_ErrorHandler();
+  }
+}
+
+
+static uint16_t faqiuji_adc_read_battery_mv(void)
+{
+  uint16_t raw;
+
+  if (HAL_ADC_PollForConversion(&AdcHandle, 2000U) != HAL_OK) {
+    return 0U;
+  }
+
+  raw = (uint16_t)HAL_ADC_GetValue(&AdcHandle);
+  return (uint16_t)(((uint32_t)raw * FAQIUJI_ADC_VREF_MV *
+                     FAQIUJI_BATTERY_DIVIDER_RATIO) /
+                    FAQIUJI_ADC_FULL_SCALE);
 }
 
 static void faqiuji_charge_led_task(uint8_t battery, uint8_t charging)
@@ -110,33 +170,15 @@ static void faqiuji_ie_pwm_init(void)
   config.OCFastMode = TIM_OCFAST_DISABLE;
   config.OCIdleState = TIM_OCIDLESTATE_RESET;
   (void)HAL_TIM_PWM_ConfigChannel(&sg_ie_tim, &config, TIM_CHANNEL_1);
+
+  /* Start enabled: 38 kHz at 50% duty. */
+  __HAL_TIM_SET_COMPARE(&sg_ie_tim, TIM_CHANNEL_1,
+                        (sg_ie_tim.Init.Period + 1U) / 2U);
+  (void)HAL_TIM_PWM_Start(&sg_ie_tim, TIM_CHANNEL_1);
 }
 
 void faqiuji_device_init(void)
 {
-  ADC_ChannelConfTypeDef config = {0};
-
-  __HAL_RCC_ADC_CLK_ENABLE();
-  sg_adc.Instance = ADC1;
-  sg_adc.Init.Resolution = ADC_RESOLUTION_12B;
-  sg_adc.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  sg_adc.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  sg_adc.Init.ContinuousConvMode = DISABLE;
-  sg_adc.Init.NbrOfConversion = 1U;
-  sg_adc.Init.DiscontinuousConvMode = DISABLE;
-  sg_adc.Init.NbrOfDiscConversion = 1U;
-  sg_adc.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  if (HAL_ADC_Init(&sg_adc) != HAL_OK) {
-    APP_ErrorHandler();
-  }
-  config.Channel = ADC_CHANNEL_7;
-  config.Rank = ADC_REGULAR_RANK_1;
-  config.SamplingTime = ADC_SAMPLETIME_239CYCLES_5;
-  if (HAL_ADC_ConfigChannel(&sg_adc, &config) != HAL_OK) {
-    APP_ErrorHandler();
-  }
-  (void)HAL_ADCEx_Calibration_Start(&sg_adc);
-
   faqiuji_ie_pwm_init();
   HAL_GPIO_WritePin(GPIOB, CHARGE_EN, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOB, NTC_CON, GPIO_PIN_SET);
@@ -223,7 +265,7 @@ void faqiuji_device_sensor_task(void *argument)
   (void)argument;
 
   for (;;) {
-    ball = (HAL_GPIO_ReadPin(GPIOA, IR) == GPIO_PIN_SET) ? 1U : 0U;
+    // ball = (HAL_GPIO_ReadPin(GPIOA, IR) == GPIO_PIN_SET) ? 1U : 0U;
     usb = (HAL_GPIO_ReadPin(GPIOF, USB_DET) == GPIO_PIN_RESET) ? 1U : 0U;
     charging = (HAL_GPIO_ReadPin(GPIOB, CHARGE_STATE) == GPIO_PIN_SET) ?
                1U : 0U;
@@ -259,34 +301,24 @@ void faqiuji_device_sensor_task(void *argument)
 
 void faqiuji_device_power_task(void *argument)
 {
-  uint16_t battery_raw;
-  uint16_t ntc_raw;
+  uint16_t battery_mv;
   uint8_t battery;
-  uint8_t data[2];
+  uint8_t data;
   uint32_t last_sample = 0U;
   (void)argument;
 
   for (;;) {
     if ((HAL_GetTick() - last_sample) >= 1000U) {
       last_sample = HAL_GetTick();
-      battery_raw = faqiuji_adc_read(ADC_CHANNEL_7);
-      ntc_raw = faqiuji_adc_read(ADC_CHANNEL_0);
-      battery = faqiuji_battery_percent(battery_raw);
+      battery_mv = faqiuji_adc_read_battery_mv();
+      battery = (battery_mv >= 4200U) ? 100U :
+                (battery_mv <= 3250U) ? 0U :
+                (uint8_t)(((battery_mv - 3250U) * 100U) /
+                           (4200U - 3250U));
       sg_battery_percent = battery;
-      data[0] = battery;
-      faqiuji_protocol_status_event(FAQIUJI_EVENT_BATTERY, data, 1U);
+      data = battery;
+      faqiuji_protocol_status_event(FAQIUJI_EVENT_BATTERY, &data, 1U);
       faqiuji_charge_led_task(battery, sg_charging);
-
-      if (ntc_raw >= FAQIUJI_NTC_OVERHEAT_RAW) {
-        sg_charge_blocked = 1U;
-      } else if (ntc_raw <= FAQIUJI_NTC_RECOVER_RAW) {
-        sg_charge_blocked = 0U;
-      }
-      HAL_GPIO_WritePin(GPIOB, CHARGE_EN,
-                        sg_charge_blocked ? GPIO_PIN_RESET : GPIO_PIN_SET);
-      data[0] = (uint8_t)ntc_raw;
-      data[1] = (uint8_t)(ntc_raw >> 8U);
-      faqiuji_protocol_status_event(FAQIUJI_EVENT_TEMPERATURE, data, 2U);
     }
     vTaskDelay(pdMS_TO_TICKS(20U));
   }
@@ -298,10 +330,14 @@ void faqiuji_device_ir_task(void *argument)
   for (;;) {
     sg_ie_tick = HAL_GetTick();
     sg_ie_enabled = 1U;
-    (void)HAL_TIM_PWM_Start(&sg_ie_tim, TIM_CHANNEL_1);
+    /* Active phase: 38 kHz at 50% duty. */
+    __HAL_TIM_SET_COMPARE(&sg_ie_tim, TIM_CHANNEL_1,
+                          (sg_ie_tim.Init.Period + 1U) / 2U);
     vTaskDelay(pdMS_TO_TICKS(3U));
     sg_ie_enabled = 0U;
-    (void)HAL_TIM_PWM_Stop(&sg_ie_tim, TIM_CHANNEL_1);
+    /* Inactive phase: keep the output continuously high. */
+    __HAL_TIM_SET_COMPARE(&sg_ie_tim, TIM_CHANNEL_1,
+                          sg_ie_tim.Init.Period + 1U);
     vTaskDelay(pdMS_TO_TICKS(3U));
   }
 }

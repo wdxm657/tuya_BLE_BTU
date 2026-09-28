@@ -15,7 +15,7 @@
 #define IE_PWM GPIO_PIN_8       // PA8 对射装置发射IO 38kHz的50%占空比，3ms有，3ms无，一直持续 TIM1_CH1 待实现
 #define LEIDA_IN_O GPIO_PIN_10  // PA10 充电使能 雷达检测人是否存在 输入 待实现
 #define IR GPIO_PIN_11          // PA11 对射装置检测IO 输入 (有球在腔里会变成高电平，无球时低电平)
-#define IR_CON GPIO_PIN_12      // P12 对射装置开关IO 直接输出低电平 暂时不用
+#define IR_CON GPIO_PIN_12      // PA12 对射装置开关IO 直接输出低电平 暂时不用
 
 #define AD_NTC GPIO_PIN_0     // PB0 NTC AD采样 (NTC温度控制)
 #define AD_I_SHUNT GPIO_PIN_1 // PA1 暂时不用实现这个AD采样 

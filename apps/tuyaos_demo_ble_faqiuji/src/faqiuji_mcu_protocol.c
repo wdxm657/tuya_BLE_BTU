@@ -58,8 +58,10 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
             TAL_PR_INFO("MCU CHARGE: %d", value);
             break;
         case FAQIUJI_MCU_EVENT_BATTERY:
-            TAL_PR_INFO("MCU BATTERY: %d%%", value);
-            app_dp_report(DP_ID_BATTERY, &value, 1U);
+            value16 = frame->len >= 3U ?
+                      ((UINT16_T)frame->payload[1] |
+                       ((UINT16_T)frame->payload[2] << 8U)) : 0U;
+            TAL_PR_INFO("MCU BAT RAW: %u", value16);
             break;
         case FAQIUJI_MCU_EVENT_BALL:
             TAL_PR_INFO("MCU BALL: %d", value);
