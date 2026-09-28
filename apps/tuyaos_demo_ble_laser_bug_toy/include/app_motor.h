@@ -10,7 +10,7 @@
 #include "tal_pwm.h"
 
 #ifndef APP_FACTORY_TEST
-#define APP_FACTORY_TEST 1
+#define APP_FACTORY_TEST 0
 #endif
 
 #ifdef __cplusplus

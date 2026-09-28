@@ -36,6 +36,8 @@ extern UINT32_T  g_sn;
 OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size);
 OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T *buf, UINT32_T size);
 VOID_T app_dp_report_all(VOID_T);
+OPERATE_RET app_dp_load_persistent(VOID_T);
+OPERATE_RET app_dp_save_battery_percent(VOID_T);
 
 #ifdef __cplusplus
 }

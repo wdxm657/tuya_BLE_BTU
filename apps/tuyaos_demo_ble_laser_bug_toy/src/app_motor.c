@@ -18,10 +18,10 @@
 #define MOTOR_STEP_MS          1000
 #define BUG_PULL_STEP_MAX_MS   3000
 #define BUG_PULL_STEP_MIN_MS   1000
-#define BUG_DIRECTION_STOP_MS  1000
+#define BUG_DIRECTION_STOP_MS  2000
 #define BUG_PULL_REPEAT_COUNT  1
 #define BUG_PULL_STRONG_DUTY_PERCENT 90
-#define BUG_SLEEP_FINISH_MOTOR 1
+#define BUG_SLEEP_FINISH_MOTOR 2
 #define MOTOR_DUTY_MIN_PERCENT 30
 #define MOTOR_DUTY_MAX_PERCENT 50
 #define MOTOR_DUTY_DEFAULT_PERCENT 40
@@ -57,8 +57,8 @@ STATIC const motor_step_t s_bug_seq[BUG_SEQ_STEPS] = {
     {MOTOR_DIR_REVERSE, MOTOR_DIR_FORWARD, FALSE, BUG_PULL_STEP_MAX_MS, TRUE, FALSE},
 };
 
-STATIC game_mode_t s_game_mode = GAME_MODE_BUG_HUNT;
-STATIC game_mode_t s_last_active_mode = GAME_MODE_BUG_HUNT;
+STATIC game_mode_t s_game_mode = GAME_MODE_ALTERNATING;
+STATIC game_mode_t s_last_active_mode = GAME_MODE_ALTERNATING;
 STATIC UINT8_T s_stepless_percent = MOTOR_STEPLESS_DEFAULT_PERCENT;
 STATIC BOOL_T s_motor_enabled = FALSE;
 STATIC BOOL_T s_motor_running = FALSE;
@@ -308,6 +308,7 @@ STATIC UINT16_T app_motor_bug_tick(VOID_T)
     const motor_step_t *step;
 
     if (s_sleep_pending && s_bug_pause_active && s_seq_index == BUG_SLEEP_FINISH_NEXT_INDEX) {
+        TAL_PR_INFO("[motor] LAST stopped");
         s_sleep_pending = FALSE;
         app_motor_all_stop();
         app_motor_enter_sleep_mode();
@@ -345,7 +346,6 @@ STATIC BOOL_T app_motor_pre_sleep(VOID_T)
 
     TAL_PR_DEBUG("PRE SLEEP");
     s_sleep_pending = TRUE;
-    s_game_mode = GAME_MODE_BUG_HUNT;
     s_seq_index = BUG_SLEEP_FINISH_SEQ_INDEX;
     s_bug_repeat_count = 0;
     s_bug_pause_active = FALSE;
@@ -415,6 +415,18 @@ STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg)
         return;
     }
 
+    /*
+     * 休眠收尾阶段统一执行 BUG 电机动作，但不修改 s_game_mode。
+     * 这样交替模式休眠后唤醒时仍能恢复最近的工作模式。
+     */
+    if (s_sleep_pending) {
+        duration_ms = app_motor_bug_tick();
+        if (duration_ms > 0) {
+            tal_sw_timer_start(s_motor_timer_id, duration_ms, TAL_TIMER_ONCE);
+        }
+        return;
+    }
+
     if (s_game_mode == GAME_MODE_LASER_CHASE) {
         app_motor_laser_chase_start();
         return;
@@ -468,8 +480,8 @@ VOID_T app_motor_init(VOID_T)
     tal_gpio_init(LASER, &laser_cfg);
     tal_sw_timer_create(app_motor_timer_handler, NULL, &s_motor_timer_id);
 
-    s_game_mode = GAME_MODE_BUG_HUNT;
-    s_last_active_mode = GAME_MODE_BUG_HUNT;
+    s_game_mode = GAME_MODE_ALTERNATING;
+    s_last_active_mode = GAME_MODE_ALTERNATING;
     s_stepless_percent = MOTOR_STEPLESS_DEFAULT_PERCENT;
     s_motor_enabled = FALSE;
     s_motor_running = FALSE;

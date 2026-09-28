@@ -70,6 +70,7 @@ OPERATE_RET app_battery_read_voltage(INT32_T *vol_mv);
  * @return UINT8_T 0~100%
  */
 UINT8_T app_battery_get_percent(VOID_T);
+VOID_T app_battery_set_percent(UINT8_T percent);
 
 /**
  * @brief 获取缓存的电压 mV

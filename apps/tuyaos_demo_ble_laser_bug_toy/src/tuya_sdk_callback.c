@@ -502,6 +502,9 @@ OPERATE_RET tuya_init_third(VOID_T)
     /* 6. 电机 (PWM 初始化) */
     app_motor_init();
 
+    /* 恢复 APP 设置和上次关机前保存的电量百分比 */
+    app_dp_load_persistent();
+
     return OPRT_OK;
 }
 
@@ -520,6 +523,8 @@ STATIC VOID_T run_on_cb(VOID_T)
 
 STATIC VOID_T machine_power_off_cb(VOID_T)
 {
+    /* 进入低功耗前保存当前设置及电量，唤醒后按断电重启流程恢复 */
+    app_dp_save_battery_percent();
     app_battery_suspend();
     app_led_update();
     app_led_prepare_sleep();

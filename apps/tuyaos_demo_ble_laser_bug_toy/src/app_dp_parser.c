@@ -5,6 +5,8 @@
 
 #include "string.h"
 
+#include "board.h"
+#include "tal_flash.h"
 #include "tal_log.h"
 #include "tal_util.h"
 #include "tuya_ble_api.h"
@@ -19,6 +21,91 @@
 demo_dp_t g_cmd = {0};
 demo_dp_t g_rsp = {0};
 UINT32_T g_sn = 0;
+
+#define APP_DP_FLASH_MAGIC       (0x4C425047UL)
+#define APP_DP_FLASH_VERSION     (1U)
+#define APP_DP_FLASH_ERASE_SIZE  (0x1000U)
+
+#pragma pack(1)
+typedef struct {
+    UINT32_T magic;
+    UINT8_T  version;
+    UINT8_T  mode;
+    UINT16_T alt_laser_time;
+    UINT16_T alt_bug_time;
+    UINT8_T  stepless_percent;
+    UINT8_T  battery_percent;
+} app_dp_flash_data_t;
+#pragma pack()
+
+STATIC OPERATE_RET app_dp_persistent_write(VOID_T)
+{
+    app_dp_flash_data_t data = {0};
+    OPERATE_RET ret;
+
+    data.magic = APP_DP_FLASH_MAGIC;
+    data.version = APP_DP_FLASH_VERSION;
+    data.mode = (UINT8_T)app_motor_get_report_mode();
+    data.alt_laser_time = app_motor_get_alt_laser_time();
+    data.alt_bug_time = app_motor_get_alt_bug_time();
+    data.stepless_percent = app_motor_get_stepless_percent();
+    data.battery_percent = app_battery_get_percent();
+
+    ret = tal_flash_erase(USER_FLASH_ADDR_LASER_BUG, APP_DP_FLASH_ERASE_SIZE);
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("[dp] erase persistent data failed: %d", ret);
+        return ret;
+    }
+
+    ret = tal_flash_write(USER_FLASH_ADDR_LASER_BUG,
+                          (CONST UCHAR_T *)&data, SIZEOF(data));
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("[dp] write persistent data failed: %d", ret);
+    }
+    TAL_PR_INFO("[dp] persistent data writed: mode=%d, laser=%d, bug=%d, speed=%d, battery=%d",
+                data.mode, data.alt_laser_time, data.alt_bug_time,
+                data.stepless_percent, data.battery_percent);
+    return ret;
+}
+
+OPERATE_RET app_dp_load_persistent(VOID_T)
+{
+    app_dp_flash_data_t data = {0};
+    OPERATE_RET ret;
+
+    ret = tal_flash_read(USER_FLASH_ADDR_LASER_BUG,
+                         (UCHAR_T *)&data, SIZEOF(data));
+    if (ret != OPRT_OK) {
+        TAL_PR_WARN("[dp] read persistent data failed: %d", ret);
+        return ret;
+    }
+
+    if (data.magic != APP_DP_FLASH_MAGIC ||
+        data.version != APP_DP_FLASH_VERSION ||
+        data.mode > GAME_MODE_ALTERNATING ||
+        data.alt_laser_time > 180 ||
+        data.alt_bug_time > 180 ||
+        data.stepless_percent > 100 ||
+        data.battery_percent > 100) {
+        TAL_PR_INFO("[dp] persistent data not found, use defaults");
+        return OPRT_OK;
+    }
+
+    app_motor_set_mode((game_mode_t)data.mode);
+    app_motor_set_alt_laser_time(data.alt_laser_time);
+    app_motor_set_alt_bug_time(data.alt_bug_time);
+    app_motor_set_stepless_percent(data.stepless_percent);
+    app_battery_set_percent(data.battery_percent);
+    TAL_PR_INFO("[dp] persistent data restored: mode=%d, laser=%d, bug=%d, speed=%d, battery=%d",
+                data.mode, data.alt_laser_time, data.alt_bug_time,
+                data.stepless_percent, data.battery_percent);
+    return OPRT_OK;
+}
+
+OPERATE_RET app_dp_save_battery_percent(VOID_T)
+{
+    return app_dp_persistent_write();
+}
 
 STATIC VOID_T app_dp_set_value(UINT8_T *buf, UINT32_T value)
 {
@@ -66,6 +153,7 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         break;
     case DP_ID_MODE:
         app_motor_set_mode((game_mode_t)g_cmd.dp_data[0]);
+        app_dp_persistent_write();
         app_dp_reset_state_for_mode();
         break;
     case DP_ID_ALT_LASER_TIME: {
@@ -80,6 +168,7 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         }
         app_dp_set_value(g_cmd.dp_data, seconds);
         app_motor_set_alt_laser_time((UINT16_T)seconds);
+        app_dp_persistent_write();
         app_dp_reset_state_for_mode();
         break;
     }
@@ -95,6 +184,7 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         }
         app_dp_set_value(g_cmd.dp_data, seconds);
         app_motor_set_alt_bug_time((UINT16_T)seconds);
+        app_dp_persistent_write();
         app_dp_reset_state_for_mode();
         break;
     }
@@ -110,6 +200,7 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         }
         app_dp_set_value(g_cmd.dp_data, percent);
         app_motor_set_stepless_percent((UINT8_T)percent);
+        app_dp_persistent_write();
         break;
     }
     default:
