@@ -121,6 +121,25 @@ OPERATE_RET app_dp_save_battery_percent(VOID_T)
     return app_dp_persistent_write();
 }
 
+OPERATE_RET app_dp_clear_persistent(VOID_T)
+{
+    OPERATE_RET ret;
+
+    ret = tal_flash_erase(USER_FLASH_ADDR_LASER_BUG, APP_DP_FLASH_ERASE_SIZE);
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("[dp] clear persistent data failed: %d", ret);
+    } else {
+        TAL_PR_INFO("[dp] persistent data cleared");
+    }
+    return ret;
+}
+
+VOID_T app_dp_reset_to_defaults(VOID_T)
+{
+    app_motor_reset_defaults();
+    TAL_PR_INFO("[dp] user configuration reset to defaults");
+}
+
 STATIC VOID_T app_dp_set_value(UINT8_T *buf, UINT32_T value)
 {
     buf[0] = (UINT8_T)((value >> 24) & 0xFF);

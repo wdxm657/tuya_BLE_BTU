@@ -120,17 +120,25 @@ STATIC VOID_T tuya_ble_protocol_callback(tuya_ble_cb_evt_param_t* event)
 
         case TUYA_BLE_CB_EVT_UNBOUND: {
             TAL_PR_INFO("TUYA_BLE_CB_EVT_UNBOUND");
+            app_dp_clear_persistent();
+            app_dp_reset_to_defaults();
         } break;
 
         case TUYA_BLE_CB_EVT_ANOMALY_UNBOUND: {
             TAL_PR_INFO("TUYA_BLE_CB_EVT_ANOMALY_UNBOUND");
+            app_dp_clear_persistent();
+            app_dp_reset_to_defaults();
         } break;
 
         case TUYA_BLE_CB_EVT_DEVICE_RESET: {
             TAL_PR_INFO("TUYA_BLE_CB_EVT_DEVICE_RESET");
+            app_dp_clear_persistent();
+            app_dp_reset_to_defaults();
         } break;
 
         case TUYA_BLE_CB_EVT_UNBIND_RESET_RESPONSE: {
+            app_dp_clear_persistent();
+            app_dp_reset_to_defaults();
             TAL_PR_INFO("TUYA_BLE_CB_EVT_UNBIND_RESET_RESPONSE");
         } break;
 

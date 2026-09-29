@@ -41,6 +41,8 @@ OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T *buf, UINT32_T size);
 VOID_T app_dp_report_all(VOID_T);
 OPERATE_RET app_dp_load_persistent(VOID_T);
 OPERATE_RET app_dp_save_battery_percent(VOID_T);
+OPERATE_RET app_dp_clear_persistent(VOID_T);
+VOID_T app_dp_reset_to_defaults(VOID_T);
 
 #ifdef __cplusplus
 }

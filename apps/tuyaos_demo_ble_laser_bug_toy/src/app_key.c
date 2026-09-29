@@ -37,6 +37,7 @@
 #include "app_key.h"
 #include "app_state.h"
 #include "app_motor.h"
+#include "app_dp_parser.h"
 
 /***********************************************************************
  ********************* constant ( macro and enum ) *********************
@@ -201,6 +202,8 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                             tuya_ble_gap_disconnect();
                         }
                         tuya_ble_device_unbind();
+                        app_dp_clear_persistent();
+                        app_dp_reset_to_defaults();
                     } else {
                         /* 开机3s内的短按不做处理（防止唤醒按键被误认为进入低功耗） */
                         if (s_boot_tick_ms != 0 && (now_ms - s_boot_tick_ms) < 3000) {

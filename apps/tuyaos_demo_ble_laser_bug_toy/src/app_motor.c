@@ -25,8 +25,8 @@
 #define MOTOR_DUTY_MIN_PERCENT 30
 #define MOTOR_DUTY_MAX_PERCENT 50
 #define MOTOR_DUTY_DEFAULT_PERCENT 40
-#define ALT_SPEED_DEFAULT_PERCENT 1
-#define ALT_GAME_ROUNDS_DEFAULT 1
+#define ALT_SPEED_DEFAULT_PERCENT 50
+#define ALT_GAME_ROUNDS_DEFAULT 2
 #define MOTOR_STEPLESS_DEFAULT_PERCENT \
     (((MOTOR_DUTY_DEFAULT_PERCENT - MOTOR_DUTY_MIN_PERCENT) * 100) / \
      (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT))
@@ -537,6 +537,26 @@ VOID_T app_motor_init(VOID_T)
     app_state_register_pre_sleep_cb(app_motor_pre_sleep);
 
     TAL_PR_INFO("[motor] laser bug initialized");
+}
+
+VOID_T app_motor_reset_defaults(VOID_T)
+{
+    s_game_mode = GAME_MODE_ALTERNATING;
+    s_last_active_mode = GAME_MODE_ALTERNATING;
+    s_stepless_percent = MOTOR_STEPLESS_DEFAULT_PERCENT;
+    s_alt_laser_time_s = 60;
+    s_alt_bug_time_s = 60;
+    s_alt_bug_speed_percent = ALT_SPEED_DEFAULT_PERCENT;
+    s_alt_laser_speed_percent = ALT_SPEED_DEFAULT_PERCENT;
+    s_alt_game_rounds = ALT_GAME_ROUNDS_DEFAULT;
+    s_seq_index = 0;
+    s_bug_repeat_count = 0;
+    s_bug_pause_active = FALSE;
+    s_sleep_pending = FALSE;
+    s_alt_phase = 0;
+    s_alt_phase_elapsed_ms = 0;
+    s_alt_round = 0;
+    TAL_PR_INFO("[motor] user configuration reset to defaults");
 }
 
 VOID_T app_motor_set_mode(game_mode_t mode)

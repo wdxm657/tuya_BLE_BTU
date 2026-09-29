@@ -36,6 +36,7 @@ typedef enum {
 } game_mode_t;
 
 VOID_T app_motor_init(VOID_T);
+VOID_T app_motor_reset_defaults(VOID_T);
 VOID_T app_motor_set_mode(game_mode_t mode);
 game_mode_t app_motor_get_mode(VOID_T);
 game_mode_t app_motor_get_report_mode(VOID_T);
