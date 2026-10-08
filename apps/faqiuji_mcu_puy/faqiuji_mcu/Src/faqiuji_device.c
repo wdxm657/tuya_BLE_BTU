@@ -274,10 +274,10 @@ void faqiuji_device_sensor_task(void *argument)
     if (ball != sg_ball_last) {
       sg_ball_last = ball;
       data[0] = ball;
-      faqiuji_protocol_status_event(FAQIUJI_EVENT_BALL, data, 1U);
-      if (ball != 0U) {
-        sg_ball_trigger = 1U;
-      }
+      // faqiuji_protocol_status_event(FAQIUJI_EVENT_BALL, data, 1U);
+      // if (ball != 0U) {
+      //   sg_ball_trigger = 1U;
+      // }
     }
     if (usb != sg_usb_last) {
       sg_usb_last = usb;
@@ -303,7 +303,7 @@ void faqiuji_device_power_task(void *argument)
 {
   uint16_t battery_mv;
   uint8_t battery;
-  uint8_t data;
+  uint8_t data[2];
   uint32_t last_sample = 0U;
   (void)argument;
 
@@ -316,8 +316,9 @@ void faqiuji_device_power_task(void *argument)
                 (uint8_t)(((battery_mv - 3250U) * 100U) /
                            (4200U - 3250U));
       sg_battery_percent = battery;
-      data = battery;
-      faqiuji_protocol_status_event(FAQIUJI_EVENT_BATTERY, &data, 1U);
+      data[0] = (uint8_t)battery_mv;
+      data[1] = (uint8_t)(battery_mv >> 8);
+      faqiuji_protocol_status_event(FAQIUJI_EVENT_BATTERY, data, 2U);
       faqiuji_charge_led_task(battery, sg_charging);
     }
     vTaskDelay(pdMS_TO_TICKS(20U));
