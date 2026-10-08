@@ -36,11 +36,11 @@
 #define DUTY_BOOST_MAX         0
 
 #if (BUG_SLEEP_FINISH_MOTOR == 1)
-#define BUG_SLEEP_FINISH_SEQ_INDEX  1
-#define BUG_SLEEP_FINISH_NEXT_INDEX 0
-#elif (BUG_SLEEP_FINISH_MOTOR == 2)
 #define BUG_SLEEP_FINISH_SEQ_INDEX  0
 #define BUG_SLEEP_FINISH_NEXT_INDEX 1
+#elif (BUG_SLEEP_FINISH_MOTOR == 2)
+#define BUG_SLEEP_FINISH_SEQ_INDEX  1
+#define BUG_SLEEP_FINISH_NEXT_INDEX 0
 #else
 #error "BUG_SLEEP_FINISH_MOTOR must be 1 or 2"
 #endif
@@ -230,11 +230,27 @@ STATIC UINT32_T app_motor_min_u32(UINT32_T a, UINT32_T b)
     return (a < b) ? a : b;
 }
 
+STATIC VOID_T app_motor_start_sleep_finish(VOID_T)
+{
+    if (s_sleep_pending) {
+        return;
+    }
+
+    TAL_PR_DEBUG("[motor] start sleep finish sequence");
+    s_sleep_pending = TRUE;
+    s_seq_index = BUG_SLEEP_FINISH_SEQ_INDEX;
+    s_bug_repeat_count = 0;
+    s_bug_pause_active = FALSE;
+    s_alt_phase = 0;
+    s_alt_phase_elapsed_ms = 0;
+    app_motor_timer_handler(s_motor_timer_id, NULL);
+}
+
 STATIC VOID_T app_motor_alternating_finish(VOID_T)
 {
     s_alt_round++;
     if (s_alt_round >= s_alt_game_rounds) {
-        app_state_enter_sleep();
+        app_motor_start_sleep_finish();
         return;
     }
 
@@ -375,13 +391,7 @@ STATIC BOOL_T app_motor_pre_sleep(VOID_T)
     }
 
     TAL_PR_DEBUG("PRE SLEEP");
-    s_sleep_pending = TRUE;
-    s_seq_index = BUG_SLEEP_FINISH_SEQ_INDEX;
-    s_bug_repeat_count = 0;
-    s_bug_pause_active = FALSE;
-    s_alt_phase = 0;
-    s_alt_phase_elapsed_ms = 0;
-    app_motor_timer_handler(s_motor_timer_id, NULL);
+    app_motor_start_sleep_finish();
     return FALSE;
 }
 

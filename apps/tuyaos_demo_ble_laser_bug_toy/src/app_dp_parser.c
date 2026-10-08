@@ -22,6 +22,8 @@ demo_dp_t g_cmd = {0};
 demo_dp_t g_rsp = {0};
 UINT32_T g_sn = 0;
 
+STATIC VOID_T app_dp_reset_state_for_mode(VOID_T);
+
 #define APP_DP_FLASH_MAGIC       (0x4C425047UL)
 #define APP_DP_FLASH_VERSION     (2U)
 #define APP_DP_FLASH_ERASE_SIZE  (0x1000U)
@@ -97,6 +99,7 @@ OPERATE_RET app_dp_load_persistent(VOID_T)
         data.alt_game_rounds < 1 || data.alt_game_rounds > 5 ||
         data.battery_percent > 100) {
         TAL_PR_INFO("[dp] persistent data not found, use defaults");
+        app_dp_reset_state_for_mode();
         return OPRT_OK;
     }
 
@@ -113,6 +116,7 @@ OPERATE_RET app_dp_load_persistent(VOID_T)
                 data.stepless_percent, data.alt_bug_speed,
                 data.alt_laser_speed, data.alt_game_rounds,
                 data.battery_percent);
+    app_dp_reset_state_for_mode();
     return OPRT_OK;
 }
 
@@ -160,8 +164,13 @@ STATIC VOID_T app_dp_reset_state_for_mode(VOID_T)
 {
     UINT32_T timeout_ms = app_motor_get_mode_timeout_ms();
 
-    if (app_motor_get_mode() == GAME_MODE_ALTERNATING && timeout_ms == 0) {
-        app_state_enter_sleep();
+    if (app_motor_get_mode() == GAME_MODE_ALTERNATING) {
+        /*
+         * 交替模式由 app_motor 的阶段定时器和轮次计数控制结束。
+         * 停止 app_state 的 WORK_PERIOD_MS 定时器，避免它提前触发
+         * pre_sleep 打断 180s + 180s 或多轮交替运行。
+         */
+        app_state_reset_work_cycle_for(0);
     } else {
         app_state_reset_work_cycle_for(timeout_ms);
     }

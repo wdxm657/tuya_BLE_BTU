@@ -9,6 +9,7 @@
 
 #include "board.h"
 #include "app_state.h"
+#include "app_motor.h"
 
 STATIC dev_state_t s_dev_state = DEV_STATE_WORK;
 STATIC BOOL_T s_machine_powered = TRUE;
@@ -87,6 +88,9 @@ STATIC VOID_T app_state_start_work_timer(UINT32_T timeout_ms)
         return;
     }
     tal_sw_timer_stop(s_work_timer_id);
+    if (app_motor_get_mode() == GAME_MODE_ALTERNATING) {
+        return;
+    }
     if (timeout_ms > 0) {
         tal_sw_timer_start(s_work_timer_id, timeout_ms, TAL_TIMER_ONCE);
     }
