@@ -8,7 +8,7 @@
 
 #define FAQIUJI_ADC_VREF_MV                2140U
 #define FAQIUJI_ADC_FULL_SCALE             4095U
-#define FAQIUJI_BATTERY_DIVIDER_RATIO      2U
+#define FAQIUJI_BATTERY_DIVIDER_RATIO      1
 #define FAQIUJI_BATTERY_LOW_PERCENT        20U
 #define FAQIUJI_BATTERY_FULL_PERCENT       90U
 
@@ -16,6 +16,7 @@ static TIM_HandleTypeDef sg_ie_tim;
 static volatile uint8_t sg_mode;
 static volatile uint8_t sg_enabled = 1U;
 static volatile uint8_t sg_ball_last;
+static uint8_t sg_ir_high_count;
 static volatile uint8_t sg_usb_last;
 static volatile uint8_t sg_charge_last;
 static volatile uint16_t sg_max_count = 20U;
@@ -184,7 +185,8 @@ void faqiuji_device_init(void)
   HAL_GPIO_WritePin(GPIOB, NTC_CON, GPIO_PIN_SET);
   sg_work_state = FAQIUJI_WORK_RUNNING;
   sg_radar_last = (HAL_GPIO_ReadPin(GPIOA, LEIDA_IN_O) == GPIO_PIN_SET) ? 1U : 0U;
-  sg_ball_last = (HAL_GPIO_ReadPin(GPIOA, IR) == GPIO_PIN_SET) ? 1U : 0U;
+  sg_ball_last = 0U;
+  sg_ir_high_count = 0U;
   sg_usb_last = (HAL_GPIO_ReadPin(GPIOF, USB_DET) == GPIO_PIN_SET) ? 1U : 0U;
   sg_charge_last = (HAL_GPIO_ReadPin(GPIOB, CHARGE_STATE) == GPIO_PIN_SET) ? 1U : 0U;
   sg_charging = sg_charge_last;
@@ -262,40 +264,64 @@ void faqiuji_device_sensor_task(void *argument)
   uint8_t charging;
   uint8_t data[2];
   uint8_t radar;
+  uint8_t ir_sampled_this_active = 0U;
+  uint32_t now;
+  uint32_t last_sensor_poll = HAL_GetTick();
   (void)argument;
 
   for (;;) {
-    // ball = (HAL_GPIO_ReadPin(GPIOA, IR) == GPIO_PIN_SET) ? 1U : 0U;
-    usb = (HAL_GPIO_ReadPin(GPIOF, USB_DET) == GPIO_PIN_RESET) ? 1U : 0U;
-    charging = (HAL_GPIO_ReadPin(GPIOB, CHARGE_STATE) == GPIO_PIN_SET) ?
-               1U : 0U;
-    radar = (HAL_GPIO_ReadPin(GPIOA, LEIDA_IN_O) == GPIO_PIN_SET) ? 1U : 0U;
+    now = HAL_GetTick();
+    if (sg_ie_enabled == 0U) {
+      ir_sampled_this_active = 0U;
+    } else if (ir_sampled_this_active == 0U &&
+               (uint32_t)(now - sg_ie_tick) >= 3U) {
+      ir_sampled_this_active = 1U;
+      ball = (HAL_GPIO_ReadPin(GPIOA, IR) == GPIO_PIN_SET) ? 1U : 0U;
+      if (ball != 0U) {
+        if (sg_ir_high_count < 3U) {
+          ++sg_ir_high_count;
+        }
+      } else {
+        sg_ir_high_count = 0U;
+      }
 
-    if (ball != sg_ball_last) {
-      sg_ball_last = ball;
-      data[0] = ball;
-      // faqiuji_protocol_status_event(FAQIUJI_EVENT_BALL, data, 1U);
-      // if (ball != 0U) {
-      //   sg_ball_trigger = 1U;
-      // }
+      ball = (sg_ir_high_count >= 3U) ? 1U : 0U;
+      if (ball != sg_ball_last) {
+        sg_ball_last = ball;
+        data[0] = ball;
+        faqiuji_protocol_status_event(FAQIUJI_EVENT_BALL, data, 1U);
+        if (ball != 0U) {
+          sg_ball_trigger = 1U;
+        }
+      }
     }
-    if (usb != sg_usb_last) {
-      sg_usb_last = usb;
-      data[0] = usb;
-      faqiuji_protocol_status_event(FAQIUJI_EVENT_USB, data, 1U);
+
+    if ((uint32_t)(now - last_sensor_poll) >= 20U) {
+      last_sensor_poll = now;
+      usb = (HAL_GPIO_ReadPin(GPIOF, USB_DET) == GPIO_PIN_RESET) ? 1U : 0U;
+      charging = (HAL_GPIO_ReadPin(GPIOB, CHARGE_STATE) == GPIO_PIN_SET) ?
+                 1U : 0U;
+      radar = (HAL_GPIO_ReadPin(GPIOA, LEIDA_IN_O) == GPIO_PIN_SET) ?
+              1U : 0U;
+
+      if (usb != sg_usb_last) {
+        sg_usb_last = usb;
+        data[0] = usb;
+        faqiuji_protocol_status_event(FAQIUJI_EVENT_USB, data, 1U);
+      }
+      if (charging != sg_charge_last) {
+        sg_charge_last = charging;
+        sg_charging = charging;
+        data[0] = charging;
+        faqiuji_protocol_status_event(FAQIUJI_EVENT_CHARGE, data, 1U);
+      }
+      if (radar != sg_radar_last) {
+        sg_radar_last = radar;
+        data[0] = radar;
+        faqiuji_protocol_status_event(FAQIUJI_EVENT_RADAR, data, 1U);
+      }
     }
-    if (charging != sg_charge_last) {
-      sg_charge_last = charging;
-      sg_charging = charging;
-      data[0] = charging;
-      faqiuji_protocol_status_event(FAQIUJI_EVENT_CHARGE, data, 1U);
-    }
-    if (radar != sg_radar_last) {
-      sg_radar_last = radar;
-      data[0] = radar;
-      faqiuji_protocol_status_event(FAQIUJI_EVENT_RADAR, data, 1U);
-    }
-    vTaskDelay(pdMS_TO_TICKS(20U));
+    vTaskDelay(pdMS_TO_TICKS(1U));
   }
 }
 
@@ -318,7 +344,7 @@ void faqiuji_device_power_task(void *argument)
       sg_battery_percent = battery;
       data[0] = (uint8_t)battery_mv;
       data[1] = (uint8_t)(battery_mv >> 8);
-      faqiuji_protocol_status_event(FAQIUJI_EVENT_BATTERY, data, 2U);
+      // faqiuji_protocol_status_event(FAQIUJI_EVENT_BATTERY, data, 2U);
       faqiuji_charge_led_task(battery, sg_charging);
     }
     vTaskDelay(pdMS_TO_TICKS(20U));
@@ -329,17 +355,17 @@ void faqiuji_device_ir_task(void *argument)
 {
   (void)argument;
   for (;;) {
-    sg_ie_tick = HAL_GetTick();
-    sg_ie_enabled = 1U;
     /* Active phase: 38 kHz at 50% duty. */
     __HAL_TIM_SET_COMPARE(&sg_ie_tim, TIM_CHANNEL_1,
                           (sg_ie_tim.Init.Period + 1U) / 2U);
-    vTaskDelay(pdMS_TO_TICKS(3U));
+    sg_ie_tick = HAL_GetTick();
+    sg_ie_enabled = 1U;
+    vTaskDelay(pdMS_TO_TICKS(10U));
     sg_ie_enabled = 0U;
     /* Inactive phase: keep the output continuously high. */
     __HAL_TIM_SET_COMPARE(&sg_ie_tim, TIM_CHANNEL_1,
                           sg_ie_tim.Init.Period + 1U);
-    vTaskDelay(pdMS_TO_TICKS(3U));
+    vTaskDelay(pdMS_TO_TICKS(90U));
   }
 }
 
