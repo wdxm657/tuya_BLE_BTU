@@ -24,6 +24,7 @@
 #include "board.h"
 
 #include "app_battery.h"
+#include "app_motor.h"
 #include "app_state.h"
 #include "app_led.h"
 
@@ -263,6 +264,7 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
     }
     
     s_cached_percent = filtered_percent;
+    app_motor_refresh_m3_duty();
 
 
     /* ----- 低电量检测 ----- */

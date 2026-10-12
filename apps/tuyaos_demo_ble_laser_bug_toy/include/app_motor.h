@@ -57,6 +57,7 @@ UINT8_T app_motor_get_alt_game_rounds(VOID_T);
 UINT32_T app_motor_get_mode_timeout_ms(VOID_T);
 VOID_T app_motor_start(VOID_T);
 VOID_T app_motor_stop(VOID_T);
+VOID_T app_motor_refresh_m3_duty(VOID_T);
 BOOL_T app_motor_is_running(VOID_T);
 
 #if (APP_FACTORY_TEST == 1)

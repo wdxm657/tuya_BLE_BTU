@@ -11,6 +11,7 @@
 #include "app_charge.h"
 #include "app_state.h"
 #include "app_led.h"
+#include "app_motor.h"
 
 #define CHARGE_POLL_MS 100
 
@@ -31,6 +32,7 @@ STATIC VOID_T app_charge_apply_state(BOOL_T usb_detected)
     s_usb_detected = usb_detected;
     app_state_set_charging(usb_detected);
     app_state_set_charge_done(FALSE);
+    app_motor_refresh_m3_duty();
     app_led_update();
 }
 

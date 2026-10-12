@@ -22,18 +22,22 @@
 #define BUG_PULL_REPEAT_COUNT  1
 #define BUG_PULL_STRONG_DUTY_PERCENT 90
 #define BUG_SLEEP_FINISH_MOTOR 2
-#define MOTOR_DUTY_MIN_PERCENT 30
-#define MOTOR_DUTY_MAX_PERCENT 50
+#define MOTOR_M12_DUTY_MIN_PERCENT 30
+#define MOTOR_M12_DUTY_MAX_PERCENT 50
+#define MOTOR_M3_DUTY_MIN_PERCENT 30
+#define MOTOR_M3_DUTY_MAX_PERCENT 50
 #define MOTOR_DUTY_DEFAULT_PERCENT 40
 #define ALT_SPEED_DEFAULT_PERCENT 50
 #define ALT_GAME_ROUNDS_DEFAULT 2
 #define MOTOR_STEPLESS_DEFAULT_PERCENT \
-    (((MOTOR_DUTY_DEFAULT_PERCENT - MOTOR_DUTY_MIN_PERCENT) * 100) / \
-     (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT))
+    (((MOTOR_DUTY_DEFAULT_PERCENT - MOTOR_M12_DUTY_MIN_PERCENT) * 100) / \
+     (MOTOR_M12_DUTY_MAX_PERCENT - MOTOR_M12_DUTY_MIN_PERCENT))
 
 #define BATTERY_VOLTAGE_MIN    3500
 #define BATTERY_VOLTAGE_MAX    4200
-#define DUTY_BOOST_MAX         0
+/* Keep M1/M2 and M3 low-voltage compensation independent for tuning. */
+#define DUTY_BOOST_M12_MAX    0
+#define DUTY_BOOST_M3_MAX     20
 
 #if (BUG_SLEEP_FINISH_MOTOR == 1)
 #define BUG_SLEEP_FINISH_SEQ_INDEX  0
@@ -84,7 +88,7 @@ STATIC BOOL_T s_factory_test_enabled = FALSE;
 STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg);
 STATIC VOID_T app_motor_alternating_handler(VOID_T);
 
-STATIC UINT32_T app_motor_battery_boost_percent_get(VOID_T)
+STATIC UINT32_T app_motor_battery_boost_percent_get(UINT32_T boost_max)
 {
     INT32_T voltage;
     UINT32_T range;
@@ -104,23 +108,30 @@ STATIC UINT32_T app_motor_battery_boost_percent_get(VOID_T)
 
     range = BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN;
     drop = (UINT32_T)(BATTERY_VOLTAGE_MAX - (UINT32_T)voltage);
-    return (drop * DUTY_BOOST_MAX) / range;
+    return (drop * boost_max) / range;
 }
 
-STATIC UINT32_T app_motor_duty_get_for_percent(UINT8_T percent)
+STATIC UINT32_T app_motor_m12_base_duty_get_for_percent(UINT8_T percent)
 {
     UINT32_T base_percent;
-    UINT32_T duty_percent;
 
     if (percent > 100) {
         percent = 100;
     }
 
-    base_percent = MOTOR_DUTY_MIN_PERCENT +
+    base_percent = MOTOR_M12_DUTY_MIN_PERCENT +
                    ((UINT32_T)percent *
-                    (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT)) / 100;
+                    (MOTOR_M12_DUTY_MAX_PERCENT - MOTOR_M12_DUTY_MIN_PERCENT)) / 100;
 
-    duty_percent = base_percent + app_motor_battery_boost_percent_get();
+    return MOTOR_PWM_DUTY_1 * base_percent;
+}
+
+STATIC UINT32_T app_motor_m12_duty_get_for_percent(UINT8_T percent)
+{
+    UINT32_T duty_percent = app_motor_m12_base_duty_get_for_percent(percent) /
+                            MOTOR_PWM_DUTY_1;
+
+    duty_percent += app_motor_battery_boost_percent_get(DUTY_BOOST_M12_MAX);
     if (duty_percent > 100) {
         duty_percent = 100;
     }
@@ -128,9 +139,73 @@ STATIC UINT32_T app_motor_duty_get_for_percent(UINT8_T percent)
     return MOTOR_PWM_DUTY_1 * duty_percent;
 }
 
-STATIC UINT32_T app_motor_duty_get(VOID_T)
+STATIC UINT32_T app_motor_m3_base_duty_get_for_percent(UINT8_T percent)
 {
-    return app_motor_duty_get_for_percent(s_stepless_percent);
+    UINT32_T base_percent;
+
+    if (percent > 100) {
+        percent = 100;
+    }
+
+    if (app_charge_is_detected())
+    {
+        base_percent = 28 +
+            ((UINT32_T)percent *
+            (34 - 28)) / 100;
+    }else{
+        base_percent = MOTOR_M3_DUTY_MIN_PERCENT +
+            ((UINT32_T)percent *
+            (MOTOR_M3_DUTY_MAX_PERCENT - MOTOR_M3_DUTY_MIN_PERCENT)) / 100;
+    }
+
+    return MOTOR_PWM_DUTY_1 * base_percent;
+}
+
+STATIC UINT32_T app_motor_m3_duty_get_for_percent(UINT8_T percent)
+{
+    UINT32_T duty_percent = app_motor_m3_base_duty_get_for_percent(percent) /
+                            MOTOR_PWM_DUTY_1;
+
+    duty_percent += app_motor_battery_boost_percent_get(DUTY_BOOST_M3_MAX);
+    if (duty_percent > 100) {
+        duty_percent = 100;
+    }
+
+    return MOTOR_PWM_DUTY_1 * duty_percent;
+}
+
+STATIC UINT32_T app_motor_m12_duty_get(VOID_T)
+{
+    return app_motor_m12_duty_get_for_percent(s_stepless_percent);
+}
+
+VOID_T app_motor_refresh_m3_duty(VOID_T)
+{
+    UINT8_T speed_percent;
+    UINT32_T duty;
+
+    /* The charge/battery timers can run before motor initialization. */
+    if (s_motor_timer_id == NULL || !s_motor_enabled ||
+        s_game_mode == GAME_MODE_SLEEP || s_sleep_pending) {
+        return;
+    }
+
+    if (s_game_mode == GAME_MODE_ALTERNATING) {
+        if (s_alt_phase != 0) {
+            return;
+        }
+        speed_percent = s_alt_laser_speed_percent;
+    } else if (s_game_mode == GAME_MODE_LASER_CHASE) {
+        speed_percent = s_stepless_percent;
+    } else {
+        return;
+    }
+
+    duty = app_motor_m3_duty_get_for_percent(speed_percent);
+    if (duty > MOTOR_PWM_DUTY_1) {
+        duty -= MOTOR_PWM_DUTY_1;
+    }
+    tal_pwm_duty_set(MOTOR_3, duty);
 }
 
 STATIC VOID_T app_motor_pair_set(TUYA_PWM_NUM_E for_ch, TUYA_PWM_NUM_E rev_ch, UINT8_T dir, UINT32_T duty)
@@ -156,8 +231,8 @@ STATIC VOID_T app_motor_pull_pair_duty_get(UINT32_T duty, const motor_step_t *st
                                            UINT32_T *m1_duty, UINT32_T *m2_duty)
 {
     UINT32_T strong_percent = BUG_PULL_STRONG_DUTY_PERCENT +
-                              app_motor_battery_boost_percent_get();
-    UINT32_T short_percent = app_motor_battery_boost_percent_get();
+                              app_motor_battery_boost_percent_get(DUTY_BOOST_M12_MAX);
+    UINT32_T short_percent = app_motor_battery_boost_percent_get(DUTY_BOOST_M12_MAX);
     UINT32_T strong_duty;
 
     if (strong_percent > 100) {
@@ -194,33 +269,29 @@ STATIC TUYA_GPIO_LEVEL_E app_motor_bug_laser_level(VOID_T)
 
 STATIC VOID_T app_motor_apply_step(const motor_step_t *step, UINT8_T speed_percent)
 {
-    UINT32_T duty = app_motor_duty_get_for_percent(speed_percent);
+    UINT32_T m12_duty = app_motor_m12_duty_get_for_percent(speed_percent);
+    UINT32_T m3_duty = app_motor_m3_duty_get_for_percent(speed_percent);
     UINT32_T m1_duty;
     UINT32_T m2_duty;
 
-    app_motor_pull_pair_duty_get(duty, step, &m1_duty, &m2_duty);
-    TAL_PR_DEBUG("duty %d m1_duty %d m2_duty %d", duty, m1_duty, m2_duty);
+    app_motor_pull_pair_duty_get(m12_duty, step, &m1_duty, &m2_duty);
+    TAL_PR_DEBUG("m12_duty %d m3_duty %d m1_duty %d m2_duty %d",
+                 m12_duty, m3_duty, m1_duty, m2_duty);
 
     app_motor_pair_set(MOTOR_FOR_1, MOTOR_REV_1, step->m1_dir, m1_duty);
     app_motor_pair_set(MOTOR_FOR_2, MOTOR_REV_2, step->m2_dir, m2_duty);
-    tal_pwm_duty_set(MOTOR_3, step->m3_on ? duty : MOTOR_PWM_DUTY_0);
+    tal_pwm_duty_set(MOTOR_3, step->m3_on ? m3_duty : MOTOR_PWM_DUTY_0);
     tal_gpio_write(LASER, app_motor_bug_laser_level());
     s_motor_running = (step->m1_dir != MOTOR_DIR_STOP ||
                        step->m2_dir != MOTOR_DIR_STOP ||
                        step->m3_on);
 }
 
-STATIC VOID_T app_motor_laser_chase_start(UINT8_T speed_percent)
+STATIC VOID_T app_motor_laser_chase_start(VOID_T)
 {
-    UINT32_T duty = app_motor_duty_get_for_percent(speed_percent);
-
-    if (duty > MOTOR_PWM_DUTY_1) {
-        duty -= MOTOR_PWM_DUTY_1;
-    }
-
     app_motor_pair_set(MOTOR_FOR_1, MOTOR_REV_1, MOTOR_DIR_STOP, MOTOR_PWM_DUTY_0);
     app_motor_pair_set(MOTOR_FOR_2, MOTOR_REV_2, MOTOR_DIR_STOP, MOTOR_PWM_DUTY_0);
-    tal_pwm_duty_set(MOTOR_3, duty);
+    app_motor_refresh_m3_duty();
     tal_gpio_write(LASER, TUYA_GPIO_LEVEL_HIGH);
     s_motor_running = TRUE;
 }
@@ -313,16 +384,17 @@ STATIC UINT16_T app_motor_bug_pull_step_ms(UINT8_T speed_percent)
 STATIC UINT16_T app_motor_factory_test_tick(VOID_T)
 {
     const motor_step_t *step = &s_bug_seq[s_seq_index];
-    UINT32_T duty = app_motor_duty_get();
+    UINT32_T m12_duty = app_motor_m12_duty_get();
+    UINT32_T m3_duty = app_motor_m3_duty_get_for_percent(s_stepless_percent);
     UINT32_T m1_duty;
     UINT32_T m2_duty;
     UINT16_T duration_ms;
 
     /* M1/M2 execute bug hunt while M3 and the laser execute laser chase. */
-    app_motor_pull_pair_duty_get(duty, step, &m1_duty, &m2_duty);
+    app_motor_pull_pair_duty_get(m12_duty, step, &m1_duty, &m2_duty);
     app_motor_pair_set(MOTOR_FOR_1, MOTOR_REV_1, step->m1_dir, m1_duty);
     app_motor_pair_set(MOTOR_FOR_2, MOTOR_REV_2, step->m2_dir, m2_duty);
-    tal_pwm_duty_set(MOTOR_3, duty);
+    tal_pwm_duty_set(MOTOR_3, m3_duty);
     tal_gpio_write(LASER, TUYA_GPIO_LEVEL_HIGH);
     s_motor_running = TRUE;
 
@@ -406,7 +478,7 @@ STATIC VOID_T app_motor_alternating_handler(VOID_T)
         if (laser_ms == 0) {
             app_motor_alternating_start_bug_phase();
         } else {
-            app_motor_laser_chase_start(s_alt_laser_speed_percent);
+            app_motor_laser_chase_start();
             remaining = laser_ms - s_alt_phase_elapsed_ms;
             duration_ms = app_motor_min_u32(MOTOR_STEP_MS, remaining);
             s_alt_phase_elapsed_ms += duration_ms;
@@ -471,7 +543,7 @@ STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg)
     }
 
     if (s_game_mode == GAME_MODE_LASER_CHASE) {
-        app_motor_laser_chase_start(s_stepless_percent);
+        app_motor_laser_chase_start();
         return;
     }
 
