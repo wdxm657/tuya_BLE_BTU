@@ -57,6 +57,17 @@ STATIC UINT8_T s_pct_budget_charge = PCT_BUDGET_CHARGING_MAX;
 /* 临界低电回调（由 tuya_sdk_callback 注册） */
 STATIC VOID_T (*s_critical_cb)(VOID_T) = NULL;
 
+STATIC BOOL_T app_battery_is_full_signal(VOID_T)
+{
+    TUYA_GPIO_LEVEL_E level = TUYA_GPIO_LEVEL_HIGH;
+
+    if (tal_gpio_read(STDBY, &level) != OPRT_OK) {
+        return FALSE;
+    }
+
+    return level == TUYA_GPIO_LEVEL_LOW;
+}
+
 /***********************************************************************
  ********************* static functions *********************************
  **********************************************************************/
@@ -72,8 +83,7 @@ STATIC CONST struct {
     INT32_T  voltage_mv;
     UINT8_T  percent;
 } s_battery_lut[] = {
-    {4200, 100},
-    {4150,  95},
+    {4150,  100},
     {4110,  90},
     {4080,  85},
     {4040,  80},
@@ -199,6 +209,7 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
     UINT8_T percent;
     UINT8_T filtered_percent;
     BOOL_T charging_or_full;
+    BOOL_T full_signal;
     BOOL_T old_battery_low = s_battery_low;
 
     /* 采样 */
@@ -211,26 +222,36 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
     filtered_percent = percent;
     charging_or_full = (app_state_is_charging() || app_state_is_charge_done());
 
+    /* Only STDBY low may report 100%; voltage calculation is capped at 99%. */
+    full_signal = app_battery_is_full_signal();
+    if (full_signal) {
+        filtered_percent = 100;
+    } else if (filtered_percent > 99) {
+        filtered_percent = 99;
+    }
+
     /* 方向约束：充电不下滑，放电不虚高 */
-    if (charging_or_full && filtered_percent < s_cached_percent) {
+    if (full_signal) {
+        /* STDBY is authoritative: a low level confirms 100% immediately. */
+    } else if (charging_or_full && filtered_percent < s_cached_percent) {
         filtered_percent = s_cached_percent;
     } else if (!charging_or_full && filtered_percent > s_cached_percent) {
         filtered_percent = s_cached_percent;
     }
 
     /* 变化速率约束：放电最多每 PCT_BUDGET_MAX 秒变化 1% */
-    if (charging_or_full)
+    if (!full_signal && charging_or_full)
     {
         if (s_pct_budget_charge < PCT_BUDGET_CHARGING_MAX) {
             s_pct_budget_charge += PCT_BUDGET_PER_TICK;
         }
-    }else{
+    }else if (!full_signal){
         if (s_pct_budget < PCT_BUDGET_MAX) {
             s_pct_budget += PCT_BUDGET_PER_TICK;
         }
     }
 
-    if (filtered_percent > s_cached_percent) {
+    if (!full_signal && filtered_percent > s_cached_percent) {
         /* 上升：限制爬升速率 — 只消耗实际变化量 */
         UINT8_T diff = filtered_percent - s_cached_percent;
         UINT8_T allowed = s_pct_budget_charge / PCT_BUDGET_CHARGING_MAX;
@@ -242,7 +263,7 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
         } else {
             s_pct_budget_charge -= (UINT8_T)used;
         }
-    } else if (filtered_percent < s_cached_percent) {
+    } else if (!full_signal && filtered_percent < s_cached_percent) {
         /* 下降：限制跌落速率 — 只消耗实际变化量 */
         UINT8_T diff = s_cached_percent - filtered_percent;
         UINT8_T allowed = s_pct_budget / PCT_BUDGET_MAX;
@@ -333,6 +354,14 @@ OPERATE_RET app_battery_init(VOID_T)
     };
     tal_gpio_init(AD_Bat_CON, &gpio_out);
     tal_gpio_write(AD_Bat_CON, TUYA_GPIO_LEVEL_HIGH);
+
+    TUYA_GPIO_BASE_CFG_T stdby_cfg = {
+        .mode   = TUYA_GPIO_PULLUP,
+        .direct = TUYA_GPIO_INPUT,
+        .level  = TUYA_GPIO_LEVEL_HIGH,
+    };
+    tal_gpio_init(STDBY, &stdby_cfg);
+
     tal_system_delay(10);  /* 等待电压稳定 */
 
     /* ---------- 首次采样初始化缓存 ---------- */
@@ -340,6 +369,11 @@ OPERATE_RET app_battery_init(VOID_T)
     if (app_battery_sample(&init_mv) == OPRT_OK) {
         s_cached_voltage = init_mv;
         s_cached_percent = app_battery_voltage_to_percent(init_mv);
+        if (app_battery_is_full_signal()) {
+            s_cached_percent = 100;
+        } else if (s_cached_percent > 99) {
+            s_cached_percent = 99;
+        }
         s_pct_budget = PCT_BUDGET_MAX;
     TAL_PR_INFO("[battery] init: %dmV, %d%%", init_mv, s_cached_percent);
     } else {
@@ -399,6 +433,9 @@ VOID_T app_battery_set_percent(UINT8_T percent)
 {
     if (percent > 100) {
         percent = 100;
+    }
+    if (percent == 100 && !app_battery_is_full_signal()) {
+        percent = 99;
     }
 
     s_cached_percent = percent;
