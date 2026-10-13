@@ -24,7 +24,7 @@
 #define BUG_SLEEP_FINISH_MOTOR 2
 #define MOTOR_M12_DUTY_MIN_PERCENT 30
 #define MOTOR_M12_DUTY_MAX_PERCENT 50
-#define MOTOR_M3_DUTY_MIN_PERCENT 30
+#define MOTOR_M3_DUTY_MIN_PERCENT 25
 #define MOTOR_M3_DUTY_MAX_PERCENT 50
 #define MOTOR_DUTY_DEFAULT_PERCENT 40
 #define ALT_SPEED_DEFAULT_PERCENT 50
@@ -38,6 +38,7 @@
 /* Keep M1/M2 and M3 low-voltage compensation independent for tuning. */
 #define DUTY_BOOST_M12_MAX    0
 #define DUTY_BOOST_M3_MAX     20
+#define M3_PATTERN_STEPS      7
 
 #if (BUG_SLEEP_FINISH_MOTOR == 1)
 #define BUG_SLEEP_FINISH_SEQ_INDEX  0
@@ -58,9 +59,29 @@ typedef struct {
     BOOL_T  m2_strong;
 } motor_step_t;
 
+typedef struct {
+    UINT16_T move_ms;
+    UINT16_T stop_ms;
+} m3_pattern_step_t;
+
 STATIC const motor_step_t s_bug_seq[BUG_SEQ_STEPS] = {
     {MOTOR_DIR_FORWARD, MOTOR_DIR_REVERSE, FALSE, BUG_PULL_STEP_MAX_MS, FALSE, TRUE},
     {MOTOR_DIR_REVERSE, MOTOR_DIR_FORWARD, FALSE, BUG_PULL_STEP_MAX_MS, TRUE, FALSE},
+};
+
+STATIC const m3_pattern_step_t s_m3_pattern[M3_PATTERN_STEPS] = {
+    {700, 1000},
+    {1300,  800},
+    {900,  800},
+    {600, 900},
+    {1100, 700},
+    {1400, 600},
+    {800, 700},
+    {1200, 800},
+    {1500, 700},
+    {1300, 600},
+    {600, 900},
+    {1500, 1000},
 };
 
 STATIC game_mode_t s_game_mode = GAME_MODE_ALTERNATING;
@@ -69,6 +90,10 @@ STATIC UINT8_T s_stepless_percent = MOTOR_STEPLESS_DEFAULT_PERCENT;
 STATIC BOOL_T s_motor_enabled = FALSE;
 STATIC BOOL_T s_motor_running = FALSE;
 STATIC TIMER_ID s_motor_timer_id = NULL;
+STATIC TIMER_ID s_m3_pattern_timer_id = NULL;
+STATIC BOOL_T s_m3_pattern_active = FALSE;
+STATIC BOOL_T s_m3_pattern_moving = FALSE;
+STATIC UINT8_T s_m3_pattern_index = 0;
 STATIC UINT8_T s_seq_index = 0;
 STATIC UINT8_T s_bug_repeat_count = 0;
 STATIC BOOL_T s_bug_pause_active = FALSE;
@@ -87,6 +112,9 @@ STATIC BOOL_T s_factory_test_enabled = FALSE;
 
 STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg);
 STATIC VOID_T app_motor_alternating_handler(VOID_T);
+STATIC VOID_T app_motor_m3_pattern_handler(TIMER_ID timer_id, VOID_T *arg);
+STATIC VOID_T app_motor_m3_pattern_start(VOID_T);
+STATIC VOID_T app_motor_m3_pattern_stop(VOID_T);
 
 STATIC UINT32_T app_motor_battery_boost_percent_get(UINT32_T boost_max)
 {
@@ -184,9 +212,8 @@ VOID_T app_motor_refresh_m3_duty(VOID_T)
     UINT8_T speed_percent;
     UINT32_T duty;
 
-    /* The charge/battery timers can run before motor initialization. */
-    if (s_motor_timer_id == NULL || !s_motor_enabled ||
-        s_game_mode == GAME_MODE_SLEEP || s_sleep_pending) {
+    if (s_m3_pattern_timer_id == NULL || !s_m3_pattern_active ||
+        !s_m3_pattern_moving) {
         return;
     }
 
@@ -206,6 +233,69 @@ VOID_T app_motor_refresh_m3_duty(VOID_T)
         duty -= MOTOR_PWM_DUTY_1;
     }
     tal_pwm_duty_set(MOTOR_3, duty);
+}
+
+STATIC VOID_T app_motor_m3_pattern_stop(VOID_T)
+{
+    if (s_m3_pattern_timer_id != NULL) {
+        tal_sw_timer_stop(s_m3_pattern_timer_id);
+    }
+    s_m3_pattern_active = FALSE;
+    s_m3_pattern_moving = FALSE;
+    s_m3_pattern_index = 0;
+    tal_pwm_duty_set(MOTOR_3, MOTOR_PWM_DUTY_0);
+}
+
+STATIC VOID_T app_motor_m3_pattern_handler(TIMER_ID timer_id, VOID_T *arg)
+{
+    UINT8_T speed_percent;
+    UINT32_T duty;
+    UINT16_T duration_ms;
+
+    if (!s_m3_pattern_active || !s_motor_enabled ||
+        s_game_mode == GAME_MODE_SLEEP || s_sleep_pending ||
+        (s_game_mode == GAME_MODE_ALTERNATING && s_alt_phase != 0) ||
+        (s_game_mode != GAME_MODE_ALTERNATING &&
+         s_game_mode != GAME_MODE_LASER_CHASE)) {
+        app_motor_m3_pattern_stop();
+        return;
+    }
+
+    speed_percent = (s_game_mode == GAME_MODE_ALTERNATING) ?
+                        s_alt_laser_speed_percent : s_stepless_percent;
+
+    if (s_m3_pattern_moving) {
+        tal_pwm_duty_set(MOTOR_3, MOTOR_PWM_DUTY_0);
+        s_m3_pattern_moving = FALSE;
+        duration_ms = s_m3_pattern[s_m3_pattern_index].stop_ms;
+        s_m3_pattern_index++;
+        if (s_m3_pattern_index >= M3_PATTERN_STEPS) {
+            s_m3_pattern_index = 0;
+        }
+    } else {
+        duty = app_motor_m3_duty_get_for_percent(speed_percent);
+        if (duty > MOTOR_PWM_DUTY_1) {
+            duty -= MOTOR_PWM_DUTY_1;
+        }
+        tal_pwm_duty_set(MOTOR_3, duty);
+        s_m3_pattern_moving = TRUE;
+        duration_ms = s_m3_pattern[s_m3_pattern_index].move_ms;
+    }
+
+    tal_sw_timer_start(s_m3_pattern_timer_id, duration_ms, TAL_TIMER_ONCE);
+}
+
+STATIC VOID_T app_motor_m3_pattern_start(VOID_T)
+{
+    if (s_m3_pattern_timer_id == NULL || s_m3_pattern_active) {
+        return;
+    }
+
+    tal_sw_timer_stop(s_m3_pattern_timer_id);
+    s_m3_pattern_active = TRUE;
+    s_m3_pattern_moving = FALSE;
+    s_m3_pattern_index = 0;
+    app_motor_m3_pattern_handler(s_m3_pattern_timer_id, NULL);
 }
 
 STATIC VOID_T app_motor_pair_set(TUYA_PWM_NUM_E for_ch, TUYA_PWM_NUM_E rev_ch, UINT8_T dir, UINT32_T duty)
@@ -255,6 +345,7 @@ STATIC VOID_T app_motor_pull_pair_duty_get(UINT32_T duty, const motor_step_t *st
 
 STATIC VOID_T app_motor_all_stop(VOID_T)
 {
+    app_motor_m3_pattern_stop();
     app_motor_pair_set(MOTOR_FOR_1, MOTOR_REV_1, MOTOR_DIR_STOP, MOTOR_PWM_DUTY_0);
     app_motor_pair_set(MOTOR_FOR_2, MOTOR_REV_2, MOTOR_DIR_STOP, MOTOR_PWM_DUTY_0);
     tal_pwm_duty_set(MOTOR_3, MOTOR_PWM_DUTY_0);
@@ -291,7 +382,11 @@ STATIC VOID_T app_motor_laser_chase_start(VOID_T)
 {
     app_motor_pair_set(MOTOR_FOR_1, MOTOR_REV_1, MOTOR_DIR_STOP, MOTOR_PWM_DUTY_0);
     app_motor_pair_set(MOTOR_FOR_2, MOTOR_REV_2, MOTOR_DIR_STOP, MOTOR_PWM_DUTY_0);
-    app_motor_refresh_m3_duty();
+    if (s_m3_pattern_active) {
+        app_motor_refresh_m3_duty();
+    } else {
+        app_motor_m3_pattern_start();
+    }
     tal_gpio_write(LASER, TUYA_GPIO_LEVEL_HIGH);
     s_motor_running = TRUE;
 }
@@ -308,6 +403,7 @@ STATIC VOID_T app_motor_start_sleep_finish(VOID_T)
     }
 
     TAL_PR_DEBUG("[motor] start sleep finish sequence");
+    app_motor_m3_pattern_stop();
     s_sleep_pending = TRUE;
     s_seq_index = BUG_SLEEP_FINISH_SEQ_INDEX;
     s_bug_repeat_count = 0;
@@ -335,6 +431,7 @@ STATIC VOID_T app_motor_alternating_finish(VOID_T)
 
 STATIC VOID_T app_motor_alternating_start_bug_phase(VOID_T)
 {
+    app_motor_m3_pattern_stop();
     s_alt_phase = 1;
     s_alt_phase_elapsed_ms = 0;
     s_seq_index = 0;
@@ -594,12 +691,16 @@ VOID_T app_motor_init(VOID_T)
     tal_pwm_init(MOTOR_3, &pwm_cfg_m3);
     tal_gpio_init(LASER, &laser_cfg);
     tal_sw_timer_create(app_motor_timer_handler, NULL, &s_motor_timer_id);
+    tal_sw_timer_create(app_motor_m3_pattern_handler, NULL, &s_m3_pattern_timer_id);
 
     s_game_mode = GAME_MODE_ALTERNATING;
     s_last_active_mode = GAME_MODE_ALTERNATING;
     s_stepless_percent = MOTOR_STEPLESS_DEFAULT_PERCENT;
     s_motor_enabled = FALSE;
     s_motor_running = FALSE;
+    s_m3_pattern_active = FALSE;
+    s_m3_pattern_moving = FALSE;
+    s_m3_pattern_index = 0;
     s_seq_index = 0;
     s_bug_repeat_count = 0;
     s_bug_pause_active = FALSE;
@@ -623,6 +724,7 @@ VOID_T app_motor_init(VOID_T)
 
 VOID_T app_motor_reset_defaults(VOID_T)
 {
+    app_motor_m3_pattern_stop();
     s_game_mode = GAME_MODE_ALTERNATING;
     s_last_active_mode = GAME_MODE_ALTERNATING;
     s_stepless_percent = MOTOR_STEPLESS_DEFAULT_PERCENT;
@@ -647,6 +749,7 @@ VOID_T app_motor_set_mode(game_mode_t mode)
         return;
     }
 
+    app_motor_m3_pattern_stop();
     s_game_mode = mode;
     if (mode != GAME_MODE_SLEEP) {
         s_last_active_mode = mode;
@@ -658,6 +761,7 @@ VOID_T app_motor_set_mode(game_mode_t mode)
     s_alt_phase = 0;
     s_alt_phase_elapsed_ms = 0;
     s_alt_round = 0;
+    s_m3_pattern_index = 0;
     if (s_motor_enabled) {
         app_motor_timer_handler(s_motor_timer_id, NULL);
     }
@@ -679,6 +783,7 @@ game_mode_t app_motor_get_report_mode(VOID_T)
 
 VOID_T app_motor_enter_sleep_mode(VOID_T)
 {
+    app_motor_m3_pattern_stop();
     s_game_mode = GAME_MODE_SLEEP;
     s_seq_index = 0;
     s_bug_repeat_count = 0;
@@ -710,6 +815,7 @@ VOID_T app_motor_set_stepless_percent(UINT8_T percent)
     s_stepless_percent = percent;
     if (s_motor_enabled && s_game_mode != GAME_MODE_SLEEP) {
         app_motor_timer_handler(s_motor_timer_id, NULL);
+        app_motor_refresh_m3_duty();
     }
     TAL_PR_INFO("[motor] speed percent=%d", s_stepless_percent);
 }
@@ -751,6 +857,7 @@ VOID_T app_motor_set_alt_laser_speed(UINT8_T percent)
     s_alt_laser_speed_percent = percent;
     if (s_motor_enabled && s_game_mode == GAME_MODE_ALTERNATING) {
         app_motor_timer_handler(s_motor_timer_id, NULL);
+        app_motor_refresh_m3_duty();
     }
 }
 

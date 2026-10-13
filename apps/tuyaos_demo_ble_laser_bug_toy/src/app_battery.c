@@ -83,7 +83,7 @@ STATIC CONST struct {
     INT32_T  voltage_mv;
     UINT8_T  percent;
 } s_battery_lut[] = {
-    {4150,  100},
+    {4150,  99},
     {4110,  90},
     {4080,  85},
     {4040,  80},
@@ -208,7 +208,7 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
     INT32_T vol_mv = 0;
     UINT8_T percent;
     UINT8_T filtered_percent;
-    BOOL_T charging_or_full;
+    BOOL_T usb_inserted;
     BOOL_T full_signal;
     BOOL_T old_battery_low = s_battery_low;
 
@@ -219,40 +219,71 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
 
     /* 换算百分比 */
     percent = app_battery_voltage_to_percent(vol_mv);
-    filtered_percent = percent;
-    charging_or_full = (app_state_is_charging() || app_state_is_charge_done());
-
-    /* Only STDBY low may report 100%; voltage calculation is capped at 99%. */
+    usb_inserted = app_state_is_charging();
     full_signal = app_battery_is_full_signal();
-    if (full_signal) {
-        filtered_percent = 100;
-    } else if (filtered_percent > 99) {
-        filtered_percent = 99;
+
+    if (usb_inserted) {
+        /*
+         * While USB is inserted, STDBY only determines whether 100% is
+         * allowed. All other percentages still come from the voltage LUT.
+         */
+        filtered_percent = full_signal ? 100 : ((percent > 99) ? 99 : percent);
+    } else {
+        /*
+         * After USB is removed, use the voltage LUT. The LUT tops out at
+         * 99%; a previous 100% value falls through the normal discharge
+         * rate limiter below.
+         */
+        filtered_percent = (percent > 99) ? 99 : percent;
+
+        /* Do not report a voltage rise while running from the battery. */
+        if (filtered_percent > s_cached_percent) {
+            filtered_percent = s_cached_percent;
+        }
     }
 
-    /* 方向约束：充电不下滑，放电不虚高 */
-    if (full_signal) {
-        /* STDBY is authoritative: a low level confirms 100% immediately. */
-    } else if (charging_or_full && filtered_percent < s_cached_percent) {
-        filtered_percent = s_cached_percent;
-    } else if (!charging_or_full && filtered_percent > s_cached_percent) {
-        filtered_percent = s_cached_percent;
+    /*
+     * When USB is still connected but STDBY is released, 100% is no longer
+     * valid and must immediately return to the LUT result. When USB is
+     * removed, keep the normal discharge rate limit from 100% to 99%.
+     */
+    if (usb_inserted && !full_signal && s_cached_percent == 100) {
+        filtered_percent = (percent > 99) ? 99 : percent;
+    } else if (!full_signal && usb_inserted) {
+        /* 充电时电量不下降，其他百分比仍按充电速率上升。 */
+        if (filtered_percent < s_cached_percent) {
+            filtered_percent = s_cached_percent;
+        }
     }
 
-    /* 变化速率约束：放电最多每 PCT_BUDGET_MAX 秒变化 1% */
-    if (!full_signal && charging_or_full)
-    {
+    if (!usb_inserted) {
+        /* 变化速率约束：放电最多每 PCT_BUDGET_MAX 秒变化 1% */
         if (s_pct_budget_charge < PCT_BUDGET_CHARGING_MAX) {
             s_pct_budget_charge += PCT_BUDGET_PER_TICK;
         }
-    }else if (!full_signal){
         if (s_pct_budget < PCT_BUDGET_MAX) {
             s_pct_budget += PCT_BUDGET_PER_TICK;
         }
-    }
 
-    if (!full_signal && filtered_percent > s_cached_percent) {
-        /* 上升：限制爬升速率 — 只消耗实际变化量 */
+        if (filtered_percent < s_cached_percent) {
+            /* 下降：限制跌落速率 — 只消耗实际变化量 */
+            UINT8_T diff = s_cached_percent - filtered_percent;
+            UINT8_T allowed = s_pct_budget / PCT_BUDGET_MAX;
+            UINT8_T actual = (diff > allowed) ? allowed : diff;
+            filtered_percent = s_cached_percent - actual;
+            UINT32_T used = (UINT32_T)actual * PCT_BUDGET_MAX;
+            if (used >= s_pct_budget) {
+                s_pct_budget = 0;
+            } else {
+                s_pct_budget -= (UINT8_T)used;
+            }
+        }
+    } else if (!full_signal && filtered_percent > s_cached_percent) {
+        /* 充电时其他百分比按查表结果并受充电速率限制。 */
+        if (s_pct_budget_charge < PCT_BUDGET_CHARGING_MAX) {
+            s_pct_budget_charge += PCT_BUDGET_PER_TICK;
+        }
+
         UINT8_T diff = filtered_percent - s_cached_percent;
         UINT8_T allowed = s_pct_budget_charge / PCT_BUDGET_CHARGING_MAX;
         UINT8_T actual = (diff > allowed) ? allowed : diff;
@@ -263,25 +294,13 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
         } else {
             s_pct_budget_charge -= (UINT8_T)used;
         }
-    } else if (!full_signal && filtered_percent < s_cached_percent) {
-        /* 下降：限制跌落速率 — 只消耗实际变化量 */
-        UINT8_T diff = s_cached_percent - filtered_percent;
-        UINT8_T allowed = s_pct_budget / PCT_BUDGET_MAX;
-        UINT8_T actual = (diff > allowed) ? allowed : diff;
-        filtered_percent = s_cached_percent - actual;
-        UINT32_T used = (UINT32_T)actual * PCT_BUDGET_MAX;
-        if (used >= s_pct_budget) {
-            s_pct_budget = 0;
-        } else {
-            s_pct_budget -= (UINT8_T)used;
-        }
     }
 
     /* 更新缓存 */
     s_cached_voltage = vol_mv;
     if (s_cached_percent != filtered_percent) {
         TAL_PR_INFO("[battery] sample: %dmV -> %d%% (raw=%d%%, charge=%d)",
-                    vol_mv, filtered_percent, percent, app_state_is_charging());
+                    vol_mv, filtered_percent, percent, usb_inserted);
     }
     
     s_cached_percent = filtered_percent;
@@ -369,7 +388,7 @@ OPERATE_RET app_battery_init(VOID_T)
     if (app_battery_sample(&init_mv) == OPRT_OK) {
         s_cached_voltage = init_mv;
         s_cached_percent = app_battery_voltage_to_percent(init_mv);
-        if (app_battery_is_full_signal()) {
+        if (app_state_is_charging() && app_battery_is_full_signal()) {
             s_cached_percent = 100;
         } else if (s_cached_percent > 99) {
             s_cached_percent = 99;
@@ -433,9 +452,6 @@ VOID_T app_battery_set_percent(UINT8_T percent)
 {
     if (percent > 100) {
         percent = 100;
-    }
-    if (percent == 100 && !app_battery_is_full_signal()) {
-        percent = 99;
     }
 
     s_cached_percent = percent;

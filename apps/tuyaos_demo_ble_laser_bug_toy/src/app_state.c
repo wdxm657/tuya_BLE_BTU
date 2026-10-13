@@ -118,25 +118,17 @@ STATIC VOID_T app_state_work_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 VOID_T app_state_init(VOID_T)
 {
     tal_sw_timer_create(app_state_work_timeout_handler, NULL, &s_work_timer_id);
-    TUYA_GPIO_LEVEL_E level = TUYA_GPIO_LEVEL_LOW;
 
     s_machine_powered = TRUE;
     s_charging = FALSE;
     s_charge_done = FALSE;
     s_low_voltage_lock = FALSE;
     s_factory_test = FALSE;
+    /* The run callback is registered later; let registration trigger run_on_cb. */
     s_run_active = FALSE;
-    if (tal_gpio_read(USB_DET, &level) != OPRT_OK) {
-    }
-    if (level == TUYA_GPIO_LEVEL_LOW) {
-        s_app_powered = FALSE;
-        s_dev_state = DEV_STATE_STANDBY;
-    }else{
-        s_dev_state = DEV_STATE_WORK;
-        s_app_powered = TRUE;
-        app_state_start_work_timer(WORK_PERIOD_MS);
-    }
-
+    s_dev_state = DEV_STATE_WORK;
+    s_app_powered = TRUE;
+    app_state_start_work_timer(WORK_PERIOD_MS);
 
     TAL_PR_INFO("[state] initialized");
 }
@@ -359,7 +351,19 @@ VOID_T app_state_register_power_cb(VOID_T (*on_cb)(VOID_T), VOID_T (*off_cb)(VOI
 {
     s_run_on_cb = on_cb;
     s_run_off_cb = off_cb;
-    app_state_notify_run_if_needed();
+
+    /*
+     * Configuration restore can notify the run state before these callbacks
+     * are registered. Re-apply the current state so the motor starts on boot.
+     */
+    if (app_state_should_run()) {
+        s_run_active = TRUE;
+        if (s_run_on_cb != NULL) {
+            s_run_on_cb();
+        }
+    } else {
+        s_run_active = FALSE;
+    }
 }
 
 VOID_T app_state_register_machine_power_cb(VOID_T (*on_cb)(VOID_T), VOID_T (*off_cb)(VOID_T))
