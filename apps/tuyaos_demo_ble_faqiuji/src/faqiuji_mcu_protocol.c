@@ -26,12 +26,24 @@ STATIC volatile UINT8_T sg_frame_queue_count = 0;
 
 STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
 {
+    CHAR_T debug_text[FAQIUJI_MCU_MAX_PAYLOAD + 1U];
     UINT8_T event_type;
     UINT8_T value;
     UINT16_T value16;
     UINT8_T work_state;
 
-    if (frame == NULL || frame->len == 0U) {
+    if (frame == NULL) {
+        return;
+    }
+
+    if (frame->cmd == FAQIUJI_MCU_CMD_DEBUG_STRING) {
+        memcpy(debug_text, frame->payload, frame->len);
+        debug_text[frame->len] = '\0';
+        TAL_PR_INFO("MCU DEBUG: %s", debug_text);
+        return;
+    }
+
+    if (frame->len == 0U) {
         return;
     }
 

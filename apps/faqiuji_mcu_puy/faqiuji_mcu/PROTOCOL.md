@@ -25,6 +25,7 @@ CRC 为 Modbus/IBM CRC16，初值 `0xFFFF`，多项式 `0xA001`，校验范围�
 | `0x15` CONTROL_SET | `enabled` | `0x95` | `STATUS` |
 | `0x20` KEY_EVENT | `pressed` | 无 | 按键状态变化主动上报 |
 | `0x21` STATUS_EVENT | `event_type, event_data...` | 无 | 传感器/工作状态主动上报 |
+| `0x22` DEBUG_STRING | UTF-8/ASCII 字符串字节 | 无 | PUYA 端调试文本主动上报 |
 
 应答命令为请求命令加 `0x80`，应答中的 `SEQ` 原样返回。
 
@@ -33,6 +34,18 @@ CRC 为 Modbus/IBM CRC16，初值 `0xFFFF`，多项式 `0xA001`，校验范围�
 
 `CONFIG_SET` 的模式值为：`0=固定10米`、`1=固定20米`、`2=随机3-20米`。
 随机距离由 PUYA 控制单片机本地计算，TUYA 端只下发模式。
+
+`DEBUG_STRING` 由 PUYA 端调用 `faqiuji_protocol_debug_string()` 发送，支持
+`%d`、`%u`、`%x`、`%s`、`%f` 和精度控制等 `printf` 格式，例如：
+
+```c
+faqiuji_protocol_debug_string("battery=%dmV voltage=%.2fV", battery_mv,
+                              voltage);
+```
+
+TUYA 端使用 `TAL_PR_INFO` 输出为 `MCU DEBUG: ...`。格式化后的字符串单次最多
+保留 255 个字符，超过 64 字节时会自动拆分为多个调试帧；每个调试帧沿用正常
+协议的 CRC 校验。
 
 `STATUS_EVENT` 的事件定义如下：
 

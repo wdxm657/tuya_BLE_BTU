@@ -23,6 +23,7 @@ typedef enum
   FAQIUJI_CMD_CONTROL_SET = 0x15,
   FAQIUJI_CMD_KEY_EVENT  = 0x20,
   FAQIUJI_CMD_STATUS_EVENT = 0x21,
+  FAQIUJI_CMD_DEBUG_STRING = 0x22,
 } FAQIUJI_CMD_E;
 
 typedef enum
@@ -69,6 +70,7 @@ void faqiuji_protocol_input(uint8_t value);
 void faqiuji_protocol_send(uint8_t cmd, uint8_t seq,
                            const uint8_t *payload, uint8_t len);
 void faqiuji_protocol_key_event(uint8_t pressed);
+void faqiuji_protocol_debug_string(const char *format, ...);
 void faqiuji_protocol_status_event(FAQIUJI_EVENT_TYPE_E type,
                                    const uint8_t *data,
                                    uint8_t len);

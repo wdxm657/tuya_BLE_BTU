@@ -3,7 +3,11 @@
 #include "faqiuji_launcher.h"
 #include "faqiuji_device.h"
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
+
+#define FAQIUJI_DEBUG_FORMAT_SIZE 256U
 
 typedef enum
 {
@@ -298,6 +302,48 @@ void faqiuji_protocol_key_event(uint8_t pressed)
     return;
   }
   faqiuji_protocol_send(FAQIUJI_CMD_KEY_EVENT, ++sg_event_seq, &payload, 1U);
+}
+
+void faqiuji_protocol_debug_string(const char *format, ...)
+{
+  char message[FAQIUJI_DEBUG_FORMAT_SIZE];
+  va_list args;
+  int formatted_len;
+  uint16_t remaining;
+  const uint8_t *cursor;
+  uint8_t chunk_len;
+
+  if (sg_protocol.huart == NULL || format == NULL) {
+    return;
+  }
+
+  va_start(args, format);
+  formatted_len = vsnprintf(message, sizeof(message), format, args);
+  va_end(args);
+
+  if (formatted_len < 0) {
+    return;
+  }
+  if (formatted_len >= (int)sizeof(message)) {
+    formatted_len = (int)sizeof(message) - 1;
+  }
+
+  cursor = (const uint8_t *)message;
+  remaining = (uint16_t)formatted_len;
+  if (remaining == 0U) {
+    faqiuji_protocol_send(FAQIUJI_CMD_DEBUG_STRING, ++sg_event_seq,
+                          NULL, 0U);
+    return;
+  }
+
+  while (remaining != 0U) {
+    chunk_len = (remaining > FAQIUJI_MAX_PAYLOAD) ?
+                FAQIUJI_MAX_PAYLOAD : (uint8_t)remaining;
+    faqiuji_protocol_send(FAQIUJI_CMD_DEBUG_STRING, ++sg_event_seq,
+                          cursor, chunk_len);
+    cursor += chunk_len;
+    remaining -= chunk_len;
+  }
 }
 
 void faqiuji_protocol_status_event(FAQIUJI_EVENT_TYPE_E type,

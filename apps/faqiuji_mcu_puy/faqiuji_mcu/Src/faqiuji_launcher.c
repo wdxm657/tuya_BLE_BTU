@@ -60,6 +60,7 @@ static void faqiuji_launcher_motor_start(FAQIUJI_LAUNCH_MODE_E mode)
 
   /* Resolve the requested distance locally on the PUYA controller. */
   sg_distance_m = faqiuji_launcher_resolve_distance(mode);
+  faqiuji_protocol_debug_string("PWM motor p %d d %d dist %d", period, duty, sg_distance_m);
   if (duty > 100U) {
     duty = 100U;
   }
@@ -149,6 +150,7 @@ void faqiuji_launcher_task(void *argument)
   for (;;) {
     if (sg_start_request != 0U) {
       FAQIUJI_LAUNCH_MODE_E mode = sg_mode;
+      faqiuji_protocol_debug_string("LAUNCHER %d", mode);
       sg_start_request = 0U;
       sg_stop_request = 0U;
 
