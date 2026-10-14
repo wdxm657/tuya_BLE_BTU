@@ -119,7 +119,7 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     if (++ping_tick >= 2U) {
         // TAL_PR_INFO("PING MCU");
         ping_tick = 0U;
-        (VOID_T)faqiuji_mcu_ping_periodic();
+        // (VOID_T)faqiuji_mcu_ping_periodic();
     }
 }
 

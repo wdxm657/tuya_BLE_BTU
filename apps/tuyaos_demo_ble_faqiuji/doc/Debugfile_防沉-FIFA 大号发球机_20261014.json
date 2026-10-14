@@ -22,7 +22,7 @@
             "attr": 1664,
             "code": "mode",
             "defaultValue": "",
-            "desc": "active：固定10米\nsimple：固定20米\nmild：随机3-20米",
+            "desc": "active：好动模式\nsimple：一般模式\nmild：温和模式",
             "editPermission": true,
             "extContent": "",
             "iconname": "icon-dp_mode",
@@ -118,9 +118,31 @@
             "type": "obj"
         },
         {
+            "attr": 1152,
+            "code": "fault",
+            "defaultValue": "",
+            "desc": "battery_low：电池低电量告警\ndevice_stuck：设备被卡告警",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-baojing",
+            "id": 20,
+            "mode": "ro",
+            "name": "故障告警",
+            "property": {
+                "label": [
+                    "battery_low",
+                    "device_stuck"
+                ],
+                "maxlen": 2,
+                "type": "bitmap"
+            },
+            "subType": "bitmap",
+            "type": "obj"
+        },
+        {
             "attr": 1664,
             "code": "work_state",
-            "defaultValue": "",
+            "defaultValue": "work",
             "desc": "work：逗宠中\nstandby：待机中\ncharging：充电中\ncharge_done：充电完成",
             "editPermission": true,
             "extContent": "",
@@ -200,6 +222,27 @@
                 "unit": ""
             },
             "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 4096,
+            "code": "battery_status",
+            "defaultValue": "has",
+            "desc": "has: 雷达感应到有人\nnone: 雷达感应到无人",
+            "editPermission": false,
+            "extContent": "",
+            "iconname": "icon-dp_battery",
+            "id": 101,
+            "mode": "ro",
+            "name": "前方2米区域",
+            "property": {
+                "range": [
+                    "has",
+                    "none"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
             "type": "obj"
         }
     ]

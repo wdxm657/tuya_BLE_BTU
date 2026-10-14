@@ -18,9 +18,9 @@ typedef enum
 } FAQIUJI_LAUNCH_MODE_E;
 
 /* These values are intentionally easy to tune after measuring the launcher. */
-#define FAQIUJI_PWM_DUTY_10M                 55U
-#define FAQIUJI_PWM_DUTY_20M                 75U
-#define FAQIUJI_PWM_DUTY_RANDOM               100U
+#define FAQIUJI_PWM_DUTY_10M                 35U
+#define FAQIUJI_PWM_DUTY_20M                 55U
+#define FAQIUJI_PWM_DUTY_RANDOM              75U
 
 typedef enum
 {

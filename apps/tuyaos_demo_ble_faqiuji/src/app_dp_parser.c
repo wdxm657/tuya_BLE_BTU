@@ -233,6 +233,7 @@ STATIC UINT8_T app_dp_type(UINT8_T dp_id)
     if (dp_id == DP_ID_MODE) return DT_ENUM;
     if (dp_id == DP_ID_SOUND_MODE) return DT_ENUM;
     if (dp_id == DP_ID_WORK_STATE) return DT_ENUM;
+    if (dp_id == DP_ID_RADAR_SENSE) return DT_ENUM;
     if (dp_id == DP_ID_BATTERY) return DT_VALUE;
     if (dp_id == DP_ID_VOLUME) return DT_VALUE;
     if (dp_id == DP_ID_AUTO_TEASE_TIME ||

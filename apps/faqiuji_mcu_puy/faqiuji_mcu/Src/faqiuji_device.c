@@ -137,7 +137,7 @@ static uint16_t faqiuji_adc_read_battery_mv(void)
 static void faqiuji_charge_led_task(uint8_t battery, uint8_t charging)
 {
   static uint8_t blink;
-
+  faqiuji_protocol_debug_string("faqiuji_charge_led_task");
   if (charging != 0U) {
     HAL_GPIO_WritePin(GPIOB, LED_R, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOB, LED_G, GPIO_PIN_SET);
@@ -470,7 +470,7 @@ void faqiuji_device_control_task(void *argument)
       sg_ball_trigger = 0U;
       if (sg_enabled != 0U && sg_work_state == FAQIUJI_WORK_RUNNING &&
           sg_radar_last == 0U &&
-          sg_count < sg_max_count &&
+          // sg_count < sg_max_count &&
           faqiuji_launcher_is_running() == 0U &&
           faqiuji_launcher_start((FAQIUJI_LAUNCH_MODE_E)sg_mode) != 0U) {
         ++sg_count;

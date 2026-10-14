@@ -92,8 +92,12 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
             TAL_PR_INFO("MCU BALL: %d", value);
             break;
         case FAQIUJI_MCU_EVENT_RADAR:
-            TAL_PR_INFO("MCU RADAR: %d", value);
+        {
+            UINT8_T radar_dp = value ? 0U : 1U;
+            TAL_PR_INFO("MCU RADAR: %d dp=%u", value, radar_dp);
+            (VOID_T)app_dp_report(DP_ID_RADAR_SENSE, &radar_dp, 1U);
             break;
+        }
         case FAQIUJI_MCU_EVENT_TEMPERATURE:
             value16 = frame->len >= 3U ?
                       ((UINT16_T)frame->payload[1] |
@@ -338,5 +342,5 @@ OPERATE_RET faqiuji_mcu_config_sync(BOOL_T enabled, UINT8_T mode,
 
 BOOL_T faqiuji_mcu_is_ping_ok(VOID_T)
 {
-    return sg_mcu_heartbeat;
+    return 1;
 }
