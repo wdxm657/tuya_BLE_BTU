@@ -23,6 +23,9 @@ STATIC FAQIUJI_MCU_FRAME_T sg_frame_queue[FAQIUJI_MCU_FRAME_QUEUE_SIZE];
 STATIC volatile UINT8_T sg_frame_queue_read = 0;
 STATIC volatile UINT8_T sg_frame_queue_write = 0;
 STATIC volatile UINT8_T sg_frame_queue_count = 0;
+STATIC volatile BOOL_T sg_mcu_heartbeat = FALSE;
+STATIC UINT8_T sg_mcu_ping_age = 0U;
+STATIC BOOL_T sg_mcu_sync_pending = FALSE;
 
 STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
 {
@@ -36,17 +39,27 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
         return;
     }
 
+    if (frame->cmd == (FAQIUJI_MCU_CMD_PING |
+                       FAQIUJI_MCU_RESPONSE_FLAG)) {
+        BOOL_T was_heartbeat = sg_mcu_heartbeat;
+        sg_mcu_heartbeat = (frame->len == 1U &&
+                            frame->payload[0] == 0U);
+        sg_mcu_ping_age = 0U;
+        // TAL_PR_INFO("MCU PING response: heartbeat=%u status=%u",
+        //             sg_mcu_heartbeat,
+        //             frame->len ? frame->payload[0] : 0xFFU);
+        if (!was_heartbeat && sg_mcu_heartbeat) {
+            sg_mcu_sync_pending = TRUE;
+        }
+        return;
+    }
+
     if (frame->cmd == FAQIUJI_MCU_CMD_DEBUG_STRING) {
         memcpy(debug_text, frame->payload, frame->len);
         debug_text[frame->len] = '\0';
         TAL_PR_INFO("MCU DEBUG: %s", debug_text);
         return;
     }
-
-    if (frame->len == 0U) {
-        return;
-    }
-
     // TAL_PR_INFO("MCU FRAME: cmd=0x%02x seq=%u len=%u",
     //             frame->cmd, frame->seq, frame->len);
 
@@ -90,8 +103,18 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
         case FAQIUJI_MCU_EVENT_WORK:
             work_state = value;
             TAL_PR_INFO("MCU WORK STATE: %d", work_state);
-            app_dp_report(DP_ID_WORK_STATE, &work_state, 1U);
-            app_dp_set_work_state(work_state);
+            if (work_state == 4U) {
+                UINT8_T s_work_state = 1;
+                UINT8_T switch_state = 0U;
+                (VOID_T)app_dp_report(DP_ID_WORK_STATE, &s_work_state, 1U);
+                (VOID_T)app_dp_report(DP_ID_SWITCH, &switch_state, 1U);
+                app_dp_set_work_state(work_state);
+            } else if (work_state <= 3U) {
+                (VOID_T)app_dp_report(DP_ID_WORK_STATE, &work_state, 1U);
+                app_dp_set_work_state(work_state);
+            } else {
+                TAL_PR_WARN("MCU WORK STATE invalid: %u", work_state);
+            }
             break;
         case FAQIUJI_MCU_EVENT_COUNT:
             value16 = frame->len >= 3U ?
@@ -103,6 +126,19 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
             TAL_PR_WARN("MCU EVENT UNKNOWN: %u", event_type);
             break;
     }
+}
+
+OPERATE_RET faqiuji_mcu_protocol_init(VOID_T)
+{
+    memset(&sg_mcu, 0, sizeof(sg_mcu));
+    sg_mcu_seq = 0U;
+    sg_frame_queue_read = 0U;
+    sg_frame_queue_write = 0U;
+    sg_frame_queue_count = 0U;
+    sg_mcu_heartbeat = FALSE;
+    sg_mcu_ping_age = 0U;
+    sg_mcu_sync_pending = FALSE;
+    return OPRT_OK;
 }
 
 STATIC UINT16_T faqiuji_crc16(CONST UINT8_T *data, UINT16_T len)
@@ -170,6 +206,18 @@ VOID_T faqiuji_mcu_protocol_process(VOID_T)
         sg_frame_queue_count--;
         faqiuji_mcu_frame_cb(&frame);
     }
+
+    /*
+     * Do not transmit CONFIG_SET/CONTROL_SET from inside the PING response
+     * callback. Complete the current RX queue first, then start a new
+     * protocol transaction from the main loop.
+     */
+    if (sg_mcu_sync_pending) {
+        sg_mcu_sync_pending = FALSE;
+        if (sg_mcu_heartbeat) {
+            (VOID_T)app_dp_sync_to_mcu();
+        }
+    }
 }
 
 VOID_T faqiuji_mcu_protocol_input(CONST UINT8_T *data, UINT16_T len)
@@ -213,14 +261,18 @@ VOID_T faqiuji_mcu_protocol_input(CONST UINT8_T *data, UINT16_T len)
 
 OPERATE_RET faqiuji_mcu_send(UINT8_T cmd, CONST UINT8_T *payload, UINT8_T len)
 {
+    return faqiuji_mcu_send_frame(cmd, ++sg_mcu_seq, payload, len);
+}
+
+OPERATE_RET faqiuji_mcu_send_frame(UINT8_T cmd, UINT8_T seq,
+                                   CONST UINT8_T *payload, UINT8_T len)
+{
     UINT8_T frame[7 + FAQIUJI_MCU_MAX_PAYLOAD];
     UINT16_T crc;
-    UINT8_T seq;
 
     if (len > FAQIUJI_MCU_MAX_PAYLOAD || (len != 0 && payload == NULL)) {
         return OPRT_INVALID_PARM;
     }
-    seq = ++sg_mcu_seq;
     frame[0] = FAQIUJI_MCU_FRAME_HEAD;
     frame[1] = FAQIUJI_MCU_FRAME_VERSION;
     frame[2] = cmd;
@@ -237,18 +289,16 @@ OPERATE_RET faqiuji_mcu_send(UINT8_T cmd, CONST UINT8_T *payload, UINT8_T len)
 }
 
 OPERATE_RET faqiuji_mcu_ping(VOID_T) { return faqiuji_mcu_send(FAQIUJI_MCU_CMD_PING, NULL, 0); }
-OPERATE_RET faqiuji_mcu_stop(VOID_T) { return faqiuji_mcu_send(FAQIUJI_MCU_CMD_STOP, NULL, 0); }
-OPERATE_RET faqiuji_mcu_status_get(VOID_T) { return faqiuji_mcu_send(FAQIUJI_MCU_CMD_STATUS_GET, NULL, 0); }
 
-OPERATE_RET faqiuji_mcu_launch(UINT8_T speed, UINT8_T angle, UINT16_T interval_ms)
+OPERATE_RET faqiuji_mcu_ping_periodic(VOID_T)
 {
-    UINT8_T payload[4] = {speed, angle, (UINT8_T)interval_ms, (UINT8_T)(interval_ms >> 8)};
-    return faqiuji_mcu_send(FAQIUJI_MCU_CMD_LAUNCH, payload, sizeof(payload));
-}
-
-OPERATE_RET faqiuji_mcu_launch_mode(UINT8_T mode)
-{
-    return faqiuji_mcu_send(FAQIUJI_MCU_CMD_LAUNCH, &mode, 1);
+    if (sg_mcu_ping_age < 2U) {
+        sg_mcu_ping_age++;
+    }
+    if (sg_mcu_ping_age >= 2U) {
+        sg_mcu_heartbeat = FALSE;
+    }
+    return faqiuji_mcu_ping();
 }
 
 OPERATE_RET faqiuji_mcu_config_set(UINT8_T mode, UINT16_T max_count,
@@ -266,4 +316,27 @@ OPERATE_RET faqiuji_mcu_control_set(BOOL_T enabled)
 {
     UINT8_T payload = enabled ? 1U : 0U;
     return faqiuji_mcu_send(FAQIUJI_MCU_CMD_CONTROL_SET, &payload, 1);
+}
+
+OPERATE_RET faqiuji_mcu_config_sync(BOOL_T enabled, UINT8_T mode,
+                                    UINT16_T max_count,
+                                    UINT16_T standby_min)
+{
+    UINT8_T payload[7] = {
+        FAQIUJI_MCU_CONFIG_SYNC_VERSION,
+        enabled ? 1U : 0U,
+        mode,
+        (UINT8_T)max_count,
+        (UINT8_T)(max_count >> 8),
+        (UINT8_T)standby_min,
+        (UINT8_T)(standby_min >> 8)
+    };
+
+    return faqiuji_mcu_send(FAQIUJI_MCU_CMD_CONFIG_SYNC, payload,
+                            sizeof(payload));
+}
+
+BOOL_T faqiuji_mcu_is_ping_ok(VOID_T)
+{
+    return sg_mcu_heartbeat;
 }

@@ -14,7 +14,7 @@
 
 static TIM_HandleTypeDef sg_ie_tim;
 static volatile uint8_t sg_mode;
-static volatile uint8_t sg_enabled = 1U;
+static volatile uint8_t sg_enabled = 0U;
 static volatile uint8_t sg_ball_last;
 static uint8_t sg_ir_high_count;
 static volatile uint8_t sg_usb_last;
@@ -23,6 +23,7 @@ static volatile uint16_t sg_max_count = 20U;
 static volatile uint16_t sg_count;
 static volatile uint16_t sg_standby_min = 20U;
 static volatile uint16_t sg_battery_percent;
+static uint8_t sg_battery_last = 0xFFU;
 static volatile uint8_t sg_charging;
 static volatile uint8_t sg_ball_trigger;
 static volatile uint8_t sg_radar_last;
@@ -36,6 +37,8 @@ static volatile uint8_t sg_ie_enabled;
 ADC_HandleTypeDef        AdcHandle;
 TIM_HandleTypeDef        TimHandle;
 TIM_MasterConfigTypeDef  sMasterConfig;
+
+static void faqiuji_device_set_work_state(uint8_t state);
 /**
   * @brief  ADC Configuration Function
   * @param  None
@@ -152,6 +155,19 @@ static void faqiuji_charge_led_task(uint8_t battery, uint8_t charging)
   }
 }
 
+static void faqiuji_device_request_launch_if_safe(const char *reason)
+{
+  if (sg_enabled != 0U && sg_ball_last != 0U && sg_radar_last == 0U) {
+    sg_ball_trigger = 1U;
+    faqiuji_protocol_debug_string("LAUNCH REQ %s ball=%u radar=%u",
+                                  reason, sg_ball_last, sg_radar_last);
+  } else {
+    faqiuji_protocol_debug_string("LAUNCH HOLD %s en=%u ball=%u radar=%u",
+                                  reason, sg_enabled, sg_ball_last,
+                                  sg_radar_last);
+  }
+}
+
 static void faqiuji_ie_pwm_init(void)
 {
   TIM_OC_InitTypeDef config = {0};
@@ -183,13 +199,18 @@ void faqiuji_device_init(void)
   faqiuji_ie_pwm_init();
   HAL_GPIO_WritePin(GPIOB, CHARGE_EN, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOB, NTC_CON, GPIO_PIN_SET);
-  sg_work_state = FAQIUJI_WORK_RUNNING;
+  sg_work_state = FAQIUJI_WORK_STOPPED;
   sg_radar_last = (HAL_GPIO_ReadPin(GPIOA, LEIDA_IN_O) == GPIO_PIN_SET) ? 1U : 0U;
   sg_ball_last = 0U;
   sg_ir_high_count = 0U;
   sg_usb_last = (HAL_GPIO_ReadPin(GPIOF, USB_DET) == GPIO_PIN_SET) ? 1U : 0U;
   sg_charge_last = (HAL_GPIO_ReadPin(GPIOB, CHARGE_STATE) == GPIO_PIN_SET) ? 1U : 0U;
   sg_charging = sg_charge_last;
+
+  {
+    uint8_t data = sg_work_state;
+    faqiuji_protocol_status_event(FAQIUJI_EVENT_WORK, &data, 1U);
+  }
 }
 
 void faqiuji_device_set_mode(uint8_t mode)
@@ -211,7 +232,27 @@ void faqiuji_device_set_config(uint8_t mode, uint16_t max_count,
 
 void faqiuji_device_set_enabled(uint8_t enabled)
 {
-  sg_enabled = enabled ? 1U : 0U;
+  uint8_t new_enabled = enabled ? 1U : 0U;
+  uint8_t old_enabled = sg_enabled;
+
+  sg_enabled = new_enabled;
+  faqiuji_protocol_debug_string("DEVICE ENABLE %u->%u%s ball=%u radar=%u",
+                                old_enabled, sg_enabled,
+                                (old_enabled == new_enabled) ?
+                                " unchanged" : "",
+                                sg_ball_last, sg_radar_last);
+
+  if (sg_enabled == 0U) {
+    sg_ball_trigger = 0U;
+    faqiuji_protocol_debug_string("DEVICE OFF stop launcher");
+    faqiuji_launcher_stop();
+    faqiuji_device_set_work_state(FAQIUJI_WORK_STOPPED);
+  } else {
+    if (sg_work_state == FAQIUJI_WORK_STOPPED) {
+      faqiuji_device_set_work_state(FAQIUJI_WORK_RUNNING);
+    }
+    faqiuji_device_request_launch_if_safe("enable");
+  }
 }
 
 uint8_t faqiuji_device_is_enabled(void)
@@ -291,7 +332,7 @@ void faqiuji_device_sensor_task(void *argument)
         data[0] = ball;
         faqiuji_protocol_status_event(FAQIUJI_EVENT_BALL, data, 1U);
         if (ball != 0U) {
-          sg_ball_trigger = 1U;
+          faqiuji_device_request_launch_if_safe("ball");
         }
       }
     }
@@ -316,9 +357,13 @@ void faqiuji_device_sensor_task(void *argument)
         faqiuji_protocol_status_event(FAQIUJI_EVENT_CHARGE, data, 1U);
       }
       if (radar != sg_radar_last) {
+        uint8_t radar_last = sg_radar_last;
         sg_radar_last = radar;
         data[0] = radar;
         faqiuji_protocol_status_event(FAQIUJI_EVENT_RADAR, data, 1U);
+        if (radar_last != 0U && radar == 0U && sg_ball_last != 0U) {
+          faqiuji_device_request_launch_if_safe("radar");
+        }
       }
     }
     vTaskDelay(pdMS_TO_TICKS(1U));
@@ -402,7 +447,8 @@ void faqiuji_device_control_task(void *argument)
       faqiuji_protocol_status_event(FAQIUJI_EVENT_COUNT, data, 2U);
     }
 
-    if (sg_work_state != FAQIUJI_WORK_STANDBY) {
+    if (sg_work_state != FAQIUJI_WORK_STANDBY &&
+        sg_work_state != FAQIUJI_WORK_STOPPED) {
       if (sg_charging != 0U) {
         faqiuji_device_set_work_state(FAQIUJI_WORK_CHARGING);
       } else if (sg_battery_percent >= FAQIUJI_BATTERY_FULL_PERCENT) {
@@ -411,11 +457,19 @@ void faqiuji_device_control_task(void *argument)
                  sg_work_state == FAQIUJI_WORK_CHARGE_DONE) {
         faqiuji_device_set_work_state(FAQIUJI_WORK_RUNNING);
       }
+    } else if (sg_work_state == FAQIUJI_WORK_STOPPED &&
+               sg_enabled != 0U) {
+      if (sg_charging != 0U) {
+        faqiuji_device_set_work_state(FAQIUJI_WORK_CHARGING);
+      } else {
+        faqiuji_device_set_work_state(FAQIUJI_WORK_RUNNING);
+      }
     }
 
     if (sg_ball_trigger != 0U) {
       sg_ball_trigger = 0U;
       if (sg_enabled != 0U && sg_work_state == FAQIUJI_WORK_RUNNING &&
+          sg_radar_last == 0U &&
           sg_count < sg_max_count &&
           faqiuji_launcher_is_running() == 0U &&
           faqiuji_launcher_start((FAQIUJI_LAUNCH_MODE_E)sg_mode) != 0U) {

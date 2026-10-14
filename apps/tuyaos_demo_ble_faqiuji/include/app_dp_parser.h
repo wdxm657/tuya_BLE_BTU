@@ -35,6 +35,9 @@ extern UINT32_T  g_sn;
 
 OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size);
 OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T *buf, UINT32_T size);
+OPERATE_RET app_dp_load_persistent(VOID_T);
+OPERATE_RET app_dp_save_persistent(VOID_T);
+OPERATE_RET app_dp_sync_to_mcu(VOID_T);
 VOID_T app_dp_process_audio_events(VOID_T);
 VOID_T app_dp_set_work_state(UINT8_T work_state);
 

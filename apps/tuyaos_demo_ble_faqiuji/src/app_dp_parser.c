@@ -11,6 +11,8 @@
 
 #include "string.h"
 
+#include "board.h"
+#include "tal_flash.h"
 #include "tal_log.h"
 #include "tal_util.h"
 #include "tkl_system.h"
@@ -39,13 +41,129 @@ demo_dp_t g_cmd = {0};
 demo_dp_t g_rsp = {0};
 UINT32_T  g_sn  = 0;
 STATIC UINT8_T sg_launch_mode = 0U;
+STATIC BOOL_T sg_switch_enabled = FALSE;
 STATIC UINT16_T sg_auto_tease_count = 20U;
 STATIC UINT16_T sg_standby_tease_min = 20U;
+STATIC UINT8_T sg_sound_mode = 0U;
+STATIC UINT8_T sg_volume = 100U;
 STATIC UINT32_T sg_record_start_ms;
 STATIC BOOL_T sg_sleep_audio_active;
 STATIC UINT8_T sg_sleep_audio_phase;
 STATIC UINT32_T sg_sleep_phase_start_ms;
 STATIC UINT8_T sg_comfort_sound_file = FAQIUJI_AUDIO_FACTORY_SOUND_1;
+
+#define FAQIUJI_DP_FLASH_MAGIC       (0x46414A51UL)
+#define FAQIUJI_DP_FLASH_VERSION     (1U)
+#define FAQIUJI_DP_FLASH_ERASE_SIZE  (0x1000U)
+
+#pragma pack(1)
+typedef struct {
+    UINT32_T magic;
+    UINT8_T version;
+    UINT8_T switch_enabled;
+    UINT8_T launch_mode;
+    UINT8_T sound_mode;
+    UINT16_T auto_tease_count;
+    UINT16_T standby_tease_min;
+    UINT8_T volume;
+} faqiuji_dp_flash_data_t;
+#pragma pack()
+
+STATIC VOID_T app_dp_set_defaults(VOID_T)
+{
+    sg_switch_enabled = FALSE;
+    sg_launch_mode = 0U;
+    sg_auto_tease_count = 20U;
+    sg_standby_tease_min = 20U;
+    sg_sound_mode = 0U;
+    sg_volume = 100U;
+    sg_comfort_sound_file = FAQIUJI_AUDIO_FACTORY_SOUND_1;
+}
+
+OPERATE_RET app_dp_save_persistent(VOID_T)
+{
+    faqiuji_dp_flash_data_t data = {0};
+    OPERATE_RET ret;
+
+    data.magic = FAQIUJI_DP_FLASH_MAGIC;
+    data.version = FAQIUJI_DP_FLASH_VERSION;
+    data.switch_enabled = sg_switch_enabled ? 1U : 0U;
+    data.launch_mode = sg_launch_mode;
+    data.sound_mode = sg_sound_mode;
+    data.auto_tease_count = sg_auto_tease_count;
+    data.standby_tease_min = sg_standby_tease_min;
+    data.volume = sg_volume;
+
+    ret = tal_flash_erase(USER_FLASH_ADDR_FAQIUJI,
+                          FAQIUJI_DP_FLASH_ERASE_SIZE);
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("FAQIUJI flash erase failed: %d", ret);
+        return ret;
+    }
+    ret = tal_flash_write(USER_FLASH_ADDR_FAQIUJI,
+                          (CONST UCHAR_T *)&data, SIZEOF(data));
+    TAL_PR_INFO("FAQIUJI config save ret=%d switch=%u mode=%u count=%u standby=%u sound=%u volume=%u",
+                ret, data.switch_enabled, data.launch_mode,
+                data.auto_tease_count, data.standby_tease_min,
+                data.sound_mode, data.volume);
+    return ret;
+}
+
+OPERATE_RET app_dp_load_persistent(VOID_T)
+{
+    faqiuji_dp_flash_data_t data = {0};
+    OPERATE_RET ret;
+
+    app_dp_set_defaults();
+    ret = tal_flash_read(USER_FLASH_ADDR_FAQIUJI,
+                         (UCHAR_T *)&data, SIZEOF(data));
+    if (ret != OPRT_OK ||
+        data.magic != FAQIUJI_DP_FLASH_MAGIC ||
+        data.version != FAQIUJI_DP_FLASH_VERSION ||
+        data.switch_enabled > 1U ||
+        data.launch_mode > 2U ||
+        data.sound_mode > 1U ||
+        data.auto_tease_count < 10U ||
+        data.auto_tease_count > 90U ||
+        data.standby_tease_min < 10U ||
+        data.standby_tease_min > 30U ||
+        data.volume < 1U ||
+        data.volume > 100U) {
+        TAL_PR_INFO("FAQIUJI config not found, use defaults");
+        return OPRT_OK;
+    }
+
+    sg_switch_enabled = data.switch_enabled ? TRUE : FALSE;
+    sg_launch_mode = data.launch_mode;
+    sg_sound_mode = data.sound_mode;
+    sg_auto_tease_count = data.auto_tease_count;
+    sg_standby_tease_min = data.standby_tease_min;
+    sg_volume = data.volume;
+    sg_comfort_sound_file = sg_sound_mode ?
+                            FAQIUJI_AUDIO_FACTORY_SOUND_2 :
+                            FAQIUJI_AUDIO_FACTORY_SOUND_1;
+    faqiuji_audio_set_volume(sg_volume);
+    TAL_PR_INFO("FAQIUJI config restored: switch=%u mode=%u count=%u standby=%u sound=%u volume=%u",
+                sg_switch_enabled, sg_launch_mode, sg_auto_tease_count,
+                sg_standby_tease_min, sg_sound_mode, sg_volume);
+    return OPRT_OK;
+}
+
+OPERATE_RET app_dp_sync_to_mcu(VOID_T)
+{
+    OPERATE_RET ret;
+
+    if (!faqiuji_mcu_is_ping_ok()) {
+        return OPRT_OK;
+    }
+    ret = faqiuji_mcu_config_sync(sg_switch_enabled, sg_launch_mode,
+                                  sg_auto_tease_count,
+                                  sg_standby_tease_min);
+    if (ret == OPRT_OK) {
+        TAL_PR_INFO("FAQIUJI config sync sent to MCU");
+    }
+    return ret;
+}
 
 #define FAQIUJI_SLEEP_AUDIO_PHASE_MS 600000UL
 #define FAQIUJI_AUDIO_SLEEP_OWNER     0U
@@ -114,6 +232,8 @@ STATIC UINT8_T app_dp_type(UINT8_T dp_id)
 {
     if (dp_id == DP_ID_MODE) return DT_ENUM;
     if (dp_id == DP_ID_SOUND_MODE) return DT_ENUM;
+    if (dp_id == DP_ID_WORK_STATE) return DT_ENUM;
+    if (dp_id == DP_ID_BATTERY) return DT_VALUE;
     if (dp_id == DP_ID_VOLUME) return DT_VALUE;
     if (dp_id == DP_ID_AUTO_TEASE_TIME ||
         dp_id == DP_ID_STANDBY_TEASE_TIME) return DT_VALUE;
@@ -139,33 +259,58 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
     }
     memcpy(&g_rsp, &g_cmd, size);
 
-    TAL_PR_HEXDUMP_INFO("dp_cmd", (VOID_T*)&g_cmd, (g_cmd.dp_data_len + 4));
+    // TAL_PR_HEXDUMP_INFO("dp_cmd", (VOID_T*)&g_cmd, (g_cmd.dp_data_len + 4));
+    // TAL_PR_INFO("DP RX: id=%u type=%u len=%u first=0x%02x",
+    //             g_cmd.dp_id, g_cmd.dp_type, g_cmd.dp_data_len,
+    //             g_cmd.dp_data_len ? g_cmd.dp_data[0] : 0U);
 
     switch (g_cmd.dp_id) {
         case DP_ID_SWITCH:
             if (g_cmd.dp_data_len != DT_BOOL_LEN) {
+                TAL_PR_ERR("DP SWITCH: invalid data length=%u",
+                           g_cmd.dp_data_len);
                 return OPRT_INVALID_PARM;
             }
-            /* The switch business is reserved for a later implementation. */
+            {
+                BOOL_T enabled = app_dp_is_true(g_cmd.dp_data,
+                                                g_cmd.dp_data_len);
+                sg_switch_enabled = enabled;
+                (VOID_T)app_dp_save_persistent();
+                OPERATE_RET ret = faqiuji_mcu_is_ping_ok() ?
+                                  faqiuji_mcu_control_set(enabled) :
+                                  OPRT_OK;
+                TAL_PR_INFO("DP SWITCH: enabled=%d mcu_control_ret=%d",
+                            enabled, ret);
+                if (ret != OPRT_OK) {
+                    return ret;
+                }
+            }
             break;
         case DP_ID_MODE: {
             UINT8_T launch_mode = app_mode_to_launch_mode(g_cmd.dp_data,
                                                             g_cmd.dp_data_len);
+            OPERATE_RET ret;
             if (launch_mode > 2U) {
                 TAL_PR_ERR("DP MODE: unsupported value");
                 return OPRT_INVALID_PARM;
             }
             sg_launch_mode = launch_mode;
+            (VOID_T)app_dp_save_persistent();
             TAL_PR_INFO("DP MODE: configure launch mode=%u", launch_mode);
-            if (faqiuji_mcu_config_set(sg_launch_mode,
-                                       sg_auto_tease_count,
-                                       sg_standby_tease_min) != OPRT_OK) {
-                return OPRT_COM_ERROR;
+            ret = faqiuji_mcu_is_ping_ok() ?
+                  faqiuji_mcu_config_set(sg_launch_mode,
+                                         sg_auto_tease_count,
+                                         sg_standby_tease_min) :
+                  OPRT_OK;
+            TAL_PR_INFO("DP MODE: mcu_config_ret=%d", ret);
+            if (ret != OPRT_OK) {
+                return ret;
             }
             break;
         }
         case DP_ID_AUTO_TEASE_TIME: {
             UINT32_T count;
+            OPERATE_RET ret;
             if (g_cmd.dp_data_len != DT_VALUE_LEN) return OPRT_INVALID_PARM;
             count = ((UINT32_T)g_cmd.dp_data[0] << 24) |
                     ((UINT32_T)g_cmd.dp_data[1] << 16) |
@@ -174,15 +319,22 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             if (count < 10U) count = 10U;
             if (count > 90U) count = 90U;
             sg_auto_tease_count = (UINT16_T)count;
-            if (faqiuji_mcu_config_set(sg_launch_mode,
-                                       sg_auto_tease_count,
-                                       sg_standby_tease_min) != OPRT_OK) {
-                return OPRT_COM_ERROR;
+            (VOID_T)app_dp_save_persistent();
+            TAL_PR_INFO("DP AUTO_TEASE_TIME: count=%u", sg_auto_tease_count);
+            ret = faqiuji_mcu_is_ping_ok() ?
+                  faqiuji_mcu_config_set(sg_launch_mode,
+                                         sg_auto_tease_count,
+                                         sg_standby_tease_min) :
+                  OPRT_OK;
+            TAL_PR_INFO("DP AUTO_TEASE_TIME: mcu_config_ret=%d", ret);
+            if (ret != OPRT_OK) {
+                return ret;
             }
             break;
         }
         case DP_ID_STANDBY_TEASE_TIME: {
             UINT32_T minutes;
+            OPERATE_RET ret;
             if (g_cmd.dp_data_len != DT_VALUE_LEN) return OPRT_INVALID_PARM;
             minutes = ((UINT32_T)g_cmd.dp_data[0] << 24) |
                       ((UINT32_T)g_cmd.dp_data[1] << 16) |
@@ -191,10 +343,17 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             if (minutes < 10U) minutes = 10U;
             if (minutes > 30U) minutes = 30U;
             sg_standby_tease_min = (UINT16_T)minutes;
-            if (faqiuji_mcu_config_set(sg_launch_mode,
-                                       sg_auto_tease_count,
-                                       sg_standby_tease_min) != OPRT_OK) {
-                return OPRT_COM_ERROR;
+            (VOID_T)app_dp_save_persistent();
+            TAL_PR_INFO("DP STANDBY_TEASE_TIME: minutes=%u",
+                        sg_standby_tease_min);
+            ret = faqiuji_mcu_is_ping_ok() ?
+                  faqiuji_mcu_config_set(sg_launch_mode,
+                                         sg_auto_tease_count,
+                                         sg_standby_tease_min) :
+                  OPRT_OK;
+            TAL_PR_INFO("DP STANDBY_TEASE_TIME: mcu_config_ret=%d", ret);
+            if (ret != OPRT_OK) {
+                return ret;
             }
             break;
         }
@@ -206,29 +365,44 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             {
                 UINT8_T file_id = app_sound_mode_to_file(g_cmd.dp_data, g_cmd.dp_data_len);
                 sg_comfort_sound_file = file_id;
+                sg_sound_mode = (file_id == FAQIUJI_AUDIO_FACTORY_SOUND_2) ? 1U : 0U;
+                (VOID_T)app_dp_save_persistent();
                 OPERATE_RET audio_ret = faqiuji_audio_preview_start(file_id);
                 TAL_PR_INFO("DP SOUND_MODE: start file=%u ret=%d", file_id, audio_ret);
             }
             break;
         case DP_ID_SOUND:
             if (g_cmd.dp_data_len != DT_BOOL_LEN) {
+                TAL_PR_ERR("DP SOUND: invalid data length=%u",
+                           g_cmd.dp_data_len);
                 return OPRT_INVALID_PARM;
             }
-            if (app_dp_is_true(g_cmd.dp_data, g_cmd.dp_data_len)) {
-                if (faqiuji_audio_is_playing()) {
-                    faqiuji_audio_stop();
-                }
-                if (!faqiuji_audio_is_recording()) {
-                    if (faqiuji_audio_record_start(FAQIUJI_AUDIO_USER_FILE_ID) != OPRT_OK) {
-                        g_cmd.dp_data[0] = 0;
-                    } else {
-                        sg_record_start_ms = tkl_system_get_millisecond();
+            {
+                BOOL_T recording = app_dp_is_true(g_cmd.dp_data,
+                                                  g_cmd.dp_data_len);
+                OPERATE_RET ret = OPRT_OK;
+                TAL_PR_INFO("DP SOUND: recording=%d", recording);
+                if (recording) {
+                    if (faqiuji_audio_is_playing()) {
+                        faqiuji_audio_stop();
+                    }
+                    if (!faqiuji_audio_is_recording()) {
+                        ret = faqiuji_audio_record_start(
+                            FAQIUJI_AUDIO_USER_FILE_ID);
+                        if (ret != OPRT_OK) {
+                            g_cmd.dp_data[0] = 0;
+                        } else {
+                            sg_record_start_ms = tkl_system_get_millisecond();
+                        }
+                    }
+                } else if (faqiuji_audio_is_recording()) {
+                    ret = faqiuji_audio_record_stop();
+                    if (ret != OPRT_OK) {
+                        g_cmd.dp_data[0] = 1;
                     }
                 }
-            } else if (faqiuji_audio_is_recording()) {
-                if (faqiuji_audio_record_stop() != OPRT_OK) {
-                    g_cmd.dp_data[0] = 1;
-                }
+                TAL_PR_INFO("DP SOUND: record_ret=%d final=%u", ret,
+                            g_cmd.dp_data[0]);
             }
             break;
         case DP_ID_PLAY:
@@ -268,17 +442,28 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             break;
         case DP_ID_VOLUME: {
             UINT32_T volume;
-            if (g_cmd.dp_data_len != DT_VALUE_LEN) return OPRT_INVALID_PARM;
+            UINT8_T volume_value;
+            if (g_cmd.dp_data_len != DT_VALUE_LEN) {
+                TAL_PR_ERR("DP VOLUME: invalid data length=%u",
+                           g_cmd.dp_data_len);
+                return OPRT_INVALID_PARM;
+            }
             volume = ((UINT32_T)g_cmd.dp_data[0] << 24) |
                      ((UINT32_T)g_cmd.dp_data[1] << 16) |
                      ((UINT32_T)g_cmd.dp_data[2] << 8) |
-                     g_cmd.dp_data[3];
+            g_cmd.dp_data[3];
             if (volume < 1) volume = 1;
             if (volume > 100) volume = 100;
-            faqiuji_audio_set_volume((UINT8_T)volume);
+            volume_value = (UINT8_T)volume;
+            sg_volume = volume_value;
+            (VOID_T)app_dp_save_persistent();
+            faqiuji_audio_set_volume(volume_value);
+            TAL_PR_INFO("DP VOLUME: volume=%u", volume_value);
             break;
         }
         default:
+            TAL_PR_WARN("DP UNKNOWN: id=%u type=%u len=%u",
+                        g_cmd.dp_id, g_cmd.dp_type, g_cmd.dp_data_len);
             break;
     }
 
@@ -304,7 +489,7 @@ OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T* buf, UINT32_T size)
 
     tal_util_reverse_byte(&g_rsp.dp_data_len, SIZEOF(UINT16_T));
 
-    TAL_PR_HEXDUMP_INFO("dp_rsp", (VOID_T*)&g_rsp, rsp_len);
+    // TAL_PR_HEXDUMP_INFO("dp_rsp", (VOID_T*)&g_rsp, rsp_len);
 
     return tuya_ble_dp_data_send(g_sn++, DP_SEND_TYPE_ACTIVE, DP_SEND_FOR_CLOUD_PANEL, DP_SEND_WITHOUT_RESPONSE, (VOID_T*)&g_rsp, rsp_len);
 }
@@ -363,4 +548,9 @@ VOID_T app_dp_set_work_state(UINT8_T work_state)
             }
         }
     }
+}
+
+VOID_T app_dp_report_all(VOID_T)
+{
+
 }

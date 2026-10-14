@@ -119,7 +119,7 @@ static void APP_UartInit(void)
   uart_rx_write = 0U;
   uart_rx_read = 0U;
   UartHandle.Instance = USART1;
-  UartHandle.Init.BaudRate = 9600;
+  UartHandle.Init.BaudRate = 115200;
   UartHandle.Init.WordLength = UART_WORDLENGTH_8B;
   UartHandle.Init.StopBits = UART_STOPBITS_1;
   UartHandle.Init.Parity = UART_PARITY_NONE;

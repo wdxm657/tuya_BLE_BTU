@@ -30,9 +30,9 @@ extern "C" {
 
 // 临时授权
 #if(SWITCH_TY==0)
-#define TY_DEVICE_MAC         "DC235427A7F6"
-#define TY_DEVICE_DID         "uuid885d127639ca" //16Bytes
-#define TY_DEVICE_AUTH_KEY    "kVTarh29WOtdYj2mUAlMNjNU3RlHVoy2" //32Bytes
+#define TY_DEVICE_MAC         "DC235427A7F7"
+#define TY_DEVICE_DID         "uuid701a2ea9c88f" //16Bytes
+#define TY_DEVICE_AUTH_KEY    "W9PcNVCEUYzk42sCzjyT6RBLDSq695KS" //32Bytes
 #endif
 #define TY_ADV_INTERVAL       20   //range: 20~10240ms
 #define TY_CONN_INTERVAL_MIN  15   //range: 7.5~4000ms

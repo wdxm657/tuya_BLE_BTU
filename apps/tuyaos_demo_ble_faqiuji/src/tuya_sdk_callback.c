@@ -70,7 +70,7 @@ TAL_UART_CFG_T tal_uart_cfg = {
     .rx_buffer_size = 256,
     .open_mode = O_BLOCK,
     {
-        .baudrate = 9600,
+        .baudrate = 115200,
         .parity = TUYA_UART_PARITY_TYPE_NONE,
         .databits = TUYA_UART_DATA_LEN_8BIT,
         .stopbits = TUYA_UART_STOP_LEN_1BIT,
@@ -112,6 +112,15 @@ STATIC TUYA_BLE_BULKDATA_CB_T tuya_ble_bulkdata_cb = {0};
 /* DP定时上报：读取缓存值，仅上报有变更的DP */
 STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 {
+    STATIC UINT8_T ping_tick = 0U;
+    (VOID_T)timer_id;
+    (VOID_T)arg;
+
+    if (++ping_tick >= 2U) {
+        // TAL_PR_INFO("PING MCU");
+        ping_tick = 0U;
+        (VOID_T)faqiuji_mcu_ping_periodic();
+    }
 }
 
 STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
@@ -365,6 +374,7 @@ OPERATE_RET tuya_init_third(VOID_T)
     {
         TAL_PR_DEBUG("AUDIO INIT ERR %d",ret);
     }
+    (VOID_T)app_dp_load_persistent();
     
     return ret;
 }
@@ -374,6 +384,7 @@ OPERATE_RET tuya_init_last(VOID_T)
     // tkl_uart.c中可以指定IO
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
 
+    (VOID_T)faqiuji_mcu_protocol_init();
     tuya_ble_protocol_init();
     tal_uart_rx_reg_irq_cb(TUYA_UART_NUM_0, tuya_uart_irq_rx_cb);
 
@@ -403,6 +414,7 @@ OPERATE_RET tuya_init_last(VOID_T)
     app_product_test_init();
 #endif // APP_PRODUCT_TEST
 #endif
+    // tuya_ble_device_unbind();
     
     return OPRT_OK;
 }

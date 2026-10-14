@@ -20,7 +20,7 @@ typedef enum
 /* These values are intentionally easy to tune after measuring the launcher. */
 #define FAQIUJI_PWM_DUTY_10M                 55U
 #define FAQIUJI_PWM_DUTY_20M                 75U
-#define FAQIUJI_PWM_DUTY_RANDOM               65U
+#define FAQIUJI_PWM_DUTY_RANDOM               100U
 
 typedef enum
 {
