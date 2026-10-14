@@ -80,12 +80,17 @@ extern unsigned int ota_program_offset;
 // #define BOARD_FLASH_MAC_START_ADDR              (0)
 // #endif
 #define APP_DATA_FLASH_ADDR 0x7F000
+
 #define LASER_BUG 0
 #define CAT_STRING 0
 #define BLE_BALL 0
 #define FAQIUJI 1
 
 #if LASER_BUG
+
+// User data area: 0x2C000 - 0x3F000. Use the last 4K sector.
+#define USER_FLASH_ADDR_LASER_BUG            (0x3E000)
+
 #ifndef BOARD_KEY_PIN
 #define BOARD_KEY_PIN                           (TUYA_GPIO_NUM_28) // D4 按键
 
@@ -93,7 +98,7 @@ extern unsigned int ota_program_offset;
 
 #if (BOARD_ENABLE_LOG)
 #ifndef BOARD_LOG_TX_PIN
-#define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_14) // B6 日志输出引脚
+// #define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_14) // B6 日志输出引脚 已被占用
 
 #endif
 #endif
@@ -107,6 +112,7 @@ extern unsigned int ota_program_offset;
 #define PIR             TUYA_GPIO_NUM_16 // C0 PIR指示 低电平有效
 #define PIR_CON         TUYA_GPIO_NUM_31 // D7 PIR开关 高电平打开 低电平关闭
 #define LASER           TUYA_GPIO_NUM_27 // D3 激光指示灯 高电平打开 低电平关闭
+#define STDBY           TUYA_GPIO_NUM_14 // B6 满电信号 上拉输入 满电低电平 否则高电平
 
 #define AD_Bat 8   // PC4
 
@@ -195,6 +201,9 @@ extern unsigned int ota_program_offset;
 #endif
 
 #if FAQIUJI
+// User data area: 0x2C000 - 0x3F000. Use the last 4K sector.
+#define USER_FLASH_ADDR_FAQIUJI            (0x3E000)
+
 #define TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE 1
 // PIN
 // #ifndef BOARD_POWER_ON_PIN
