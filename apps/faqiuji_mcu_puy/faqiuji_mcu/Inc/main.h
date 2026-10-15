@@ -46,6 +46,7 @@ extern "C" {
 /* Private defines -----------------------------------------------------------*/
 /* Exported variables prototypes ---------------------------------------------*/
 extern UART_HandleTypeDef UartHandle;
+extern DMA_HandleTypeDef hdma_usart1_rx;
 
 /* Exported functions prototypes ---------------------------------------------*/
 void APP_ErrorHandler(void);

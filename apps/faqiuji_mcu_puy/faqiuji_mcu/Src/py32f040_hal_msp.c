@@ -36,6 +36,7 @@
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
+DMA_HandleTypeDef hdma_usart1_rx;
 /* Private function prototypes -----------------------------------------------*/
 /* External functions --------------------------------------------------------*/
 /**
@@ -60,6 +61,8 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
     /* Enable USART1 clock */
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_USART1_CLK_ENABLE();
+    __HAL_RCC_DMA_CLK_ENABLE();
+    __HAL_RCC_SYSCFG_CLK_ENABLE();
     /* Initialize GPIO
     PB8     ------> USART1_TX
     PB9     ------> USART1_RX
@@ -74,9 +77,27 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
     GPIO_InitStruct.Alternate = GPIO_AF9_USART1;
     GPIO_InitStruct.Pin = GPIO_PIN_9;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    /* USART1 RX DMA configuration. */
+    hdma_usart1_rx.Instance = DMA1_Channel2;
+    hdma_usart1_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
+    hdma_usart1_rx.Init.PeriphInc = DMA_PINC_DISABLE;
+    hdma_usart1_rx.Init.MemInc = DMA_MINC_ENABLE;
+    hdma_usart1_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+    hdma_usart1_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+    hdma_usart1_rx.Init.Mode = DMA_CIRCULAR;
+    hdma_usart1_rx.Init.Priority = DMA_PRIORITY_HIGH;
+    if (HAL_DMA_Init(&hdma_usart1_rx) != HAL_OK) {
+      APP_ErrorHandler();
+    }
+    __HAL_LINKDMA(huart, hdmarx, hdma_usart1_rx);
+    HAL_DMA_ChannelMap(&hdma_usart1_rx, DMA_CHANNEL_MAP_USART1_RD);
+
     /* Enable USART1 interrupt */
     HAL_NVIC_SetPriority(USART1_IRQn, 0, 1);
     HAL_NVIC_EnableIRQ(USART1_IRQn);
+    HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 1, 1);
+    HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
   }
 }
 
@@ -84,6 +105,7 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
 {
   if (huart->Instance == USART1) {
     HAL_GPIO_DeInit(GPIOB, UART_TX | UART_RX);
+    HAL_DMA_DeInit(huart->hdmarx);
     __HAL_RCC_USART1_CLK_DISABLE();
   }
 }

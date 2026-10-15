@@ -5,22 +5,44 @@
 #include "gpio_config.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include <string.h>
 
 UART_HandleTypeDef UartHandle;
-static uint8_t uart_rx_byte;
-#define UART_RX_QUEUE_SIZE 128U
-static volatile uint8_t uart_rx_queue[UART_RX_QUEUE_SIZE];
-static volatile uint8_t uart_rx_write;
-static volatile uint8_t uart_rx_read;
+#define UART_RX_DMA_SIZE 256U
+static uint8_t uart_rx_dma_buffer[UART_RX_DMA_SIZE];
+static uint16_t uart_rx_read;
+static volatile uint8_t uart_rx_restart_required;
 
 static void APP_UartService(void)
 {
-  uint8_t value;
+  uint16_t dma_write;
 
-  while (uart_rx_read != uart_rx_write) {
-    value = uart_rx_queue[uart_rx_read];
-    uart_rx_read = (uint8_t)((uart_rx_read + 1U) % UART_RX_QUEUE_SIZE);
-    faqiuji_protocol_input(value);
+  if (UartHandle.hdmarx == NULL) {
+    return;
+  }
+
+  if (uart_rx_restart_required != 0U) {
+    uart_rx_restart_required = 0U;
+    uart_rx_read = 0U;
+    (void)HAL_UART_DMAStop(&UartHandle);
+    __HAL_UART_CLEAR_OREFLAG(&UartHandle);
+    (void)HAL_UART_Receive_DMA(&UartHandle, uart_rx_dma_buffer,
+                               UART_RX_DMA_SIZE);
+    return;
+  }
+
+  dma_write = (uint16_t)(UART_RX_DMA_SIZE -
+                         __HAL_DMA_GET_COUNTER(UartHandle.hdmarx));
+  if (dma_write >= UART_RX_DMA_SIZE) {
+    dma_write = 0U;
+  }
+
+  while (uart_rx_read != dma_write) {
+    faqiuji_protocol_input(uart_rx_dma_buffer[uart_rx_read]);
+    uart_rx_read++;
+    if (uart_rx_read >= UART_RX_DMA_SIZE) {
+      uart_rx_read = 0U;
+    }
   }
 }
 
@@ -116,8 +138,9 @@ static void APP_GpioInit(void)
 
 static void APP_UartInit(void)
 {
-  uart_rx_write = 0U;
   uart_rx_read = 0U;
+  uart_rx_restart_required = 0U;
+  memset(uart_rx_dma_buffer, 0, sizeof(uart_rx_dma_buffer));
   UartHandle.Instance = USART1;
   UartHandle.Init.BaudRate = 115200;
   UartHandle.Init.WordLength = UART_WORDLENGTH_8B;
@@ -133,7 +156,8 @@ static void APP_UartInit(void)
   }
 
   faqiuji_protocol_init(&UartHandle);
-  if (HAL_UART_Receive_IT(&UartHandle, &uart_rx_byte, 1U) != HAL_OK) {
+  if (HAL_UART_Receive_DMA(&UartHandle, uart_rx_dma_buffer,
+                           UART_RX_DMA_SIZE) != HAL_OK) {
     APP_ErrorHandler();
   }
 }
@@ -207,25 +231,14 @@ static void APP_SystemClockConfig(void)
   }
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-  if (huart == &UartHandle) {
-    uint8_t next = (uint8_t)((uart_rx_write + 1U) % UART_RX_QUEUE_SIZE);
-    if (next != uart_rx_read) {
-      uart_rx_queue[uart_rx_write] = uart_rx_byte;
-      uart_rx_write = next;
-    }
-    if (HAL_UART_Receive_IT(&UartHandle, &uart_rx_byte, 1U) != HAL_OK) {
-      APP_ErrorHandler();
-    }
-  }
-}
-
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
   if (huart == &UartHandle) {
-    /* Keep RX armed after an overrun or framing error. */
-    (void)HAL_UART_Receive_IT(&UartHandle, &uart_rx_byte, 1U);
+    /*
+     * DMA reception is continuous. Recover from an overrun/framing error
+     * from the UART task instead of calling locking HAL APIs in the ISR.
+     */
+    uart_rx_restart_required = 1U;
   }
 }
 

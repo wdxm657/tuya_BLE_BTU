@@ -104,4 +104,12 @@ void USART1_IRQHandler(void)
   HAL_UART_IRQHandler(&UartHandle);
 }
 
+/**
+  * @brief This function handles DMA1 channel2 and channel3 Interrupt.
+  */
+void DMA1_Channel2_3_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(UartHandle.hdmarx);
+}
+
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/
