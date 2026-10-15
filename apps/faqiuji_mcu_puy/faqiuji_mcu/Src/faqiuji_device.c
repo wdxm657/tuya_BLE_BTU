@@ -51,7 +51,6 @@ static const struct {
 #define BATTERY_LUT_SIZE  (sizeof(s_battery_lut) / sizeof(s_battery_lut[0]))
 
 static TIM_HandleTypeDef sg_ie_tim;
-static volatile uint8_t sg_mode;
 static volatile uint8_t sg_enabled = 0U;
 static volatile uint8_t sg_ball_last;
 static uint8_t sg_ir_high_count;
@@ -60,6 +59,7 @@ static volatile uint8_t sg_charge_last;
 static volatile uint16_t sg_max_count = 20U;
 static volatile uint16_t sg_count;
 static volatile uint16_t sg_standby_min = 20U;
+static volatile uint8_t sg_motor_speed = 1U;
 static volatile uint8_t sg_battery_percent;
 static uint8_t sg_battery_last = 0xFFU;
 static uint8_t sg_battery_initialized;
@@ -283,21 +283,22 @@ void faqiuji_device_init(void)
   }
 }
 
-void faqiuji_device_set_mode(uint8_t mode)
-{
-  if (mode <= FAQIUJI_LAUNCH_MODE_RANDOM) {
-    sg_mode = mode;
-  }
-}
-
 void faqiuji_device_set_config(uint8_t mode, uint16_t max_count,
                                uint16_t standby_min)
 {
-  faqiuji_device_set_mode(mode);
+  /* Reserved legacy mode byte; DP 102 controls motor speed now. */
+  (void)mode;
   sg_max_count = (max_count < 10U) ? 10U :
                  (max_count > 90U) ? 90U : max_count;
   sg_standby_min = (standby_min < 10U) ? 10U :
                    (standby_min > 30U) ? 30U : standby_min;
+}
+
+void faqiuji_device_set_motor_speed(uint8_t motor_speed)
+{
+  sg_motor_speed = (motor_speed < 1U) ? 1U :
+                   (motor_speed > 100U) ? 100U : motor_speed;
+  faqiuji_launcher_set_motor_speed((uint8_t)sg_motor_speed);
 }
 
 void faqiuji_device_set_enabled(uint8_t enabled)
@@ -337,12 +338,12 @@ static void faqiuji_device_update_distance_leds(void)
   GPIO_PinState high = GPIO_PIN_SET;
 
   if (sg_enabled != 0U) {
-    if (sg_mode == FAQIUJI_LAUNCH_MODE_10M) {
-      middle = GPIO_PIN_RESET;
-    } else if (sg_mode == FAQIUJI_LAUNCH_MODE_20M) {
-      high = GPIO_PIN_RESET;
-    } else {
+    if (sg_motor_speed <= 33U) {
       low = GPIO_PIN_RESET;
+    } else if (sg_motor_speed <= 66U) {
+      middle = GPIO_PIN_RESET;
+    } else {
+      high = GPIO_PIN_RESET;
     }
   }
 
@@ -455,13 +456,13 @@ void faqiuji_device_power_task(void *argument)
     if ((uint32_t)(now - last_sample) >= 1000U) {
       last_sample = now;
       battery_mv = faqiuji_adc_read_battery_mv();
-      faqiuji_protocol_debug_string("raw mv %d", battery_mv);
       if (battery_mv == 0U) {
         faqiuji_charge_led_task((uint8_t)sg_battery_percent, sg_charging);
         vTaskDelay(pdMS_TO_TICKS(20U));
         continue;
       }
       measured_percent = faqiuji_battery_voltage_to_percent(battery_mv);
+      // faqiuji_protocol_debug_string("raw mv %d charging %d usbdet %d per %d", battery_mv, sg_charging, sg_usb_last, measured_percent);
 
       if (sg_battery_initialized == 0U) {
         battery = measured_percent;
@@ -587,7 +588,7 @@ void faqiuji_device_control_task(void *argument)
           sg_radar_last == 0U &&
           // sg_count < sg_max_count &&
           faqiuji_launcher_is_running() == 0U &&
-          faqiuji_launcher_start((FAQIUJI_LAUNCH_MODE_E)sg_mode) != 0U) {
+          faqiuji_launcher_start() != 0U) {
         ++sg_count;
         data[0] = (uint8_t)sg_count;
         data[1] = (uint8_t)(sg_count >> 8U);

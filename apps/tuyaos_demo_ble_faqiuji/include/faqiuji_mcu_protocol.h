@@ -19,6 +19,7 @@ typedef enum {
     FAQIUJI_MCU_CMD_CONFIG_SET  = 0x14,
     FAQIUJI_MCU_CMD_CONTROL_SET = 0x15,
     FAQIUJI_MCU_CMD_CONFIG_SYNC = 0x16,
+    FAQIUJI_MCU_CMD_DUTY_SET = 0x17,
     FAQIUJI_MCU_CMD_KEY_EVENT  = 0x20,
     FAQIUJI_MCU_CMD_STATUS_EVENT = 0x21,
     FAQIUJI_MCU_CMD_DEBUG_STRING = 0x22,
@@ -56,7 +57,9 @@ OPERATE_RET faqiuji_mcu_config_set(UINT8_T mode, UINT16_T max_count,
 OPERATE_RET faqiuji_mcu_control_set(BOOL_T enabled);
 OPERATE_RET faqiuji_mcu_config_sync(BOOL_T enabled, UINT8_T mode,
                                     UINT16_T max_count,
-                                    UINT16_T standby_min);
+                                    UINT16_T standby_min,
+                                    UINT8_T motor_speed);
+OPERATE_RET faqiuji_mcu_duty_set(UINT8_T motor_speed);
 BOOL_T faqiuji_mcu_is_ping_ok(VOID_T);
 
 #ifdef __cplusplus

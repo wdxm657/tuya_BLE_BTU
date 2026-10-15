@@ -20,6 +20,7 @@ extern "C" {
 #define DP_ID_AUTO_TEASE_TIME 28
 #define DP_ID_STANDBY_TEASE_TIME 29
 #define DP_ID_RADAR_SENSE  101
+#define DP_ID_MOTOR_SPEED  102
 
 #pragma pack(1)
 typedef struct {
@@ -36,6 +37,7 @@ extern UINT32_T  g_sn;
 
 OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size);
 OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T *buf, UINT32_T size);
+VOID_T app_dp_report_all(VOID_T);
 OPERATE_RET app_dp_load_persistent(VOID_T);
 OPERATE_RET app_dp_save_persistent(VOID_T);
 OPERATE_RET app_dp_sync_to_mcu(VOID_T);

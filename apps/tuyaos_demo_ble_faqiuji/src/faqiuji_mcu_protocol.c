@@ -86,6 +86,7 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
         {
             UINT32_T battery_value;
             UINT8_T battery_dp[4];
+            OPERATE_RET report_ret;
 
             if (frame->len != 2U) {
                 TAL_PR_WARN("MCU BATTERY invalid len=%u", frame->len);
@@ -93,12 +94,14 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
             }
             value = frame->payload[1] > 100U ? 100U : frame->payload[1];
             battery_value = value;
-            battery_dp[0] = (UINT8_T)battery_value;
-            battery_dp[1] = (UINT8_T)(battery_value >> 8U);
-            battery_dp[2] = (UINT8_T)(battery_value >> 16U);
-            battery_dp[3] = (UINT8_T)(battery_value >> 24U);
-            TAL_PR_INFO("MCU BATTERY: %u%%", value);
-            (VOID_T)app_dp_report(DP_ID_BATTERY, battery_dp, 4U);
+            /* Tuya VALUE DP payloads use network byte order. */
+            battery_dp[0] = (UINT8_T)(battery_value >> 24U);
+            battery_dp[1] = (UINT8_T)(battery_value >> 16U);
+            battery_dp[2] = (UINT8_T)(battery_value >> 8U);
+            battery_dp[3] = (UINT8_T)battery_value;
+            report_ret = app_dp_report(DP_ID_BATTERY, battery_dp, 4U);
+            TAL_PR_INFO("MCU BATTERY: %u%% dp_report_ret=%d",
+                        value, report_ret);
             break;
         }
         case FAQIUJI_MCU_EVENT_BALL:
@@ -337,20 +340,33 @@ OPERATE_RET faqiuji_mcu_control_set(BOOL_T enabled)
 
 OPERATE_RET faqiuji_mcu_config_sync(BOOL_T enabled, UINT8_T mode,
                                     UINT16_T max_count,
-                                    UINT16_T standby_min)
+                                    UINT16_T standby_min,
+                                    UINT8_T motor_speed)
 {
-    UINT8_T payload[7] = {
+    UINT8_T payload[8] = {
         FAQIUJI_MCU_CONFIG_SYNC_VERSION,
         enabled ? 1U : 0U,
         mode,
         (UINT8_T)max_count,
         (UINT8_T)(max_count >> 8),
         (UINT8_T)standby_min,
-        (UINT8_T)(standby_min >> 8)
+        (UINT8_T)(standby_min >> 8),
+        motor_speed
     };
 
+    if (motor_speed < 1U || motor_speed > 100U) {
+        return OPRT_INVALID_PARM;
+    }
     return faqiuji_mcu_send(FAQIUJI_MCU_CMD_CONFIG_SYNC, payload,
                             sizeof(payload));
+}
+
+OPERATE_RET faqiuji_mcu_duty_set(UINT8_T motor_speed)
+{
+    if (motor_speed < 1U || motor_speed > 100U) {
+        return OPRT_INVALID_PARM;
+    }
+    return faqiuji_mcu_send(FAQIUJI_MCU_CMD_DUTY_SET, &motor_speed, 1U);
 }
 
 BOOL_T faqiuji_mcu_is_ping_ok(VOID_T)

@@ -97,7 +97,7 @@ static void faqiuji_protocol_handle_frame(void)
       {
         uint16_t max_count = 0U;
         uint16_t standby_min = 0U;
-      if (frame->len != 5U || frame->payload[0] > FAQIUJI_LAUNCH_MODE_RANDOM) {
+      if (frame->len != 5U || frame->payload[0] > 2U) {
         status = FAQIUJI_STATUS_BAD_PAYLOAD;
       } else {
         max_count = (uint16_t)frame->payload[1] |
@@ -126,16 +126,31 @@ static void faqiuji_protocol_handle_frame(void)
       faqiuji_protocol_reply(frame->cmd, frame->seq, (FAQIUJI_STATUS_E)status);
       break;
 
+    case FAQIUJI_CMD_DUTY_SET:
+      if (frame->len != 1U || frame->payload[0] < 1U ||
+          frame->payload[0] > 100U) {
+        status = FAQIUJI_STATUS_BAD_PAYLOAD;
+      } else {
+        faqiuji_device_set_motor_speed(frame->payload[0]);
+      }
+      faqiuji_protocol_debug_string("CMD DUTY_SET speed=%u status=%u",
+                                    frame->len == 1U ? frame->payload[0] : 0U,
+                                    status);
+      faqiuji_protocol_reply(frame->cmd, frame->seq, (FAQIUJI_STATUS_E)status);
+      break;
+
     case FAQIUJI_CMD_CONFIG_SYNC:
       {
         uint16_t max_count = 0U;
         uint16_t standby_min = 0U;
 
-        if (frame->len != 7U) {
+        if (frame->len != 7U && frame->len != 8U) {
           status = FAQIUJI_STATUS_BAD_LENGTH;
         } else if (frame->payload[0] != FAQIUJI_CONFIG_SYNC_VERSION ||
                    frame->payload[1] > 1U ||
-                   frame->payload[2] > FAQIUJI_LAUNCH_MODE_RANDOM) {
+                   frame->payload[2] > 2U ||
+                   (frame->len == 8U &&
+                    (frame->payload[7] < 1U || frame->payload[7] > 100U))) {
           status = FAQIUJI_STATUS_BAD_PAYLOAD;
         } else {
           max_count = (uint16_t)frame->payload[3] |
@@ -144,15 +159,19 @@ static void faqiuji_protocol_handle_frame(void)
                         ((uint16_t)frame->payload[6] << 8U);
           faqiuji_device_set_config(frame->payload[2], max_count,
                                     standby_min);
+          if (frame->len == 8U) {
+            faqiuji_device_set_motor_speed(frame->payload[7]);
+          }
           faqiuji_device_set_enabled(frame->payload[1]);
         }
 
         faqiuji_protocol_debug_string(
-            "CMD CONFIG_SYNC ver=%u en=%u mode=%u max=%u standby=%u status=%u",
+            "CMD CONFIG_SYNC ver=%u en=%u mode=%u max=%u standby=%u speed=%u status=%u",
             frame->len > 0U ? frame->payload[0] : 0U,
             frame->len > 1U ? frame->payload[1] : 0U,
             frame->len > 2U ? frame->payload[2] : 0U,
-            max_count, standby_min, status);
+            max_count, standby_min,
+            frame->len > 7U ? frame->payload[7] : 1U, status);
         faqiuji_protocol_reply(frame->cmd, frame->seq,
                                (FAQIUJI_STATUS_E)status);
       }

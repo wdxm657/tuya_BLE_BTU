@@ -7,20 +7,10 @@
 extern "C" {
 #endif
 
-#define FAQIUJI_LAUNCH_DISTANCE_MIN          3U
-#define FAQIUJI_LAUNCH_DISTANCE_MAX          20U
-
-typedef enum
-{
-  FAQIUJI_LAUNCH_MODE_10M = 0U,
-  FAQIUJI_LAUNCH_MODE_20M = 1U,
-  FAQIUJI_LAUNCH_MODE_RANDOM = 2U,
-} FAQIUJI_LAUNCH_MODE_E;
-
-/* These values are intentionally easy to tune after measuring the launcher. */
-#define FAQIUJI_PWM_DUTY_10M                 35U
-#define FAQIUJI_PWM_DUTY_20M                 55U
-#define FAQIUJI_PWM_DUTY_RANDOM              75U
+/* The old fixed 10 m / 20 m / random duty values are no longer used. */
+/* #define FAQIUJI_PWM_DUTY_10M              35U */
+/* #define FAQIUJI_PWM_DUTY_20M              55U */
+/* #define FAQIUJI_PWM_DUTY_RANDOM           75U */
 
 typedef enum
 {
@@ -31,7 +21,8 @@ typedef enum
 } FAQIUJI_LAUNCH_STATE_E;
 
 HAL_StatusTypeDef faqiuji_launcher_init(void);
-uint8_t faqiuji_launcher_start(FAQIUJI_LAUNCH_MODE_E mode);
+uint8_t faqiuji_launcher_start(void);
+void faqiuji_launcher_set_motor_speed(uint8_t motor_speed);
 void faqiuji_launcher_stop(void);
 void faqiuji_launcher_task(void *argument);
 uint8_t faqiuji_launcher_is_running(void);
