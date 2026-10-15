@@ -8,9 +8,47 @@
 
 #define FAQIUJI_ADC_VREF_MV                2140U
 #define FAQIUJI_ADC_FULL_SCALE             4095U
-#define FAQIUJI_BATTERY_DIVIDER_RATIO      1
+// 50/250=0.2   4.2v计算用2.5f
+#define FAQIUJI_BATTERY_DIVIDER_RATIO      2.5f
 #define FAQIUJI_BATTERY_LOW_PERCENT        20U
 #define FAQIUJI_BATTERY_FULL_PERCENT       90U
+#define FAQIUJI_BATTERY_CHARGE_STEP_MS     5000UL
+#define FAQIUJI_BATTERY_DISCHARGE_STEP_MS  30000UL
+
+/**
+ * @brief 18650 电池电压 → 百分比查找表（mV 映射 %）
+ *
+ * 基于典型 18650 锂离子电池放电曲线建立，
+ * 表中电压为开路电压近似值（带载时略有下降）。
+ * 输入电压在两个表项之间时采用线性插值。
+ */
+static const struct {
+    int32_t  voltage_mv;
+    uint8_t  percent;
+} s_battery_lut[] = {
+    {4180, 100},
+    {4150,  95},
+    {4110,  90},
+    {4080,  85},
+    {4040,  80},
+    {4000,  75},
+    {3960,  70},
+    {3920,  65},
+    {3880,  60},
+    {3840,  55},
+    {3800,  50},
+    {3760,  45},
+    {3720,  40},
+    {3680,  35},
+    {3640,  30},
+    {3600,  25},
+    {3560,  20},
+    {3500,  10},
+    {3400,  5},
+    {3250,   0},
+    // {3000,   0},
+};
+#define BATTERY_LUT_SIZE  (sizeof(s_battery_lut) / sizeof(s_battery_lut[0]))
 
 static TIM_HandleTypeDef sg_ie_tim;
 static volatile uint8_t sg_mode;
@@ -22,8 +60,11 @@ static volatile uint8_t sg_charge_last;
 static volatile uint16_t sg_max_count = 20U;
 static volatile uint16_t sg_count;
 static volatile uint16_t sg_standby_min = 20U;
-static volatile uint16_t sg_battery_percent;
+static volatile uint8_t sg_battery_percent;
 static uint8_t sg_battery_last = 0xFFU;
+static uint8_t sg_battery_initialized;
+static uint8_t sg_battery_usb_last;
+static uint32_t sg_battery_rate_tick;
 static volatile uint8_t sg_charging;
 static volatile uint8_t sg_ball_trigger;
 static volatile uint8_t sg_radar_last;
@@ -134,10 +175,36 @@ static uint16_t faqiuji_adc_read_battery_mv(void)
                     FAQIUJI_ADC_FULL_SCALE);
 }
 
+static uint8_t faqiuji_battery_voltage_to_percent(uint16_t voltage_mv)
+{
+  uint32_t i;
+
+  if (voltage_mv >= s_battery_lut[0].voltage_mv) {
+    return s_battery_lut[0].percent;
+  }
+  if (voltage_mv <= s_battery_lut[BATTERY_LUT_SIZE - 1U].voltage_mv) {
+    return s_battery_lut[BATTERY_LUT_SIZE - 1U].percent;
+  }
+
+  for (i = 0U; i < BATTERY_LUT_SIZE - 1U; ++i) {
+    if (voltage_mv <= s_battery_lut[i].voltage_mv &&
+        voltage_mv >= s_battery_lut[i + 1U].voltage_mv) {
+      int32_t high_mv = s_battery_lut[i].voltage_mv;
+      int32_t low_mv = s_battery_lut[i + 1U].voltage_mv;
+      int32_t high_percent = s_battery_lut[i].percent;
+      int32_t low_percent = s_battery_lut[i + 1U].percent;
+      return (uint8_t)(low_percent +
+                       ((high_percent - low_percent) *
+                        ((int32_t)voltage_mv - low_mv)) /
+                       (high_mv - low_mv));
+    }
+  }
+  return 0U;
+}
+
 static void faqiuji_charge_led_task(uint8_t battery, uint8_t charging)
 {
   static uint8_t blink;
-  faqiuji_protocol_debug_string("faqiuji_charge_led_task");
   if (charging != 0U) {
     HAL_GPIO_WritePin(GPIOB, LED_R, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOB, LED_G, GPIO_PIN_SET);
@@ -203,9 +270,12 @@ void faqiuji_device_init(void)
   sg_radar_last = (HAL_GPIO_ReadPin(GPIOA, LEIDA_IN_O) == GPIO_PIN_SET) ? 1U : 0U;
   sg_ball_last = 0U;
   sg_ir_high_count = 0U;
-  sg_usb_last = (HAL_GPIO_ReadPin(GPIOF, USB_DET) == GPIO_PIN_SET) ? 1U : 0U;
+  sg_usb_last = (HAL_GPIO_ReadPin(GPIOF, USB_DET) == GPIO_PIN_RESET) ? 1U : 0U;
   sg_charge_last = (HAL_GPIO_ReadPin(GPIOB, CHARGE_STATE) == GPIO_PIN_SET) ? 1U : 0U;
   sg_charging = sg_charge_last;
+  sg_battery_initialized = 0U;
+  sg_battery_usb_last = sg_usb_last;
+  sg_battery_rate_tick = HAL_GetTick();
 
   {
     uint8_t data = sg_work_state;
@@ -373,23 +443,68 @@ void faqiuji_device_sensor_task(void *argument)
 void faqiuji_device_power_task(void *argument)
 {
   uint16_t battery_mv;
+  uint8_t measured_percent;
   uint8_t battery;
-  uint8_t data[2];
+  uint8_t data[1];
   uint32_t last_sample = 0U;
+  uint32_t now;
   (void)argument;
 
   for (;;) {
-    if ((HAL_GetTick() - last_sample) >= 1000U) {
-      last_sample = HAL_GetTick();
+    now = HAL_GetTick();
+    if ((uint32_t)(now - last_sample) >= 1000U) {
+      last_sample = now;
       battery_mv = faqiuji_adc_read_battery_mv();
-      battery = (battery_mv >= 4200U) ? 100U :
-                (battery_mv <= 3250U) ? 0U :
-                (uint8_t)(((battery_mv - 3250U) * 100U) /
-                           (4200U - 3250U));
+      faqiuji_protocol_debug_string("raw mv %d", battery_mv);
+      if (battery_mv == 0U) {
+        faqiuji_charge_led_task((uint8_t)sg_battery_percent, sg_charging);
+        vTaskDelay(pdMS_TO_TICKS(20U));
+        continue;
+      }
+      measured_percent = faqiuji_battery_voltage_to_percent(battery_mv);
+
+      if (sg_battery_initialized == 0U) {
+        battery = measured_percent;
+        sg_battery_initialized = 1U;
+        sg_battery_rate_tick = now;
+      } else {
+        battery = (uint8_t)sg_battery_percent;
+        if (sg_battery_usb_last != sg_usb_last) {
+          sg_battery_usb_last = sg_usb_last;
+          sg_battery_rate_tick = now;
+        }
+
+        if (sg_usb_last != 0U) {
+          if (measured_percent > battery &&
+              (uint32_t)(now - sg_battery_rate_tick) >=
+              FAQIUJI_BATTERY_CHARGE_STEP_MS) {
+            uint32_t steps = (uint32_t)(now - sg_battery_rate_tick) /
+                             FAQIUJI_BATTERY_CHARGE_STEP_MS;
+            uint32_t target = (uint32_t)battery + steps;
+            battery = (target > measured_percent) ?
+                      measured_percent : (uint8_t)target;
+            sg_battery_rate_tick += steps *
+                                    FAQIUJI_BATTERY_CHARGE_STEP_MS;
+          }
+        } else if (measured_percent < battery &&
+                   (uint32_t)(now - sg_battery_rate_tick) >=
+                   FAQIUJI_BATTERY_DISCHARGE_STEP_MS) {
+          uint32_t steps = (uint32_t)(now - sg_battery_rate_tick) /
+                           FAQIUJI_BATTERY_DISCHARGE_STEP_MS;
+          battery = (steps >= battery ||
+                     (uint32_t)battery - steps < measured_percent) ?
+                    measured_percent : (uint8_t)(battery - steps);
+          sg_battery_rate_tick += steps *
+                                 FAQIUJI_BATTERY_DISCHARGE_STEP_MS;
+        }
+      }
+
       sg_battery_percent = battery;
-      data[0] = (uint8_t)battery_mv;
-      data[1] = (uint8_t)(battery_mv >> 8);
-      // faqiuji_protocol_status_event(FAQIUJI_EVENT_BATTERY, data, 2U);
+      if (sg_battery_last != battery) {
+        sg_battery_last = battery;
+        data[0] = battery;
+        faqiuji_protocol_status_event(FAQIUJI_EVENT_BATTERY, data, 1U);
+      }
       faqiuji_charge_led_task(battery, sg_charging);
     }
     vTaskDelay(pdMS_TO_TICKS(20U));

@@ -83,11 +83,24 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
             TAL_PR_INFO("MCU CHARGE: %d", value);
             break;
         case FAQIUJI_MCU_EVENT_BATTERY:
-            value16 = frame->len >= 3U ?
-                      ((UINT16_T)frame->payload[1] |
-                       ((UINT16_T)frame->payload[2] << 8U)) : 0U;
-            TAL_PR_INFO("MCU BAT RAW: %u", value16);
+        {
+            UINT32_T battery_value;
+            UINT8_T battery_dp[4];
+
+            if (frame->len != 2U) {
+                TAL_PR_WARN("MCU BATTERY invalid len=%u", frame->len);
+                break;
+            }
+            value = frame->payload[1] > 100U ? 100U : frame->payload[1];
+            battery_value = value;
+            battery_dp[0] = (UINT8_T)battery_value;
+            battery_dp[1] = (UINT8_T)(battery_value >> 8U);
+            battery_dp[2] = (UINT8_T)(battery_value >> 16U);
+            battery_dp[3] = (UINT8_T)(battery_value >> 24U);
+            TAL_PR_INFO("MCU BATTERY: %u%%", value);
+            (VOID_T)app_dp_report(DP_ID_BATTERY, battery_dp, 4U);
             break;
+        }
         case FAQIUJI_MCU_EVENT_BALL:
             TAL_PR_INFO("MCU BALL: %d", value);
             break;
