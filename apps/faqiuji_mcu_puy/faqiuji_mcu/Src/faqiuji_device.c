@@ -584,7 +584,8 @@ void faqiuji_device_control_task(void *argument)
 
     if (sg_ball_trigger != 0U) {
       sg_ball_trigger = 0U;
-      if (sg_enabled != 0U && sg_work_state == FAQIUJI_WORK_RUNNING &&
+      faqiuji_protocol_debug_string("sg_ball_trigger %d %d %d %d", sg_enabled, sg_work_state, sg_radar_last, faqiuji_launcher_is_running());
+      if (sg_enabled != 0U && sg_work_state != FAQIUJI_WORK_STANDBY &&
           sg_radar_last == 0U &&
           // sg_count < sg_max_count &&
           faqiuji_launcher_is_running() == 0U &&

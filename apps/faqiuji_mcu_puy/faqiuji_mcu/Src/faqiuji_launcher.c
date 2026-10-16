@@ -148,6 +148,7 @@ void faqiuji_launcher_task(void *argument)
       sg_stop_request = 0U;
 
       sg_state = FAQIUJI_LAUNCH_MOTOR_BEFORE_DCT;
+      faqiuji_protocol_debug_string("LAUNCHER faqiuji_launcher_motor_start");
       faqiuji_launcher_motor_start();
       vTaskDelay(pdMS_TO_TICKS(FAQIUJI_MOTOR_BEFORE_DCT_MS));
       if (sg_stop_request != 0U) {
