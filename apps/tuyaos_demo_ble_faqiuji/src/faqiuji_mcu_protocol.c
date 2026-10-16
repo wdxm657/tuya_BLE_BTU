@@ -1,11 +1,15 @@
 #include "string.h"
 #include "tal_uart.h"
 #include "tal_log.h"
+#include "tkl_system.h"
+#include "tuya_ble_api.h"
+#include "tuya_sdk_callback.h"
 #include "faqiuji_mcu_protocol.h"
 #include "app_dp_parser.h"
 
 #define FAQIUJI_MCU_PORT TUYA_UART_NUM_0
 #define FAQIUJI_MCU_FRAME_QUEUE_SIZE 4U
+#define FAQIUJI_KEY_LONG_PRESS_MS 3000UL
 
 typedef struct {
     UINT8_T state;
@@ -26,6 +30,33 @@ STATIC volatile UINT8_T sg_frame_queue_count = 0;
 STATIC volatile BOOL_T sg_mcu_heartbeat = FALSE;
 STATIC UINT8_T sg_mcu_ping_age = 0U;
 STATIC BOOL_T sg_mcu_sync_pending = FALSE;
+STATIC BOOL_T sg_key_pressed = FALSE;
+STATIC UINT32_T sg_key_press_ms;
+STATIC BOOL_T sg_factory_reset_pending = FALSE;
+
+STATIC VOID_T faqiuji_mcu_key_event(UINT8_T pressed)
+{
+    UINT32_T now = tkl_system_get_millisecond();
+    UINT32_T duration;
+
+    if (pressed != 0U) {
+        if (!sg_key_pressed) {
+            sg_key_pressed = TRUE;
+            sg_key_press_ms = now;
+            TAL_PR_INFO("MCU KEY: pressed");
+        }
+        return;
+    }
+    if (!sg_key_pressed) {
+        return;
+    }
+    sg_key_pressed = FALSE;
+    duration = now - sg_key_press_ms;
+    TAL_PR_INFO("MCU KEY: released after %lu ms", (unsigned long)duration);
+    if (duration >= FAQIUJI_KEY_LONG_PRESS_MS) {
+        sg_factory_reset_pending = TRUE;
+    }
+}
 
 STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
 {
@@ -64,8 +95,11 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
     //             frame->cmd, frame->seq, frame->len);
 
     if (frame->cmd == FAQIUJI_MCU_CMD_KEY_EVENT) {
-        value = frame->payload[0] ? 1U : 0U;
-        TAL_PR_INFO("MCU KEY: %d", value);
+        if (frame->len != 1U || frame->payload[0] > 1U) {
+            TAL_PR_WARN("MCU KEY: invalid payload len=%u", frame->len);
+            return;
+        }
+        faqiuji_mcu_key_event(frame->payload[0]);
         return;
     }
 
@@ -158,6 +192,9 @@ OPERATE_RET faqiuji_mcu_protocol_init(VOID_T)
     sg_mcu_heartbeat = FALSE;
     sg_mcu_ping_age = 0U;
     sg_mcu_sync_pending = FALSE;
+    sg_key_pressed = FALSE;
+    sg_key_press_ms = 0U;
+    sg_factory_reset_pending = FALSE;
     return OPRT_OK;
 }
 
@@ -225,6 +262,27 @@ VOID_T faqiuji_mcu_protocol_process(VOID_T)
         }
         sg_frame_queue_count--;
         faqiuji_mcu_frame_cb(&frame);
+    }
+
+    if (sg_factory_reset_pending) {
+        OPERATE_RET reset_ret;
+        tuya_ble_status_t unbind_ret;
+
+        sg_factory_reset_pending = FALSE;
+        sg_mcu_sync_pending = FALSE;
+        sg_key_pressed = FALSE;
+        TAL_PR_INFO("MCU KEY: long press release -> factory reset/pairing");
+        reset_ret = app_dp_reset_to_defaults();
+        if (reset_ret != OPRT_OK) {
+            TAL_PR_ERR("FACTORY RESET: defaults/sync failed=%d", reset_ret);
+            return;
+        }
+        if (tuya_app_get_conn_handle() != 0xFFFFU) {
+            tuya_ble_gap_disconnect();
+        }
+        unbind_ret = tuya_ble_device_unbind();
+        TAL_PR_INFO("FACTORY RESET: unbind request ret=%d", unbind_ret);
+        return;
     }
 
     /*

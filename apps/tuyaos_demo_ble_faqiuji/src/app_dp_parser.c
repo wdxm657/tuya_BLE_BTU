@@ -182,6 +182,37 @@ OPERATE_RET app_dp_sync_to_mcu(VOID_T)
     return ret;
 }
 
+OPERATE_RET app_dp_reset_to_defaults(VOID_T)
+{
+    OPERATE_RET ret;
+    OPERATE_RET sync_ret;
+
+    sg_sleep_audio_active = FALSE;
+    sg_sleep_audio_phase = 0U;
+    sg_sleep_phase_start_ms = 0U;
+    sg_record_start_ms = 0U;
+    if (faqiuji_audio_is_recording()) {
+        ret = faqiuji_audio_record_stop();
+        if (ret != OPRT_OK) {
+            TAL_PR_ERR("FACTORY RESET: stop recording failed=%d", ret);
+        }
+    }
+    (VOID_T)faqiuji_audio_stop();
+    (VOID_T)faqiuji_audio_take_play_finished();
+    app_dp_set_defaults();
+    (VOID_T)faqiuji_audio_set_volume(sg_volume);
+    sg_work_state = 1U;
+    sg_work_valid = FALSE;
+    sg_fault_valid = FALSE;
+
+    /* One CONFIG_SYNC also turns the PUYA motor off. */
+    sync_ret = app_dp_sync_to_mcu();
+    ret = app_dp_save_persistent();
+    TAL_PR_INFO("FACTORY RESET: defaults saved=%d mcu_sync=%d",
+                ret, sync_ret);
+    return ret != OPRT_OK ? ret : sync_ret;
+}
+
 #define FAQIUJI_SLEEP_AUDIO_PHASE_MS 600000UL
 #define FAQIUJI_AUDIO_SLEEP_OWNER     0U
 #define FAQIUJI_AUDIO_SLEEP_COMFORT   1U
