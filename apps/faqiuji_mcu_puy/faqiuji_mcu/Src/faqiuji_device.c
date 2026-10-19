@@ -1,4 +1,5 @@
 #include "faqiuji_device.h"
+#include "faqiuji_ota.h"
 #include "faqiuji_protocol.h"
 #include "faqiuji_launcher.h"
 #include "gpio_config.h"
@@ -306,6 +307,9 @@ void faqiuji_device_set_enabled(uint8_t enabled)
   uint8_t new_enabled = enabled ? 1U : 0U;
   uint8_t old_enabled = sg_enabled;
 
+  if (new_enabled != 0U && faqiuji_ota_busy()) {
+    return;
+  }
   sg_enabled = new_enabled;
   faqiuji_protocol_debug_string("DEVICE ENABLE %u->%u%s ball=%u radar=%u",
                                 old_enabled, sg_enabled,

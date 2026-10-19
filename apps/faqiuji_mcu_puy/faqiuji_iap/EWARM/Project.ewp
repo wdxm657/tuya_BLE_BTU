@@ -337,10 +337,10 @@
                 </option>
                 <option>
                     <name>CCIncludePath2</name>
-                    <state>$PROJ_DIR$\..\..\..\Drivers\BSP\PY32F040xx_Start_Kit</state>
-                    <state>$PROJ_DIR$\..\..\..\Drivers\CMSIS\Device\PY32F040\Include</state>
-                    <state>$PROJ_DIR$\..\..\..\Drivers\CMSIS\Include</state>
-                    <state>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Inc</state>
+                    <state>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\BSP\PY32F040xx_Start_Kit</state>
+                    <state>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\CMSIS\Device\PY32F040\Include</state>
+                    <state>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\CMSIS\Include</state>
+                    <state>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Inc</state>
                     <state>$PROJ_DIR$\..\Inc</state>
                 </option>
                 <option>
@@ -1072,7 +1072,7 @@
         <group>
             <name>BSP</name>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\BSP\PY32F040xx_Start_Kit\py32f040xx_Start_Kit.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\BSP\PY32F040xx_Start_Kit\py32f040xx_Start_Kit.c</name>
             </file>
         </group>
         <group>
@@ -1084,31 +1084,31 @@
         <group>
             <name>PY32F040_HAL_Driver</name>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_cortex.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_cortex.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_dma.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_dma.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_gpio.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_gpio.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_i2c.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_i2c.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_pwr.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_pwr.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc_ex.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc_ex.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_uart.c</name>
+                <name>$PROJ_DIR$\..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_uart.c</name>
             </file>
         </group>
     </group>

@@ -391,7 +391,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\BSP\PY32F040xx_Start_Kit\py32f040xx_Start_Kit.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\BSP\PY32F040xx_Start_Kit\py32f040xx_Start_Kit.c</PathWithFileName>
       <FilenameWithoutPath>py32f040xx_Start_Kit.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -411,7 +411,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal.c</PathWithFileName>
       <FilenameWithoutPath>py32f040_hal.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -423,7 +423,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_cortex.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_cortex.c</PathWithFileName>
       <FilenameWithoutPath>py32f040_hal_cortex.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -435,7 +435,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_dma.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_dma.c</PathWithFileName>
       <FilenameWithoutPath>py32f040_hal_dma.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -447,7 +447,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_gpio.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_gpio.c</PathWithFileName>
       <FilenameWithoutPath>py32f040_hal_gpio.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -459,7 +459,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc.c</PathWithFileName>
       <FilenameWithoutPath>py32f040_hal_rcc.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -471,7 +471,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc_ex.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc_ex.c</PathWithFileName>
       <FilenameWithoutPath>py32f040_hal_rcc_ex.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -483,7 +483,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_pwr.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_pwr.c</PathWithFileName>
       <FilenameWithoutPath>py32f040_hal_pwr.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -495,7 +495,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_i2c.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_i2c.c</PathWithFileName>
       <FilenameWithoutPath>py32f040_hal_i2c.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -507,7 +507,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_uart.c</PathWithFileName>
+      <PathWithFileName>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_uart.c</PathWithFileName>
       <FilenameWithoutPath>py32f040_hal_uart.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>

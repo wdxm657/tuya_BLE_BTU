@@ -29,6 +29,7 @@
   */
 
 #include "py32f0xx.h"
+#include "../../faqiuji_flash_layout.h"
 
 #if !defined  (HSE_VALUE)
 #define HSE_VALUE    24000000U    /*!< Value of the External oscillator in Hz */
@@ -52,7 +53,7 @@
      Internal SRAM. */
 /* #define FORBID_VECT_TAB_MIGRATION */
 /* #define VECT_TAB_SRAM */
-#define VECT_TAB_OFFSET  0x00 /*!< Vector Table base offset field.
+#define VECT_TAB_OFFSET  (FAQIUJI_APP_BASE - FLASH_BASE) /*!< Vector Table base offset field.
                                    This value must be a multiple of 0x100. */
 /******************************************************************************/
 /*----------------------------------------------------------------------------

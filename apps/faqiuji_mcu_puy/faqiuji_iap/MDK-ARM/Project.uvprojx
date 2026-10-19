@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>VECT_TAB_BASE=0x08000000,USE_HAL_DRIVER,PY32F040xB</Define>
               <Undefine></Undefine>
-              <IncludePath>..\Inc;..\..\..\Drivers\BSP\PY32F040xx_Start_Kit;..\..\..\Drivers\CMSIS\Include;..\..\..\Drivers\CMSIS\Device\PY32F040\Include;..\..\..\Drivers\PY32F040_HAL_Driver\Inc</IncludePath>
+              <IncludePath>..\Inc;..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\BSP\PY32F040xx_Start_Kit;..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\CMSIS\Include;..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\CMSIS\Device\PY32F040\Include;..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Inc</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -447,7 +447,7 @@
             <File>
               <FileName>py32f040xx_Start_Kit.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\BSP\PY32F040xx_Start_Kit\py32f040xx_Start_Kit.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\BSP\PY32F040xx_Start_Kit\py32f040xx_Start_Kit.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -457,47 +457,47 @@
             <File>
               <FileName>py32f040_hal.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal.c</FilePath>
             </File>
             <File>
               <FileName>py32f040_hal_cortex.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_cortex.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_cortex.c</FilePath>
             </File>
             <File>
               <FileName>py32f040_hal_dma.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_dma.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_dma.c</FilePath>
             </File>
             <File>
               <FileName>py32f040_hal_gpio.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_gpio.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_gpio.c</FilePath>
             </File>
             <File>
               <FileName>py32f040_hal_rcc.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc.c</FilePath>
             </File>
             <File>
               <FileName>py32f040_hal_rcc_ex.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc_ex.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc_ex.c</FilePath>
             </File>
             <File>
               <FileName>py32f040_hal_pwr.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_pwr.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_pwr.c</FilePath>
             </File>
             <File>
               <FileName>py32f040_hal_i2c.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_i2c.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_i2c.c</FilePath>
             </File>
             <File>
               <FileName>py32f040_hal_uart.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_uart.c</FilePath>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_uart.c</FilePath>
             </File>
           </Files>
         </Group>

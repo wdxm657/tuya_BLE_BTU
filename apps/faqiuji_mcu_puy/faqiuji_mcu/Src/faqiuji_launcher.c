@@ -1,5 +1,6 @@
 #include "faqiuji_launcher.h"
 #include "faqiuji_protocol.h"
+#include "faqiuji_ota.h"
 #include "gpio_config.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -43,8 +44,6 @@ static void faqiuji_launcher_motor_start(void)
                         (period + 1U) * duty / 100U);
   (void)HAL_TIM_PWM_Start(&sg_tim, TIM_CHANNEL_3);
   taskEXIT_CRITICAL();
-  faqiuji_protocol_debug_string("PWM motor period=%lu duty=%lu%%",
-                                (unsigned long)period, (unsigned long)duty);
 }
 
 static void faqiuji_launcher_motor_stop(void)
@@ -87,7 +86,8 @@ HAL_StatusTypeDef faqiuji_launcher_init(void)
 uint8_t faqiuji_launcher_start(void)
 {
   taskENTER_CRITICAL();
-  if (sg_state != FAQIUJI_LAUNCH_IDLE || sg_start_request != 0U) {
+  if (faqiuji_ota_busy() || sg_state != FAQIUJI_LAUNCH_IDLE ||
+      sg_start_request != 0U) {
     taskEXIT_CRITICAL();
     return 0U;
   }
@@ -144,20 +144,30 @@ void faqiuji_launcher_task(void *argument)
   for (;;) {
     if (sg_start_request != 0U) {
       faqiuji_protocol_debug_string("LAUNCHER speed=%u", sg_motor_speed);
-      sg_start_request = 0U;
-      sg_stop_request = 0U;
-
-      sg_state = FAQIUJI_LAUNCH_MOTOR_BEFORE_DCT;
       faqiuji_protocol_debug_string("LAUNCHER faqiuji_launcher_motor_start");
+      taskENTER_CRITICAL();
+      if (sg_stop_request != 0U || faqiuji_ota_busy()) {
+        sg_start_request = 0U;
+        taskEXIT_CRITICAL();
+        continue;
+      }
+      sg_start_request = 0U;
+      sg_state = FAQIUJI_LAUNCH_MOTOR_BEFORE_DCT;
       faqiuji_launcher_motor_start();
+      taskEXIT_CRITICAL();
+      faqiuji_protocol_debug_string("PWM motor duty=%lu%%",
+                                    (unsigned long)faqiuji_launcher_duty());
       vTaskDelay(pdMS_TO_TICKS(FAQIUJI_MOTOR_BEFORE_DCT_MS));
-      if (sg_stop_request != 0U) {
+      taskENTER_CRITICAL();
+      if (sg_stop_request != 0U || faqiuji_ota_busy()) {
+        taskEXIT_CRITICAL();
         faqiuji_launcher_stop();
         continue;
       }
 
       sg_state = FAQIUJI_LAUNCH_DCT_ACTIVE;
       HAL_GPIO_WritePin(GPIOC, DCT_CON, GPIO_PIN_SET);
+      taskEXIT_CRITICAL();
       vTaskDelay(pdMS_TO_TICKS(FAQIUJI_DCT_ACTIVE_MS));
       HAL_GPIO_WritePin(GPIOC, DCT_CON, GPIO_PIN_RESET);
       if (sg_stop_request != 0U) {

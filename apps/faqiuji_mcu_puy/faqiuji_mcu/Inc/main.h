@@ -40,6 +40,7 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "py32f0xx_hal.h"
 #include "py32f040xx_Start_Kit.h"
+#include "../../faqiuji_flash_layout.h"
 
 /* Private includes ----------------------------------------------------------*/
 #include "gpio_config.h"

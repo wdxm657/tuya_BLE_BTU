@@ -2,6 +2,7 @@
 #include "gpio_config.h"
 #include "faqiuji_launcher.h"
 #include "faqiuji_device.h"
+#include "faqiuji_ota.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
 
@@ -80,6 +81,17 @@ static void faqiuji_protocol_handle_frame(void)
 {
   const FAQIUJI_FRAME_T *frame = &sg_protocol.frame;
   uint8_t status = FAQIUJI_STATUS_OK;
+  if (frame->cmd >= FAQIUJI_CMD_OTA_INFO &&
+      frame->cmd <= FAQIUJI_CMD_OTA_REBOOT) {
+    faqiuji_ota_handle(frame);
+    return;
+  }
+  if (faqiuji_ota_busy() &&
+      (frame->cmd == FAQIUJI_CMD_CONTROL_SET ||
+       frame->cmd == FAQIUJI_CMD_CONFIG_SYNC)) {
+    faqiuji_protocol_reply(frame->cmd, frame->seq, FAQIUJI_STATUS_BUSY);
+    return;
+  }
   switch (frame->cmd) {
     case FAQIUJI_CMD_PING:
       if (frame->len != 0U) {

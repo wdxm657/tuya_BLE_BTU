@@ -2,6 +2,7 @@
 #include "faqiuji_protocol.h"
 #include "faqiuji_launcher.h"
 #include "faqiuji_device.h"
+#include "faqiuji_ota.h"
 #include "gpio_config.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -85,6 +86,7 @@ static void APP_UartTask(void *argument)
   (void)argument;
   for (;;) {
     APP_UartService();
+    faqiuji_ota_poll();
     vTaskDelay(pdMS_TO_TICKS(1U));
   }
 }
