@@ -368,12 +368,14 @@ OPERATE_RET tuya_init_third(VOID_T)
     // };
     // tal_i2c_init(TUYA_I2C_NUM_0, &iic_cfg);
 #endif
-
-    OPERATE_RET ret = faqiuji_audio_init();
+    OPERATE_RET ret;
+    #if !SHOUQUAN
+    ret = faqiuji_audio_init();
     if (ret != OPRT_OK)
     {
         TAL_PR_DEBUG("AUDIO INIT ERR %d",ret);
     }
+    #endif
     (VOID_T)app_dp_load_persistent();
     
     return ret;
@@ -424,9 +426,11 @@ OPERATE_RET tuya_main_loop(VOID_T)
 #if !TUYA_BLE_USE_OS
     tuya_ble_main_tasks_exec();
 #endif
+#if !SHOUQUAN
     faqiuji_mcu_protocol_process();
     faqiuji_audio_task();
     app_dp_process_audio_events();
+#endif
 //    tal_watchdog_refresh();
     return (tuya_ble_sleep_allowed_check() == TRUE);
 }
