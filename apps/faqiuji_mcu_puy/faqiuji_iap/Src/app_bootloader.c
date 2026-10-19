@@ -1,7 +1,6 @@
 #include "main.h"
 #include "app_bootloader.h"
 #include "app_usart.h"
-#include "app_wdg.h"
 #include "../../faqiuji_flash_layout.h"
 #include <stddef.h>
 #include <string.h>
@@ -27,9 +26,6 @@ static uint32_t APP_Bootloader_Crc32(const void *data, uint32_t length)
   uint8_t bit;
 
   for (i = 0U; i < length; ++i) {
-    if ((i & 0xFFU) == 0U) {
-      APP_WDG_Refresh();
-    }
     crc ^= bytes[i];
     for (bit = 0U; bit < 8U; ++bit) {
       crc = (crc & 1U) != 0U ?
@@ -182,38 +178,27 @@ void APP_Bootloader_Go(uint32_t address)
   APP_USART_Debug("IAP jump APP base=%08lX", (unsigned long)address);
   HAL_Delay(2U);
   APP_USART_DeInit();
-  __disable_irq();
+
+  /*
+   * Match the vendor IAP handoff sequence: return SYSCLK to HSI before
+   * entering the application. The application startup code may then
+   * configure its own oscillator and PLL state from a known clock source.
+   */
+  CLEAR_BIT(RCC->CFGR, RCC_CFGR_SW);
+  while (READ_BIT(RCC->CFGR, RCC_CFGR_SWS) != 0U) {
+  }
+  CLEAR_BIT(RCC->CR, RCC_CR_PLLON);
+
   SysTick->CTRL = 0U;
   SysTick->LOAD = 0U;
   SysTick->VAL = 0U;
   SCB->VTOR = address;
   __DSB();
   __set_MSP(stack_pointer);
+  __DSB();
+  __ISB();
   application();
 
   while (1) {
-  }
-}
-
-void APP_Bootloader_SendByte(uint8_t data)
-{
-  (void)APP_USART_Send(&data, 1U);
-}
-
-void APP_Bootloader_SendData(uint8_t *data, uint16_t size)
-{
-  (void)APP_USART_Send(data, size);
-}
-
-uint8_t APP_Bootloader_ReadByte(void)
-{
-  uint8_t data = 0U;
-  return data;
-}
-
-void APP_Bootloader_ReadData(uint8_t *data, uint16_t size)
-{
-  if (data != NULL && size != 0U) {
-    memset(data, 0, size);
   }
 }

@@ -1,7 +1,6 @@
 #include "main.h"
 #include "app_bootloader.h"
 #include "app_usart.h"
-#include "app_wdg.h"
 
 static void APP_SystemClockConfig(void)
 {
@@ -36,7 +35,6 @@ int main(void)
   uint32_t elapsed;
 
   HAL_Init();
-  APP_WDG_Init();
   APP_SystemClockConfig();
   if (APP_USART_Init() != HAL_OK) {
     while (1) {
@@ -46,13 +44,13 @@ int main(void)
   APP_USART_Debug("IAP start");
   application = APP_Bootloader_Select();
   if (application != 0U) {
+    APP_USART_Debug("APP_Bootloader_Go 0x%x", application);
     APP_Bootloader_Go(application);
   }
 
   while (1) {
     APP_USART_Debug("IAP waiting for valid APP");
     for (elapsed = 0U; elapsed < 2000U; elapsed += 100U) {
-      APP_WDG_Refresh();
       HAL_Delay(100U);
     }
   }

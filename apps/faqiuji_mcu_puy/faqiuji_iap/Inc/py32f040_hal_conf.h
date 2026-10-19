@@ -45,17 +45,14 @@
   */
 #define HAL_MODULE_ENABLED  
 #define HAL_RCC_MODULE_ENABLED
-#define HAL_ADC_MODULE_ENABLED
+#define HAL_FLASH_MODULE_ENABLED
 /* #define HAL_CRC_MODULE_ENABLED */
 /* #define HAL_COMP_MODULE_ENABLED */
-#define HAL_FLASH_MODULE_ENABLED
 #define HAL_GPIO_MODULE_ENABLED
 /* #define HAL_IWDG_MODULE_ENABLED */
 /* #define HAL_WWDG_MODULE_ENABLED */
-#define HAL_TIM_MODULE_ENABLED
 #define HAL_DMA_MODULE_ENABLED
 /* #define HAL_LPTIM_MODULE_ENABLED */
-#define HAL_PWR_MODULE_ENABLED
 /* #define HAL_I2C_MODULE_ENABLED */
 #define HAL_UART_MODULE_ENABLED
 /* #define HAL_USART_MODULE_ENABLED */
@@ -146,6 +143,15 @@
 /**
   * @brief Include module's header file 
   */
+#ifdef HAL_DMA_MODULE_ENABLED
+  /*
+   * The vendor UART HAL references DMA_HandleTypeDef from its own
+   * translation unit. Include DMA before the umbrella HAL header so the
+   * type is available even when the HAL headers are entered recursively.
+   */
+  #include "py32f040_hal_dma.h"
+#endif /* HAL_DMA_MODULE_ENABLED */
+
 #ifdef HAL_MODULE_ENABLED
  #include "py32f0xx_hal.h"
 #endif /* HAL_MODULE_ENABLED */
@@ -165,14 +171,6 @@
 #ifdef HAL_CORTEX_MODULE_ENABLED
  #include "py32f040_hal_cortex.h"
 #endif /* HAL_CORTEX_MODULE_ENABLED */
-
-#ifdef HAL_DMA_MODULE_ENABLED
-  #include "py32f040_hal_dma.h"
-#endif /* HAL_DMA_MODULE_ENABLED */
-
-#ifdef HAL_ADC_MODULE_ENABLED
- #include "py32f040_hal_adc.h"
-#endif /* HAL_ADC_MODULE_ENABLED */
 
 #ifdef HAL_CRC_MODULE_ENABLED
  #include "py32f040_hal_crc.h"
@@ -194,10 +192,6 @@
  #include "py32f040_hal_iwdg.h"
 #endif /* HAL_IWDG_MODULE_ENABLED */
 
-#ifdef HAL_PWR_MODULE_ENABLED
- #include "py32f040_hal_pwr.h"
-#endif /* HAL_PWR_MODULE_ENABLED */
-
 #ifdef HAL_RTC_MODULE_ENABLED
  #include "py32f040_hal_rtc.h"
 #endif /* HAL_RTC_MODULE_ENABLED */    
@@ -205,10 +199,6 @@
 #ifdef HAL_SPI_MODULE_ENABLED
  #include "py32f040_hal_spi.h"
 #endif /* HAL_SPI_MODULE_ENABLED */
-
-#ifdef HAL_TIM_MODULE_ENABLED
- #include "py32f040_hal_tim.h"
-#endif /* HAL_TIM_MODULE_ENABLED */
 
 #ifdef HAL_LPTIM_MODULE_ENABLED
  #include "py32f040_hal_lptim.h" 
