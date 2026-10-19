@@ -21,6 +21,8 @@ extern "C" {
 #define DP_ID_STANDBY_TEASE_TIME 29
 #define DP_ID_RADAR_SENSE  101
 #define DP_ID_MOTOR_SPEED  102
+#define DP_ID_LOG_UPLOAD   103
+#define APP_DP_LOG_MAX_LEN 255U
 
 #pragma pack(1)
 typedef struct {
@@ -37,6 +39,11 @@ extern UINT32_T  g_sn;
 
 OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size);
 OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T *buf, UINT32_T size);
+/* Main-loop/task context only. Strings exclude the terminating NUL.
+ * report_log rejects oversized text; report_logf truncates to 255 bytes.
+ * Disconnected logs are not retained; the SDK send result is returned. */
+OPERATE_RET app_dp_report_log(CONST CHAR_T *text);
+OPERATE_RET app_dp_report_logf(CONST CHAR_T *format, ...);
 VOID_T app_dp_report_all(VOID_T);
 OPERATE_RET app_dp_load_persistent(VOID_T);
 OPERATE_RET app_dp_save_persistent(VOID_T);

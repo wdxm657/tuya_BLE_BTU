@@ -52,7 +52,7 @@ STATIC VOID_T faqiuji_mcu_key_event(UINT8_T pressed)
     }
     sg_key_pressed = FALSE;
     duration = now - sg_key_press_ms;
-    TAL_PR_INFO("MCU KEY: released after %lu ms", (unsigned long)duration);
+    TAL_PR_INFO("MCU KEY: released after %d ms", (unsigned long)duration);
     if (duration >= FAQIUJI_KEY_LONG_PRESS_MS) {
         sg_factory_reset_pending = TRUE;
     }
@@ -89,6 +89,10 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
         memcpy(debug_text, frame->payload, frame->len);
         debug_text[frame->len] = '\0';
         TAL_PR_INFO("MCU DEBUG: %s", debug_text);
+        // if (frame->len != 0U) {
+        //     (VOID_T)app_dp_report(DP_ID_LOG_UPLOAD,
+        //                          (UINT8_T *)debug_text, frame->len);
+        // }
         return;
     }
     // TAL_PR_INFO("MCU FRAME: cmd=0x%02x seq=%u len=%u",

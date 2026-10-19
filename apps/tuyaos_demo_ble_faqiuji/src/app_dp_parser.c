@@ -10,6 +10,8 @@
 
 
 #include "string.h"
+#include <stdarg.h>
+#include <stdio.h>
 
 #include "board.h"
 #include "tal_flash.h"
@@ -278,6 +280,7 @@ STATIC VOID_T app_audio_stop_current(VOID_T)
 
 STATIC UINT8_T app_dp_type(UINT8_T dp_id)
 {
+    if (dp_id == DP_ID_LOG_UPLOAD) return DT_STRING;
     if (dp_id == DP_ID_MODE) return DT_ENUM;
     if (dp_id == DP_ID_SOUND_MODE) return DT_ENUM;
     if (dp_id == DP_ID_WORK_STATE) return DT_ENUM;
@@ -316,6 +319,9 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
     //             g_cmd.dp_data_len ? g_cmd.dp_data[0] : 0U);
 
     switch (g_cmd.dp_id) {
+        case DP_ID_LOG_UPLOAD:
+            /* Log upload is read-only. */
+            return OPRT_INVALID_PARM;
         case DP_ID_SWITCH:
             if (g_cmd.dp_data_len != DT_BOOL_LEN) {
                 TAL_PR_ERR("DP SWITCH: invalid data length=%u",
@@ -564,6 +570,12 @@ OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T* buf, UINT32_T size)
     }
     /* Keep MCU state even when the phone is disconnected. */
     switch (dp_id) {
+        case DP_ID_LOG_UPLOAD:
+            if (size == 0U || size > APP_DP_LOG_MAX_LEN ||
+                memchr(buf, '\0', size) != NULL) {
+                return OPRT_INVALID_PARM;
+            }
+            break;
         case DP_ID_BATTERY:
             if (size != DT_VALUE_LEN || buf[0] != 0U ||
                 buf[1] != 0U || buf[2] != 0U || buf[3] > 100U) {
@@ -615,6 +627,41 @@ OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T* buf, UINT32_T size)
     // TAL_PR_HEXDUMP_INFO("dp_rsp", (VOID_T*)&g_rsp, rsp_len);
 
     return tuya_ble_dp_data_send(g_sn++, DP_SEND_TYPE_ACTIVE, DP_SEND_FOR_CLOUD_PANEL, DP_SEND_WITHOUT_RESPONSE, (VOID_T*)&g_rsp, rsp_len);
+}
+
+OPERATE_RET app_dp_report_log(CONST CHAR_T *text)
+{
+    UINT16_T length = 0U;
+
+    if (text == NULL) {
+        return OPRT_INVALID_PARM;
+    }
+    while (length <= APP_DP_LOG_MAX_LEN && text[length] != '\0') {
+        ++length;
+    }
+    if (length == 0U || length > APP_DP_LOG_MAX_LEN) {
+        return OPRT_INVALID_PARM;
+    }
+    return app_dp_report(DP_ID_LOG_UPLOAD, (UINT8_T *)text, length);
+}
+
+OPERATE_RET app_dp_report_logf(CONST CHAR_T *format, ...)
+{
+    CHAR_T text[APP_DP_LOG_MAX_LEN + 1U];
+    va_list args;
+    int length;
+
+    if (format == NULL) {
+        return OPRT_INVALID_PARM;
+    }
+    va_start(args, format);
+    length = vsnprintf(text, sizeof(text), format, args);
+    va_end(args);
+    if (length <= 0) {
+        return OPRT_INVALID_PARM;
+    }
+    text[APP_DP_LOG_MAX_LEN] = '\0';
+    return app_dp_report_log(text);
 }
 
 VOID_T app_dp_process_audio_events(VOID_T)
