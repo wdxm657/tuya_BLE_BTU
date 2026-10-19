@@ -33,6 +33,8 @@ STATIC BOOL_T sg_mcu_sync_pending = FALSE;
 STATIC BOOL_T sg_key_pressed = FALSE;
 STATIC UINT32_T sg_key_press_ms;
 STATIC BOOL_T sg_factory_reset_pending = FALSE;
+STATIC volatile BOOL_T sg_response_valid = FALSE;
+STATIC volatile FAQIUJI_MCU_FRAME_T sg_response_frame;
 
 STATIC VOID_T faqiuji_mcu_key_event(UINT8_T pressed)
 {
@@ -199,6 +201,8 @@ OPERATE_RET faqiuji_mcu_protocol_init(VOID_T)
     sg_key_pressed = FALSE;
     sg_key_press_ms = 0U;
     sg_factory_reset_pending = FALSE;
+    sg_response_valid = FALSE;
+    memset((VOID_T *)&sg_response_frame, 0, sizeof(sg_response_frame));
     return OPRT_OK;
 }
 
@@ -235,6 +239,14 @@ STATIC VOID_T faqiuji_mcu_frame_done(UINT8_T crc_l, UINT8_T crc_h)
     memcpy(&crc_buf[4], sg_mcu.payload, sg_mcu.len);
     crc = faqiuji_crc16(crc_buf, (UINT16_T)(4 + sg_mcu.len));
     if ((UINT8_T)crc == crc_l && (UINT8_T)(crc >> 8) == crc_h) {
+        if ((sg_mcu.cmd & FAQIUJI_MCU_RESPONSE_FLAG) != 0U) {
+            sg_response_frame.cmd = sg_mcu.cmd;
+            sg_response_frame.seq = sg_mcu.seq;
+            sg_response_frame.len = sg_mcu.len;
+            memcpy((VOID_T *)sg_response_frame.payload,
+                   sg_mcu.payload, sg_mcu.len);
+            sg_response_valid = TRUE;
+        }
         if (sg_frame_queue_count < FAQIUJI_MCU_FRAME_QUEUE_SIZE) {
             FAQIUJI_MCU_FRAME_T *frame =
                 &sg_frame_queue[sg_frame_queue_write];
@@ -368,6 +380,45 @@ OPERATE_RET faqiuji_mcu_send_frame(UINT8_T cmd, UINT8_T seq,
     frame[6 + len] = (UINT8_T)(crc >> 8);
     return (tal_uart_write(FAQIUJI_MCU_PORT, frame, (UINT32_T)(7 + len)) < 0) ?
            OPRT_COM_ERROR : OPRT_OK;
+}
+
+OPERATE_RET faqiuji_mcu_send_wait_response(UINT8_T cmd,
+                                           CONST UINT8_T *payload,
+                                           UINT8_T len,
+                                           FAQIUJI_MCU_FRAME_T *response,
+                                           UINT32_T timeout_ms)
+{
+    UINT8_T seq;
+    UINT8_T attempt;
+    UINT32_T start;
+    FAQIUJI_MCU_FRAME_T received;
+
+    if (response == NULL || timeout_ms == 0U) {
+        return OPRT_INVALID_PARM;
+    }
+
+    seq = ++sg_mcu_seq;
+    for (attempt = 0U; attempt < 3U; attempt++) {
+        sg_response_valid = FALSE;
+        if (faqiuji_mcu_send_frame(cmd, seq, payload, len) != OPRT_OK) {
+            return OPRT_COM_ERROR;
+        }
+
+        start = tkl_system_get_millisecond();
+        while ((tkl_system_get_millisecond() - start) < timeout_ms) {
+            if (sg_response_valid) {
+                received = sg_response_frame;
+                sg_response_valid = FALSE;
+                if (received.cmd == (UINT8_T)(cmd | FAQIUJI_MCU_RESPONSE_FLAG) &&
+                    received.seq == seq) {
+                    *response = received;
+                    return OPRT_OK;
+                }
+            }
+            tkl_system_delay(1U);
+        }
+    }
+    return OPRT_TIMEOUT;
 }
 
 OPERATE_RET faqiuji_mcu_ping(VOID_T) { return faqiuji_mcu_send(FAQIUJI_MCU_CMD_PING, NULL, 0); }

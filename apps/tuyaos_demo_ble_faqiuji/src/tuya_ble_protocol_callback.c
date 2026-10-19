@@ -139,14 +139,25 @@ STATIC VOID_T tuya_ble_protocol_callback(tuya_ble_cb_evt_param_t* event)
         } break;
 
         case TUYA_BLE_CB_EVT_OTA_DATA: {
-            if (event->ota_data.p_data[0] == 0) {
+            UINT8_T ota_channel;
+            if (event->ota_data.p_data == NULL ||
+                event->ota_data.data_len < 1U) {
+                TAL_PR_WARN("OTA event has no channel");
+                break;
+            }
+            ota_channel = event->ota_data.p_data[0];
+            if (ota_channel == 0U) {
 #if defined(TUYA_BLE_FEATURE_OTA_ENABLE) && (TUYA_BLE_FEATURE_OTA_ENABLE == 1)
                 tuya_ble_ota_handler(&event->ota_data);
 #endif
-            } else {
+            } else if (ota_channel == 1U ||
+                       (ota_channel >= 10U && ota_channel <= 19U)) {
 #if defined(TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE) && (TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE == 1)
                 tuya_ble_attach_ota_handler(&event->ota_data);
 #endif
+            } else {
+                TAL_PR_WARN("OTA event unsupported channel=%u",
+                            ota_channel);
             }
         } break;
 

@@ -13,6 +13,7 @@ extern "C" {
 #define FAQIUJI_MCU_MAX_PAYLOAD      64
 #define FAQIUJI_MCU_RESPONSE_FLAG    0x80
 #define FAQIUJI_MCU_CONFIG_SYNC_VERSION 0x01
+#define FAQIUJI_MCU_OTA_DATA_MAX     60U
 
 typedef enum {
     FAQIUJI_MCU_CMD_PING       = 0x01,
@@ -23,6 +24,12 @@ typedef enum {
     FAQIUJI_MCU_CMD_KEY_EVENT  = 0x20,
     FAQIUJI_MCU_CMD_STATUS_EVENT = 0x21,
     FAQIUJI_MCU_CMD_DEBUG_STRING = 0x22,
+    FAQIUJI_MCU_CMD_OTA_INFO = 0x30,
+    FAQIUJI_MCU_CMD_OTA_BEGIN = 0x31,
+    FAQIUJI_MCU_CMD_OTA_DATA = 0x32,
+    FAQIUJI_MCU_CMD_OTA_END = 0x33,
+    FAQIUJI_MCU_CMD_OTA_ABORT = 0x34,
+    FAQIUJI_MCU_CMD_OTA_REBOOT = 0x35,
 } FAQIUJI_MCU_CMD_E;
 
 typedef enum {
@@ -50,6 +57,11 @@ VOID_T faqiuji_mcu_protocol_process(VOID_T);
 OPERATE_RET faqiuji_mcu_send(UINT8_T cmd, CONST UINT8_T *payload, UINT8_T len);
 OPERATE_RET faqiuji_mcu_send_frame(UINT8_T cmd, UINT8_T seq,
                                    CONST UINT8_T *payload, UINT8_T len);
+OPERATE_RET faqiuji_mcu_send_wait_response(UINT8_T cmd,
+                                           CONST UINT8_T *payload,
+                                           UINT8_T len,
+                                           FAQIUJI_MCU_FRAME_T *response,
+                                           UINT32_T timeout_ms);
 OPERATE_RET faqiuji_mcu_ping(VOID_T);
 OPERATE_RET faqiuji_mcu_ping_periodic(VOID_T);
 OPERATE_RET faqiuji_mcu_config_set(UINT8_T mode, UINT16_T max_count,
