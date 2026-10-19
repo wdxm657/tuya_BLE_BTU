@@ -54,6 +54,7 @@
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 #define  TUYA_BLE_BULKDATA_BLOCK_SIZE 512
 #endif
+#define SHOUQUAN 0
 
 /***********************************************************************
  ********************* struct ******************************************
@@ -469,6 +470,17 @@ OPERATE_RET tuya_init_third(VOID_T)
     /* 6. 电机 (PWM 初始化) */
     app_motor_init();
 
+    #if !SHOUQUAN
+    TUYA_GPIO_BASE_CFG_T output_cfg = {
+        .mode = TUYA_GPIO_PUSH_PULL,
+        .direct = TUYA_GPIO_OUTPUT,
+        .level = TUYA_GPIO_LEVEL_LOW,
+    };
+    tal_gpio_init(Set_Charg_I, &output_cfg);
+    tal_gpio_init(AD_NTC_CON, &output_cfg);
+    tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
+    tal_gpio_write(AD_NTC_CON, TUYA_GPIO_LEVEL_LOW);
+    #endif
     return OPRT_OK;
 }
 
@@ -506,11 +518,15 @@ STATIC VOID_T machine_power_on_cb(VOID_T)
 OPERATE_RET tuya_init_last(VOID_T)
 {
     // PB1 TX   PB7 RX
+    #if SHOUQUAN
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
+    #endif
 
     tuya_ble_protocol_init();
 
+    #if SHOUQUAN
     tal_uart_rx_reg_irq_cb(TUYA_UART_NUM_0, tuya_uart_irq_rx_cb);
+    #endif
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
     tal_sdk_test_init();

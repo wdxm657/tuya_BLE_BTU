@@ -16,7 +16,7 @@
 #define VARIABLE_SEQ_STEPS 4
 #define FIXED_SEQ_STEPS (sizeof(s_fixed_seq) / sizeof(s_fixed_seq[0]))
 #define VARIABLE_SEQ_CYCLES 5
-#define RANDOM_BURST_MS 6000
+#define RANDOM_BURST_MS 4000
 #define RANDOM_BURST_RAMP_STEPS 12
 #define RANDOM_BURST_STEP_MS (RANDOM_BURST_MS / RANDOM_BURST_RAMP_STEPS)
 #define RANDOM_STOP_MS 2000
@@ -110,10 +110,10 @@ STATIC const sm_simple_seq_step_t s_fixed_seq[] = {
 };
 
 STATIC const sm_simple_seq_step_t s_variable_seq[VARIABLE_SEQ_STEPS] = {
-    {MOTOR_DIR_FORWARD, 250},
-    {MOTOR_DIR_STOP, 100},
-    {MOTOR_DIR_REVERSE, 250},
-    {MOTOR_DIR_STOP, 100},
+    {MOTOR_DIR_FORWARD, 1000},
+    {MOTOR_DIR_STOP, 500},
+    {MOTOR_DIR_REVERSE, 1000},
+    {MOTOR_DIR_STOP, 500},
 };
 
 /* 随机爆发序列 — 方向与挡位预编排，避免连续同方向 */
