@@ -13,7 +13,7 @@
 #include "app_battery.h"
 #include "tal_log.h"
 
-#define LED_BLINK_PERIOD_MS 250
+#define LED_BLINK_PERIOD_MS 500
 
 STATIC TIMER_ID s_led_timer_id = NULL;
 STATIC led_mode_t s_status_mode = LED_MODE_OFF;

@@ -68,7 +68,7 @@ STATIC CONST struct {
     INT32_T  voltage_mv;
     UINT8_T  percent;
 } s_battery_lut[] = {
-    {4200, 100},
+    {4150, 100},
     {4150,  95},
     {4110,  90},
     {4080,  85},

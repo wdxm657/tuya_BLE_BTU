@@ -26,21 +26,15 @@ extern "C" {
 // #define TY_DEVICE_PID         "3aubjk7p" //oem no use
 #define TY_DEVICE_PID         "ytaqgucz"
 
-#define SWITCH_TY 2
+#define SWITCH_TY 0
 
 #if(SWITCH_TY==0)
 #define TY_DEVICE_MAC         "DC234DAFCC96"
 #define TY_DEVICE_DID         "tuya07d9624bc2e5" //16Bytes
 #define TY_DEVICE_AUTH_KEY    "fs1RKoeL4W3AYNFSCRgCW2ev6tOFmeer" //32Bytes
-#elif(SWITCH_TY==1)
-#define TY_DEVICE_MAC         "DC2353C6A38A"
-#define TY_DEVICE_DID         "uuid6a9439dded85" //16Bytes
-#define TY_DEVICE_AUTH_KEY    "ZWWyLkOD5V3gksgEdEa8ddSuPBismztt" //32Bytes
-#elif(SWITCH_TY==2)
-#define TY_DEVICE_MAC         "DC2353C6A38B"
-#define TY_DEVICE_DID         "uuid8f4ff4251b9c" //16Bytes
-#define TY_DEVICE_AUTH_KEY    "hNVIfbmUD1tWe7xb75g0qKva2Ao7vZhY" //32Bytes
+
 #endif
+
 #define TY_ADV_INTERVAL       20   //range: 20~10240ms
 #define TY_CONN_INTERVAL_MIN  15   //range: 7.5~4000ms
 #define TY_CONN_INTERVAL_MAX  15   //range: 7.5~4000ms
