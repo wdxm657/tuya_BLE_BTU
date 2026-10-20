@@ -12,7 +12,7 @@
 // CONFIG_ENABLE_LOG is not set
 // CONFIG_BOARD_ENABLE_LOG is not set
 // CONFIG_TUYA_SDK_TEST is not set
-#define TUYA_SDK_DEBUG_MODE 1
+#define TUYA_SDK_DEBUG_MODE 0
 // end of APP
 
 //
@@ -23,8 +23,8 @@
 // FW_INFO
 //
 #define FIRMWARE_NAME           "tuyaos_demo_ble_laser_bug_toy"
-#define FIRMWARE_VERSION        "1.0.15"
-#define FIRMWARE_VERSION_HEX    0x0001000f
+#define FIRMWARE_VERSION        "1.0.0"
+#define FIRMWARE_VERSION_HEX    0x00010000
 #define HARDWARE_VERSION        "0.1.0"
 #define HARDWARE_VERSION_HEX    0x00000100
 

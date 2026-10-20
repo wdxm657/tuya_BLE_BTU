@@ -49,6 +49,7 @@
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 #define  TUYA_BLE_BULKDATA_BLOCK_SIZE 512
 #endif
+#define SHOUQUAN 0
 
 /***********************************************************************
  ********************* struct ******************************************
@@ -70,7 +71,11 @@ TAL_UART_CFG_T tal_uart_cfg = {
     .rx_buffer_size = 256,
     .open_mode = O_BLOCK,
     {
+        #if !SHOUQUAN
         .baudrate = 115200,
+        #else
+        .baudrate = 9600,
+        #endif
         .parity = TUYA_UART_PARITY_TYPE_NONE,
         .databits = TUYA_UART_DATA_LEN_8BIT,
         .stopbits = TUYA_UART_STOP_LEN_1BIT,
@@ -234,8 +239,6 @@ STATIC VOID_T tuya_log_output_cb(IN CONST CHAR_T *str)
 }
 
 #endif
-
-#define SHOUQUAN 0
 
 STATIC VOID_T tuya_uart_irq_rx_cb(TUYA_UART_NUM_E port_id, VOID_T *buff, UINT16_T len)
 {

@@ -54,7 +54,7 @@
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 #define  TUYA_BLE_BULKDATA_BLOCK_SIZE 512
 #endif
-#define SHOUQUAN 0
+#define SHOUQUAN 1
 
 /***********************************************************************
  ********************* struct ******************************************
