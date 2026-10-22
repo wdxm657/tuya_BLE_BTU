@@ -51,6 +51,14 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
     switch (g_cmd.dp_id) {
     case DP_ID_SWITCH:
         app_state_set_app_power(g_cmd.dp_data[0] != 0);
+        if (!g_cmd.dp_data[0])
+        {
+            // tal_ble_advertising_stop();
+            tal_cpu_allow_sleep();
+        }else{
+            tal_cpu_force_wakeup();
+        }
+        
         app_led_update();
         break;
     case DP_ID_MODE:

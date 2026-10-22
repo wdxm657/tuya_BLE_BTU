@@ -227,7 +227,7 @@ VOID_T app_key_init(VOID_T)
 
     /* 创建并启动 10ms 周期轮询定时器 */
     tal_sw_timer_create(app_key_poll_handler, NULL, &s_app_key_timer_id);
-    tal_sw_timer_start(s_app_key_timer_id, KEY_POLL_MS, TAL_TIMER_CYCLE);
+    // tal_sw_timer_start(s_app_key_timer_id, KEY_POLL_MS, TAL_TIMER_CYCLE);
 
     /* 状态机初始值 */
     s_key_state          = KEY_STATE_IDLE;

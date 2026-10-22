@@ -35,9 +35,9 @@ extern "C" {
 
 #endif
 
-#define TY_ADV_INTERVAL       20   //range: 20~10240ms
-#define TY_CONN_INTERVAL_MIN  15   //range: 7.5~4000ms
-#define TY_CONN_INTERVAL_MAX  15   //range: 7.5~4000ms
+#define TY_ADV_INTERVAL       200   //range: 20~10240ms
+#define TY_CONN_INTERVAL_MIN  300   //range: 7.5~4000ms
+#define TY_CONN_INTERVAL_MAX  300   //range: 7.5~4000ms
 
 //event id
 typedef enum {

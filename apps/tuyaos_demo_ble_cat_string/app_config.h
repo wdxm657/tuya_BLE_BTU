@@ -11,7 +11,7 @@
 //
 #define ENABLE_LOG 1
 #define BOARD_ENABLE_LOG 1
-#define TUYA_SDK_TEST 1
+// CONFIG_TUYA_SDK_TEST is not set
 #define TUYA_SDK_DEBUG_MODE 0
 // end of APP
 

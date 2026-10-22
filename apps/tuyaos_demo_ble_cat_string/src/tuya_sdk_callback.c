@@ -54,7 +54,7 @@
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 #define  TUYA_BLE_BULKDATA_BLOCK_SIZE 512
 #endif
-#define SHOUQUAN 1
+#define SHOUQUAN 0
 
 /***********************************************************************
  ********************* struct ******************************************
@@ -451,57 +451,29 @@ OPERATE_RET tuya_init_third(VOID_T)
     };
     tkl_wakeup_source_set(&usb_wakeup_cfg);
 
-    /* ---- 模块初始化 ---- */
-    /* 1. 状态机（须在其他模块之前初始化） */
-    app_state_init();
-
-    /* 2. 按键（一直运行） */
-    app_key_init();
-
-    /* 3. LED 指示灯 */
-    app_led_init();
-
-    /* 4. 电池监测（ADC+定时器） */
-    app_battery_init();
-
-    /* 5. 充电检测（GPIO轮询） */
-    app_charge_init();
-
-    /* 6. 电机 (PWM 初始化) */
-    app_motor_init();
-
-    #if !SHOUQUAN
-    TUYA_GPIO_BASE_CFG_T output_cfg = {
-        .mode = TUYA_GPIO_PUSH_PULL,
-        .direct = TUYA_GPIO_OUTPUT,
-        .level = TUYA_GPIO_LEVEL_LOW,
-    };
-    tal_gpio_init(Set_Charg_I, &output_cfg);
-    tal_gpio_init(AD_NTC_CON, &output_cfg);
-    tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
-    tal_gpio_write(AD_NTC_CON, TUYA_GPIO_LEVEL_LOW);
-    #endif
     return OPRT_OK;
 }
 
 STATIC VOID_T run_off_cb(VOID_T)
 {
-    app_motor_stop();
-    // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
-    app_led_update();
+    // app_motor_stop();
+    // // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
+    // app_led_update();
 }
 
 STATIC VOID_T run_on_cb(VOID_T)
 {
-    if (app_state_is_charging()) {
-        // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_HIGH);
-    }
-    app_motor_start();
-    app_led_update();
+    // if (app_state_is_charging()) {
+    //     // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_HIGH);
+    // }
+    // app_motor_start();
+    // app_led_update();
 }
 
 STATIC VOID_T machine_power_off_cb(VOID_T)
 {
+    // tal_ble_advertising_stop();
+
     app_battery_suspend();
     app_led_update();
     app_led_prepare_sleep();
@@ -517,6 +489,37 @@ STATIC VOID_T machine_power_on_cb(VOID_T)
 
 OPERATE_RET tuya_init_last(VOID_T)
 {
+/* ---- 模块初始化 ---- */
+    /* 1. 状态机（须在其他模块之前初始化） */
+    app_state_init();
+
+    // /* 2. 按键（一直运行） */
+    app_key_init();
+
+    // /* 3. LED 指示灯 */
+    app_led_init();
+
+    // /* 4. 电池监测（ADC+定时器） */
+    // app_battery_init();
+
+    // /* 5. 充电检测（GPIO轮询） */
+    // app_charge_init();
+
+    // /* 6. 电机 (PWM 初始化) */
+    // app_motor_init();
+
+    // #if !SHOUQUAN
+    // TUYA_GPIO_BASE_CFG_T output_cfg = {
+    //     .mode = TUYA_GPIO_PUSH_PULL,
+    //     .direct = TUYA_GPIO_OUTPUT,
+    //     .level = TUYA_GPIO_LEVEL_LOW,
+    // };
+    // tal_gpio_init(Set_Charg_I, &output_cfg);
+    // tal_gpio_init(AD_NTC_CON, &output_cfg);
+    // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
+    // tal_gpio_write(AD_NTC_CON, TUYA_GPIO_LEVEL_LOW);
+    // #endif
+
     // PB1 TX   PB7 RX
     #if SHOUQUAN
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
@@ -535,8 +538,8 @@ OPERATE_RET tuya_init_last(VOID_T)
     tal_ble_advertising_start(&tal_adv_param);
 
     /* ---- DP 定时上报定时器 ---- */
-    tal_sw_timer_create(dp_report_timeout_handler, NULL, &s_dp_report_timer_id);
-    tal_sw_timer_start(s_dp_report_timer_id, 1000, TAL_TIMER_CYCLE);
+    // tal_sw_timer_create(dp_report_timeout_handler, NULL, &s_dp_report_timer_id);
+    // tal_sw_timer_start(s_dp_report_timer_id, 1000, TAL_TIMER_CYCLE);
 
     /* ---- 回调注册 ---- */
 
@@ -566,8 +569,8 @@ OPERATE_RET tuya_init_last(VOID_T)
     app_product_test_init();
 #endif // APP_PRODUCT_TEST
 #endif
-    app_led_update();
-    
+    // app_led_update();
+    // tuya_ble_device_factory_reset();
     return OPRT_OK;
 }
 
