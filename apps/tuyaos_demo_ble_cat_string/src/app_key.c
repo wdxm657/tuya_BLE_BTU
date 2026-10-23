@@ -224,10 +224,13 @@ VOID_T app_key_init(VOID_T)
 
     /* 初始化 GPIO（不进中断，纯输入轮询） */
     tal_gpio_init(APP_KEY_PIN, &gpio_cfg);
+}
 
-    /* 创建并启动 10ms 周期轮询定时器 */
-    tal_sw_timer_create(app_key_poll_handler, NULL, &s_app_key_timer_id);
-    // tal_sw_timer_start(s_app_key_timer_id, KEY_POLL_MS, TAL_TIMER_CYCLE);
+VOID_T app_key_timer_init(VOID_T)
+{
+    if (s_app_key_timer_id != NULL) {
+        return;
+    }
 
     /* 状态机初始值 */
     s_key_state          = KEY_STATE_IDLE;
@@ -235,6 +238,10 @@ VOID_T app_key_init(VOID_T)
     s_press_tick_ms      = 0;
     s_long_press_eligible = FALSE;
     s_boot_tick_ms       = tal_system_get_millisecond();
+
+    /* Create once on normal boot; polling remains disabled. */
+    tal_sw_timer_create(app_key_poll_handler, NULL, &s_app_key_timer_id);
+    // tal_sw_timer_start(s_app_key_timer_id, KEY_POLL_MS, TAL_TIMER_CYCLE);
 
     TAL_PR_INFO("[key] custom driver initialized (poll %dms), pin %d",
                 KEY_POLL_MS, APP_KEY_PIN);

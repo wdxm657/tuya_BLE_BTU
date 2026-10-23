@@ -94,6 +94,13 @@ TAL_BLE_ADV_PARAMS_T tal_adv_param = {
     .adv_type = TAL_BLE_ADV_TYPE_CS_UNDIR,
 };
 
+STATIC VOID_T tuya_pre_sleep_cb(VOID_T);
+STATIC VOID_T tuya_post_wakeup_cb(VOID_T);
+STATIC TUYA_SLEEP_CB_T tal_sleep_cb = {
+    .pre_sleep_cb = tuya_pre_sleep_cb,
+    .post_wakeup_cb = tuya_post_wakeup_cb,
+};
+
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 STATIC VOID_T tuya_pre_sleep_cb(VOID_T);
 STATIC VOID_T tuya_post_wakeup_cb(VOID_T);
@@ -350,6 +357,20 @@ STATIC VOID_T tuya_uart_irq_rx_cb(TUYA_UART_NUM_E port_id, VOID_T *buff, UINT16_
     }
 }
 
+STATIC VOID_T tuya_pre_sleep_cb(VOID_T)
+{
+    app_led_prepare_sleep();
+    app_battery_suspend();
+    // TODO:进入retention低功耗时开启一个定时器，若定时器不存在
+}
+
+STATIC VOID_T tuya_post_wakeup_cb(VOID_T)
+{
+    // TODO:退出retention低功耗时每过1秒打印一下retention低功耗保持的时间,超过5秒进入超低功耗模式，即打开下面的注释即可
+    // tal_ble_advertising_stop();
+}
+
+
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 
 STATIC VOID_T tuya_pre_sleep_cb(VOID_T)
@@ -450,6 +471,36 @@ OPERATE_RET tuya_init_third(VOID_T)
         .wakeup_para.gpio_param.level = TUYA_GPIO_LEVEL_LOW,
     };
     tkl_wakeup_source_set(&usb_wakeup_cfg);
+/* ---- 模块初始化 ---- */
+    /* 1. 状态机（须在其他模块之前初始化） */
+    app_state_init();
+
+    // #if !SHOUQUAN
+    // TUYA_GPIO_BASE_CFG_T output_cfg = {
+    //     .mode = TUYA_GPIO_PUSH_PULL,
+    //     .direct = TUYA_GPIO_OUTPUT,
+    //     .level = TUYA_GPIO_LEVEL_LOW,
+    // };
+    // tal_gpio_init(Set_Charg_I, &output_cfg);
+    // tal_gpio_init(AD_NTC_CON, &output_cfg);
+    // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
+    // tal_gpio_write(AD_NTC_CON, TUYA_GPIO_LEVEL_LOW);
+    // #endif
+
+    // /* 2. 按键 */
+    app_key_init();
+
+    // /* 3. LED 指示灯 */
+    app_led_init();
+
+    // /* 4. 电池 ADC 和分压控制 GPIO */
+    app_battery_init();
+
+    // /* 5. 充电检测 GPIO */
+    app_charge_init();
+
+    // /* 6. 电机 (PWM 初始化) */
+    app_motor_init();
 
     return OPRT_OK;
 }
@@ -489,36 +540,9 @@ STATIC VOID_T machine_power_on_cb(VOID_T)
 
 OPERATE_RET tuya_init_last(VOID_T)
 {
-/* ---- 模块初始化 ---- */
-    /* 1. 状态机（须在其他模块之前初始化） */
-    app_state_init();
-
-    // /* 2. 按键（一直运行） */
-    app_key_init();
-
-    // /* 3. LED 指示灯 */
-    app_led_init();
-
-    // /* 4. 电池监测（ADC+定时器） */
-    // app_battery_init();
-
-    // /* 5. 充电检测（GPIO轮询） */
-    // app_charge_init();
-
-    // /* 6. 电机 (PWM 初始化) */
-    // app_motor_init();
-
-    // #if !SHOUQUAN
-    // TUYA_GPIO_BASE_CFG_T output_cfg = {
-    //     .mode = TUYA_GPIO_PUSH_PULL,
-    //     .direct = TUYA_GPIO_OUTPUT,
-    //     .level = TUYA_GPIO_LEVEL_LOW,
-    // };
-    // tal_gpio_init(Set_Charg_I, &output_cfg);
-    // tal_gpio_init(AD_NTC_CON, &output_cfg);
-    // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
-    // tal_gpio_write(AD_NTC_CON, TUYA_GPIO_LEVEL_LOW);
-    // #endif
+    OPERATE_RET ret;
+    
+    app_battery_timer_init();
 
     // PB1 TX   PB7 RX
     #if SHOUQUAN
@@ -552,6 +576,7 @@ OPERATE_RET tuya_init_last(VOID_T)
 
     /* 临界低电 -> 硬件关机保护 */
     app_battery_register_critical_cb(battery_critical_poweroff);
+    tal_cpu_sleep_callback_register(&tal_sleep_cb);
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
     // if (tal_oled_init() == OPRT_OK) {

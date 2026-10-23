@@ -48,6 +48,7 @@ STATIC UINT8_T s_var_burst_idx = 0;
 STATIC UINT8_T s_var_burst_step = 0;
 STATIC UINT8_T s_var_burst_dir = MOTOR_DIR_STOP;
 STATIC UINT8_T s_current_direction = MOTOR_DIR_STOP;
+STATIC UINT32_T s_current_duty = MOTOR_PWM_DUTY_0;
 
 typedef enum
 {
@@ -210,6 +211,7 @@ STATIC VOID_T app_motor_set_direction(UINT8_T direction, UINT32_T duty)
     }
 
     s_current_direction = direction;
+    s_current_duty = duty;
 
     switch (direction)
     {
@@ -358,7 +360,18 @@ VOID_T app_motor_init(VOID_T)
 
     tal_pwm_init(MOTOR_PWM_CH_FOR, &pwm_cfg);
     tal_pwm_init(MOTOR_PWM_CH_REV, &pwm_cfg);
-    tal_sw_timer_create(app_motor_timer_handler, NULL, &s_motor_timer_id);
+    /* Restore the retained output without advancing the motor sequence. */
+    tal_pwm_duty_set(MOTOR_PWM_CH_FOR,
+                     s_current_direction == MOTOR_DIR_FORWARD ? s_current_duty : MOTOR_PWM_DUTY_0);
+    tal_pwm_duty_set(MOTOR_PWM_CH_REV,
+                     s_current_direction == MOTOR_DIR_REVERSE ? s_current_duty : MOTOR_PWM_DUTY_0);
+}
+
+VOID_T app_motor_timer_init(VOID_T)
+{
+    if (s_motor_timer_id != NULL) {
+        return;
+    }
 
     s_work_mode = WORK_MODE_FIXED;
     s_app_stepless_percent = MOTOR_STEPLESS_DEFAULT_PERCENT;
@@ -374,6 +387,9 @@ VOID_T app_motor_init(VOID_T)
     s_var_burst_step = 0;
     s_var_burst_dir = MOTOR_DIR_STOP;
     s_current_direction = MOTOR_DIR_STOP;
+    s_current_duty = MOTOR_PWM_DUTY_0;
+
+    tal_sw_timer_create(app_motor_timer_handler, NULL, &s_motor_timer_id);
 
     TAL_PR_INFO("[motor] initialized");
 }

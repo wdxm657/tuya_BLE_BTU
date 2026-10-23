@@ -32,6 +32,8 @@ typedef enum {
 } work_mode_t;
 
 VOID_T app_motor_init(VOID_T);
+/* Call once on normal boot, after IO initialization. */
+VOID_T app_motor_timer_init(VOID_T);
 VOID_T app_motor_set_mode(work_mode_t mode);
 work_mode_t app_motor_get_mode(VOID_T);
 VOID_T app_motor_set_stepless_percent(UINT8_T percent);

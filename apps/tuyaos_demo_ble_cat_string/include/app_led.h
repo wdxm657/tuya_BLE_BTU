@@ -23,6 +23,8 @@ typedef enum {
 } led_mode_t;
 
 VOID_T app_led_init(VOID_T);
+/* Call once on normal boot, after the software timer service is ready. */
+VOID_T app_led_timer_init(VOID_T);
 VOID_T app_led_set_mode(led_mode_t mode);
 VOID_T app_led_update(VOID_T);
 VOID_T app_led_prepare_sleep(VOID_T);

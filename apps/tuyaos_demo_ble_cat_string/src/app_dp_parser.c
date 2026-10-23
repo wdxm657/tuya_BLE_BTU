@@ -54,6 +54,7 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         if (!g_cmd.dp_data[0])
         {
             // tal_ble_advertising_stop();
+            // app_led_prepare_sleep();
             tal_cpu_allow_sleep();
         }else{
             tal_cpu_force_wakeup();

@@ -51,10 +51,12 @@ extern "C" {
  **********************************************************************/
 
 /**
- * @brief 初始化电池 ADC + 开启 AD_BAT_SWITCH + 启动监测定时器
+ * @brief 初始化电池 ADC 和分压控制 GPIO，不采样或操作定时器
  * @return OPRT_OK 成功
  */
 OPERATE_RET app_battery_init(VOID_T);
+/* Initial sampling and monitoring setup; excluded from retention wakeup. */
+OPERATE_RET app_battery_timer_init(VOID_T);
 OPERATE_RET app_battery_resume(VOID_T);
 VOID_T app_battery_suspend(VOID_T);
 

@@ -102,9 +102,18 @@ VOID_T app_charge_init(VOID_T)
 
     tal_gpio_write(CHARGE_EN, TUYA_GPIO_LEVEL_HIGH);
     // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
+}
+
+VOID_T app_charge_timer_init(VOID_T)
+{
+    if (s_charge_timer_id != NULL) {
+        return;
+    }
 
     s_charge_state = CHG_STATE_NO_USB;
-    tal_sw_timer_create(app_charge_poll_handler, NULL, &s_charge_timer_id);
+    if (tal_sw_timer_create(app_charge_poll_handler, NULL, &s_charge_timer_id) != OPRT_OK) {
+        return;
+    }
     app_charge_poll_handler(s_charge_timer_id, NULL);
     tal_sw_timer_start(s_charge_timer_id, CHARGE_POLL_MS, TAL_TIMER_CYCLE);
 }

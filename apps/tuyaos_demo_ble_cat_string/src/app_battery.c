@@ -287,14 +287,6 @@ OPERATE_RET app_battery_init(VOID_T)
 {
     OPERATE_RET ret;
 
-    if (s_adc_inited) {
-        if (s_monitor_timer_id != NULL) {
-            tal_sw_timer_start(s_monitor_timer_id, BATTERY_MONITOR_INTERVAL_MS, TAL_TIMER_CYCLE);
-        }
-        tal_gpio_write(AD_Bat_CON, TUYA_GPIO_LEVEL_HIGH);
-        return OPRT_OK;
-    }
-
     /* ---------- ADC 初始化 ---------- */
     TUYA_ADC_BASE_CFG_T adc_cfg = {
         .ch_nums       = 1,
@@ -305,18 +297,28 @@ OPERATE_RET app_battery_init(VOID_T)
 
     ret = tal_adc_init(TUYA_ADC_NUM_0, &adc_cfg);
     if (ret != OPRT_OK) {
-        TAL_PR_ERR("[battery] ADC init failed: %d", ret);
         return ret;
     }
 
-    /* ---------- 使能分压电路（常开，不再开关） ---------- */
+    /* ---------- 使能分压电路 ---------- */
     TUYA_GPIO_BASE_CFG_T gpio_out = {
         .mode   = TUYA_GPIO_PUSH_PULL,
         .direct = TUYA_GPIO_OUTPUT,
         .level  = TUYA_GPIO_LEVEL_HIGH,
     };
-    tal_gpio_init(AD_Bat_CON, &gpio_out);
-    tal_gpio_write(AD_Bat_CON, TUYA_GPIO_LEVEL_HIGH);
+    ret = tal_gpio_init(AD_Bat_CON, &gpio_out);
+    s_adc_inited = (ret == OPRT_OK);
+    return ret;
+}
+
+OPERATE_RET app_battery_timer_init(VOID_T)
+{
+    OPERATE_RET ret;
+
+    if (!s_adc_inited) {
+        return OPRT_COM_ERROR;
+    }
+
     tal_system_delay(10);  /* 等待电压稳定 */
 
     /* ---------- 首次采样初始化缓存 ---------- */
@@ -332,18 +334,33 @@ OPERATE_RET app_battery_init(VOID_T)
 
     /* ---------- 创建监测定时器（ BATTERY_MONITOR_INTERVAL_MS 周期） ---------- */
     if (s_monitor_timer_id == NULL) {
-        tal_sw_timer_create(app_battery_monitor_handler, NULL, &s_monitor_timer_id);
+        ret = tal_sw_timer_create(app_battery_monitor_handler, NULL, &s_monitor_timer_id);
+        if (ret != OPRT_OK) {
+            return ret;
+        }
     }
-    tal_sw_timer_start(s_monitor_timer_id, BATTERY_MONITOR_INTERVAL_MS, TAL_TIMER_CYCLE);
+    ret = tal_sw_timer_start(s_monitor_timer_id, BATTERY_MONITOR_INTERVAL_MS, TAL_TIMER_CYCLE);
+    if (ret != OPRT_OK) {
+        return ret;
+    }
 
-    s_adc_inited = TRUE;
     TAL_PR_INFO("[battery] monitoring started, interval=%dms", BATTERY_MONITOR_INTERVAL_MS);
     return OPRT_OK;
 }
 
 OPERATE_RET app_battery_resume(VOID_T)
 {
-    return app_battery_init();
+    OPERATE_RET ret;
+
+    if (s_adc_inited && s_monitor_timer_id != NULL) {
+        return tal_sw_timer_start(s_monitor_timer_id, BATTERY_MONITOR_INTERVAL_MS, TAL_TIMER_CYCLE);
+    }
+
+    ret = app_battery_init();
+    if (ret != OPRT_OK) {
+        return ret;
+    }
+    return app_battery_timer_init();
 }
 
 VOID_T app_battery_suspend(VOID_T)

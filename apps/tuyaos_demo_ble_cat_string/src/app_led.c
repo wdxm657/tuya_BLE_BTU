@@ -19,6 +19,7 @@ STATIC TIMER_ID s_led_timer_id = NULL;
 STATIC led_mode_t s_status_mode = LED_MODE_OFF;
 STATIC led_mode_t s_power_mode = LED_MODE_OFF;
 STATIC BOOL_T s_blink_on = FALSE;
+STATIC BOOL_T s_led_suspended = FALSE;
 
 STATIC VOID_T app_led_write(TUYA_GPIO_NUM_E pin, BOOL_T on)
 {
@@ -100,23 +101,13 @@ STATIC VOID_T app_led_apply(VOID_T)
     }
 }
 
-STATIC VOID_T app_led_restart_timer_if_needed(VOID_T)
-{
-    BOOL_T need_blink = app_led_mode_blinks(s_status_mode) || app_led_mode_blinks(s_power_mode);
-
-    if (s_led_timer_id != NULL) {
-        tal_sw_timer_stop(s_led_timer_id);
-    }
-    s_blink_on = TRUE;
-    app_led_apply();
-
-    if (need_blink) {
-        tal_sw_timer_start(s_led_timer_id, LED_BLINK_PERIOD_MS, TAL_TIMER_CYCLE);
-    }
-}
-
 STATIC VOID_T app_led_blink_handler(TIMER_ID timer_id, VOID_T *arg)
 {
+    if (s_led_suspended ||
+        (!app_led_mode_blinks(s_status_mode) && !app_led_mode_blinks(s_power_mode))) {
+        return;
+    }
+
     s_blink_on = !s_blink_on;
     app_led_apply();
 }
@@ -127,19 +118,37 @@ VOID_T app_led_init(VOID_T)
     app_led_output_init(LED_G);
     app_led_output_init(CHARGE_R);
     app_led_output_init(CHARGE_G);
-    tal_sw_timer_create(app_led_blink_handler, NULL, &s_led_timer_id);
+    if (!s_led_suspended) {
+        app_led_apply();
+    }
+}
+
+VOID_T app_led_timer_init(VOID_T)
+{
+    if (s_led_timer_id != NULL) {
+        return;
+    }
 
     s_status_mode = LED_MODE_OFF;
     s_power_mode = LED_MODE_OFF;
     s_blink_on = FALSE;
+    s_led_suspended = FALSE;
     app_led_apply();
+
+    tal_sw_timer_create(app_led_blink_handler, NULL, &s_led_timer_id);
+    if (s_led_timer_id != NULL) {
+        tal_sw_timer_start(s_led_timer_id, LED_BLINK_PERIOD_MS, TAL_TIMER_CYCLE);
+    }
 }
 
 VOID_T app_led_set_mode(led_mode_t mode)
 {
     s_status_mode = mode;
     s_power_mode = LED_MODE_OFF;
-    app_led_restart_timer_if_needed();
+    s_blink_on = TRUE;
+    if (!s_led_suspended) {
+        app_led_apply();
+    }
 }
 
 VOID_T app_led_update(VOID_T)
@@ -176,18 +185,22 @@ VOID_T app_led_update(VOID_T)
 
     s_status_mode = status_mode;
     s_power_mode = power_mode;
-    app_led_restart_timer_if_needed();
+    s_blink_on = TRUE;
+    if (!s_led_suspended) {
+        app_led_apply();
+    }
 }
 
 VOID_T app_led_prepare_sleep(VOID_T)
 {
-    if (s_led_timer_id != NULL) {
-        tal_sw_timer_stop(s_led_timer_id);
-    }
+    s_led_suspended = TRUE;
     s_status_mode = LED_MODE_OFF;
     s_power_mode = LED_MODE_OFF;
     s_blink_on = FALSE;
-
+    // gpio_setup_up_down_resistor(LED_B, 2);
+    // gpio_setup_up_down_resistor(LED_G, 2);
+    // gpio_setup_up_down_resistor(CHARGE_R, 2);
+    // gpio_setup_up_down_resistor(CHARGE_G, 2);
     app_led_pulldown_input(LED_B);
     app_led_pulldown_input(LED_G);
     app_led_pulldown_input(CHARGE_R);
@@ -196,13 +209,11 @@ VOID_T app_led_prepare_sleep(VOID_T)
 
 VOID_T app_led_resume(VOID_T)
 {
-    app_led_output_init(LED_B);
-    app_led_output_init(LED_G);
-    app_led_output_init(CHARGE_R);
-    app_led_output_init(CHARGE_G);
+    app_led_init();
     s_status_mode = LED_MODE_OFF;
     s_power_mode = LED_MODE_OFF;
     s_blink_on = FALSE;
+    s_led_suspended = FALSE;
     app_led_update();
 }
 

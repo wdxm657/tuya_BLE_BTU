@@ -141,7 +141,7 @@ VOID_T app_state_init(VOID_T)
     s_dev_state = DEV_STATE_WORK;
     app_state_start_work_timer();
 
-    TAL_PR_INFO("[state] initialized");
+    // TAL_PR_INFO("[state] initialized");
 }
 
 dev_state_t app_state_get(VOID_T)
