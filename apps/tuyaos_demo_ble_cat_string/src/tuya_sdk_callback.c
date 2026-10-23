@@ -596,11 +596,10 @@ STATIC VOID_T machine_power_off_cb(VOID_T)
 {
     if (tuya_app_get_conn_handle() != 0xFFFF) {
         tuya_ble_gap_disconnect();
-        tal_system_sleep(1000);
+        tal_system_sleep(1500);
         TAL_PR_INFO("[retention] tuya_ble_gap_disconnect after 1000 ms");
     }
     tal_ble_advertising_stop();
-    tal_system_sleep(1500);
 
     app_battery_suspend();
     app_led_update();

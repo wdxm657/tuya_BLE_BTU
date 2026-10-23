@@ -189,9 +189,7 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                             TAL_PR_DEBUG("[key] short press ignored (within 1s of boot)");
                         } else {
                             // 如果USB插入时，按键短按仅负责开关机
-                            TUYA_GPIO_LEVEL_E level = 1;
-                            tal_gpio_read(USB_DET, &level);
-                            if (!level)
+                            if (app_charge_read_usb())
                             {
                                 // 如果是关机状态，则开机
                                 if (app_state_is_app_power_on())
@@ -303,12 +301,14 @@ VOID_T app_key_process(VOID_T)
         return;
     }
     irq_mask = tal_system_enter_critical();
-    pending = s_key_irq_pending;
+    // 如果USB插入时，直接读取按键IO即可
+    pending = s_key_irq_pending || app_charge_read_usb();
     s_key_irq_pending = FALSE;
     tal_system_exit_critical(irq_mask);
-    if (!pending || tal_gpio_read(APP_KEY_PIN, &level) != OPRT_OK) {
+    if ((!pending) || tal_gpio_read(APP_KEY_PIN, &level) != OPRT_OK) {
         return;
     }
+    
     if (level == TUYA_GPIO_LEVEL_LOW && !tal_sw_timer_is_running(s_app_key_timer_id)) {
         tal_sw_timer_start(s_app_key_timer_id, KEY_POLL_MS, TAL_TIMER_CYCLE);
     }

@@ -102,7 +102,7 @@ STATIC VOID_T app_state_work_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 
     app_state_set(DEV_STATE_SLEEP);
     //15分钟达到且USB未插入，进入retention低功耗休眠
-    if (s_charging || s_charge_done)
+    if (!app_charge_read_usb())
     {
         tal_cpu_allow_sleep();
     }

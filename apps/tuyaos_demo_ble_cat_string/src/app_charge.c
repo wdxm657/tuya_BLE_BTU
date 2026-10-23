@@ -30,7 +30,7 @@ STATIC VOID_T app_charge_irq_handler(VOID_T *arg)
     s_usb_irq_pending = TRUE;
 }
 
-STATIC BOOL_T app_charge_read_usb(VOID_T)
+BOOL_T app_charge_read_usb(VOID_T)
 {
     TUYA_GPIO_LEVEL_E level = TUYA_GPIO_LEVEL_HIGH;
     if (tal_gpio_read(USB_DET, &level) != OPRT_OK) {

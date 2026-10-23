@@ -196,6 +196,12 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
     UINT8_T filtered_percent;
     BOOL_T charging_or_full;
 
+    // retention休眠时不做AD采样
+    if (tkl_cpu_is_sleep())
+    {
+        return;
+    }
+
     /* 采样 */
     if (app_battery_sample(&vol_mv) != OPRT_OK) {
         return;  /* 采样失败，保持缓存值 */
