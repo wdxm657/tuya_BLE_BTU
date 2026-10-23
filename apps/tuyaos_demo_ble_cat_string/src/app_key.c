@@ -69,6 +69,12 @@ typedef enum {
 
 /* 轮询定时器 */
 STATIC TIMER_ID s_app_key_timer_id = NULL;
+STATIC volatile BOOL_T s_key_irq_pending = FALSE;
+
+STATIC VOID_T app_key_irq_handler(VOID_T *arg)
+{
+    s_key_irq_pending = TRUE;
+}
 
 /* 按键状态机状态 */
 STATIC key_state_t s_key_state = KEY_STATE_IDLE;
@@ -182,10 +188,37 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                         if (s_boot_tick_ms != 0 && (now_ms - s_boot_tick_ms) < 1000) {
                             TAL_PR_DEBUG("[key] short press ignored (within 1s of boot)");
                         } else {
-                            /* 短按松开 -> 进入低功耗 */
-                            TAL_PR_INFO("[key] short press release (%dms) -> toggle machine power",
-                                        press_duration);
-                            app_state_set_power(FALSE);
+                            // 如果USB插入时，按键短按仅负责开关机
+                            TUYA_GPIO_LEVEL_E level = 1;
+                            tal_gpio_read(USB_DET, &level);
+                            if (!level)
+                            {
+                                // 如果是关机状态，则开机
+                                if (app_state_is_app_power_on())
+                                {
+                                    app_state_set_app_power(0);
+                                }else{
+                                    app_state_set_app_power(1);
+                                }
+                            }
+                            else{
+                                // 如果按键按下时在retention休眠状态，则退出retention
+                                if (tkl_cpu_is_sleep())
+                                {
+                                    tal_cpu_force_wakeup();
+                                    app_led_resume();
+                                    // 如果是关机状态，则开机
+                                    if (!app_state_is_app_power_on())
+                                    {
+                                        app_state_set_app_power(1);
+                                    }
+                                }else{
+                                    /* 短按松开 -> 进入超低功耗 */
+                                    TAL_PR_INFO("[key] short press release (%dms) -> toggle machine power",
+                                                press_duration);
+                                    app_state_set_power(FALSE);
+                                }
+                            }
                         }
                     }
 
@@ -208,6 +241,10 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
             s_long_press_eligible = FALSE;
         } break;
     }
+
+    if (s_key_state == KEY_STATE_IDLE && level == TUYA_GPIO_LEVEL_HIGH) {
+        tal_sw_timer_stop(s_app_key_timer_id);
+    }
 }
 
 /***********************************************************************
@@ -221,9 +258,16 @@ VOID_T app_key_init(VOID_T)
         .direct = TUYA_GPIO_INPUT,
         .level  = TUYA_GPIO_LEVEL_LOW,
     };
+    TUYA_GPIO_IRQ_T irq_cfg = {
+        .mode = TUYA_GPIO_IRQ_FALL,
+        .cb = app_key_irq_handler,
+        .arg = NULL,
+    };
 
-    /* 初始化 GPIO（不进中断，纯输入轮询） */
+    /* Restore IO and the falling-edge interrupt after retention wakeup. */
     tal_gpio_init(APP_KEY_PIN, &gpio_cfg);
+    tal_gpio_irq_init(APP_KEY_PIN, &irq_cfg);
+    tal_gpio_irq_enable(APP_KEY_PIN);
 }
 
 VOID_T app_key_timer_init(VOID_T)
@@ -239,10 +283,33 @@ VOID_T app_key_timer_init(VOID_T)
     s_long_press_eligible = FALSE;
     s_boot_tick_ms       = tal_system_get_millisecond();
 
-    /* Create once on normal boot; polling remains disabled. */
-    tal_sw_timer_create(app_key_poll_handler, NULL, &s_app_key_timer_id);
-    // tal_sw_timer_start(s_app_key_timer_id, KEY_POLL_MS, TAL_TIMER_CYCLE);
+    if (tal_sw_timer_create(app_key_poll_handler, NULL, &s_app_key_timer_id) != OPRT_OK) {
+        return;
+    }
+    /* Check for a key already held at boot. */
+    s_key_irq_pending = TRUE;
 
     TAL_PR_INFO("[key] custom driver initialized (poll %dms), pin %d",
                 KEY_POLL_MS, APP_KEY_PIN);
+}
+
+VOID_T app_key_process(VOID_T)
+{
+    TUYA_GPIO_LEVEL_E level;
+    UINT32_T irq_mask;
+    BOOL_T pending;
+
+    if (s_app_key_timer_id == NULL) {
+        return;
+    }
+    irq_mask = tal_system_enter_critical();
+    pending = s_key_irq_pending;
+    s_key_irq_pending = FALSE;
+    tal_system_exit_critical(irq_mask);
+    if (!pending || tal_gpio_read(APP_KEY_PIN, &level) != OPRT_OK) {
+        return;
+    }
+    if (level == TUYA_GPIO_LEVEL_LOW && !tal_sw_timer_is_running(s_app_key_timer_id)) {
+        tal_sw_timer_start(s_app_key_timer_id, KEY_POLL_MS, TAL_TIMER_CYCLE);
+    }
 }

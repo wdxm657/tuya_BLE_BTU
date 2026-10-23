@@ -17,6 +17,7 @@
 
 #include "tal_log.h"
 #include "tal_sleep.h"
+#include "tal_system.h"
 #include "tal_sw_timer.h"
 #include "tal_rtc.h"
 #include "tal_watchdog.h"
@@ -55,6 +56,8 @@
 #define  TUYA_BLE_BULKDATA_BLOCK_SIZE 512
 #endif
 #define SHOUQUAN 0
+#define RETENTION_REPORT_INTERVAL_MS 1000U
+#define RETENTION_LOW_POWER_TIMEOUT_MS 1000U * 600
 
 /***********************************************************************
  ********************* struct ******************************************
@@ -74,6 +77,15 @@ STATIC UINT8_T s_last_switch = 0xFF;
 STATIC UINT8_T s_last_mode = 0xFF;
 STATIC UINT8_T s_last_stepless = 0xFF;
 STATIC UINT8_T s_last_work_state = 0xFF;
+
+STATIC TIMER_ID s_retention_timer_id = NULL;
+STATIC UINT32_T s_retention_start_ms = 0;
+STATIC UINT32_T s_retention_reported_seconds = 0;
+STATIC BOOL_T s_retention_tracking = FALSE;
+STATIC BOOL_T s_retention_low_power_entered = FALSE;
+STATIC volatile BOOL_T s_retention_check_pending = FALSE;
+
+extern BOOL_T tkl_cpu_is_sleep(VOID_T);
 
 /* 设备状态DP定时上报（向APP周期性通知 work_state） */
 TAL_UART_CFG_T tal_uart_cfg = {
@@ -102,13 +114,6 @@ STATIC TUYA_SLEEP_CB_T tal_sleep_cb = {
 };
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
-STATIC VOID_T tuya_pre_sleep_cb(VOID_T);
-STATIC VOID_T tuya_post_wakeup_cb(VOID_T);
-STATIC TUYA_SLEEP_CB_T tal_sleep_cb = {
-    .pre_sleep_cb = tuya_pre_sleep_cb,
-    .post_wakeup_cb = tuya_post_wakeup_cb,
-};
-
 STATIC TUYA_BLE_BULKDATA_EXTERNAL_PARAM_T tuya_ble_external_param = {
     .type = 1,
     .flag = NEED_PARSING_BY_APP,
@@ -357,29 +362,96 @@ STATIC VOID_T tuya_uart_irq_rx_cb(TUYA_UART_NUM_E port_id, VOID_T *buff, UINT16_
     }
 }
 
+STATIC VOID_T tuya_retention_timer_handler(TIMER_ID timer_id, VOID_T *arg)
+{
+    s_retention_check_pending = TRUE;
+}
+
+STATIC VOID_T tuya_retention_sleep_process(VOID_T)
+{
+    UINT32_T elapsed_ms;
+    UINT32_T elapsed_seconds;
+    OPERATE_RET ret;
+
+    if (!tkl_cpu_is_sleep()) {
+        if (s_retention_tracking) {
+            tal_sw_timer_stop(s_retention_timer_id);
+        }
+        s_retention_tracking = FALSE;
+        s_retention_low_power_entered = FALSE;
+        s_retention_check_pending = FALSE;
+        return;
+    }
+
+    if (!s_retention_check_pending || !s_retention_tracking) {
+        return;
+    }
+    s_retention_check_pending = FALSE;
+
+    elapsed_ms = (UINT32_T)tal_system_get_millisecond() - s_retention_start_ms;
+    elapsed_seconds = elapsed_ms / RETENTION_REPORT_INTERVAL_MS;
+    if (elapsed_seconds > s_retention_reported_seconds) {
+        s_retention_reported_seconds = elapsed_seconds;
+        // TAL_PR_INFO("[retention] elapsed: %us", elapsed_seconds);
+    }
+
+    if (elapsed_ms > RETENTION_LOW_POWER_TIMEOUT_MS) {
+        if (tuya_app_get_conn_handle() != 0xFFFF) {
+            tuya_ble_gap_disconnect();
+            tal_system_sleep(1000);
+            TAL_PR_INFO("[retention] tuya_ble_gap_disconnect after 1000 ms");
+        }
+        ret = tal_ble_advertising_stop();
+        if (ret != OPRT_OK) {
+            TAL_PR_WARN("[retention] stop advertising failed: %d", ret);
+            return;
+        }
+
+        tal_sw_timer_stop(s_retention_timer_id);
+        s_retention_tracking = FALSE;
+        s_retention_low_power_entered = TRUE;
+        TAL_PR_INFO("[retention] advertising stopped after %ums", elapsed_ms);
+    }
+}
+
 STATIC VOID_T tuya_pre_sleep_cb(VOID_T)
 {
+    OPERATE_RET ret;
+
     app_led_prepare_sleep();
     app_battery_suspend();
-    // TODO:进入retention低功耗时开启一个定时器，若定时器不存在
+
+    if (s_retention_tracking || s_retention_low_power_entered) {
+        return;
+    }
+
+    if (s_retention_timer_id == NULL) {
+        ret = tal_sw_timer_create(tuya_retention_timer_handler, NULL, &s_retention_timer_id);
+        if (ret != OPRT_OK) {
+            TAL_PR_ERR("[retention] timer create failed: %d", ret);
+            return;
+        }
+    }
+
+    s_retention_start_ms = (UINT32_T)tal_system_get_millisecond();
+    s_retention_reported_seconds = 0;
+    s_retention_check_pending = FALSE;
+    ret = tal_sw_timer_start(s_retention_timer_id, RETENTION_REPORT_INTERVAL_MS, TAL_TIMER_CYCLE);
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("[retention] timer start failed: %d", ret);
+        return;
+    }
+    s_retention_tracking = TRUE;
 }
 
 STATIC VOID_T tuya_post_wakeup_cb(VOID_T)
 {
-    // TODO:退出retention低功耗时每过1秒打印一下retention低功耗保持的时间,超过5秒进入超低功耗模式，即打开下面的注释即可
-    // tal_ble_advertising_stop();
+    /* Defer logging and BLE operations until peripheral recovery is complete. */
+    s_retention_check_pending = TRUE;
 }
 
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
-
-STATIC VOID_T tuya_pre_sleep_cb(VOID_T)
-{
-}
-
-STATIC VOID_T tuya_post_wakeup_cb(VOID_T)
-{
-}
 
 VOID_T tuya_ble_bulkdata_info_cb(TUYA_BLE_BULKDATA_INFO_T* info)
 {
@@ -441,7 +513,8 @@ OPERATE_RET tuya_init_second(VOID_T)
     tal_sw_timer_init();
 
     tal_ble_bt_init(TAL_BLE_ROLE_PERIPERAL, tuya_ble_evt_callback);
-
+    /* 1. 状态机（须在其他模块之前初始化） */
+    app_state_init();
     return OPRT_OK;
 }
 
@@ -472,8 +545,6 @@ OPERATE_RET tuya_init_third(VOID_T)
     };
     tkl_wakeup_source_set(&usb_wakeup_cfg);
 /* ---- 模块初始化 ---- */
-    /* 1. 状态机（须在其他模块之前初始化） */
-    app_state_init();
 
     // #if !SHOUQUAN
     // TUYA_GPIO_BASE_CFG_T output_cfg = {
@@ -507,23 +578,29 @@ OPERATE_RET tuya_init_third(VOID_T)
 
 STATIC VOID_T run_off_cb(VOID_T)
 {
-    // app_motor_stop();
-    // // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
-    // app_led_update();
+    app_motor_stop();
+    // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
+    app_led_update();
 }
 
 STATIC VOID_T run_on_cb(VOID_T)
 {
-    // if (app_state_is_charging()) {
-    //     // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_HIGH);
-    // }
-    // app_motor_start();
-    // app_led_update();
+    if (app_state_is_charging()) {
+        // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_HIGH);
+    }
+    app_motor_start();
+    app_led_update();
 }
 
 STATIC VOID_T machine_power_off_cb(VOID_T)
 {
-    // tal_ble_advertising_stop();
+    if (tuya_app_get_conn_handle() != 0xFFFF) {
+        tuya_ble_gap_disconnect();
+        tal_system_sleep(1000);
+        TAL_PR_INFO("[retention] tuya_ble_gap_disconnect after 1000 ms");
+    }
+    tal_ble_advertising_stop();
+    tal_system_sleep(1500);
 
     app_battery_suspend();
     app_led_update();
@@ -543,7 +620,10 @@ OPERATE_RET tuya_init_last(VOID_T)
     OPERATE_RET ret;
     
     app_battery_timer_init();
-
+    app_key_timer_init();
+    app_charge_timer_init();
+    app_led_timer_init();
+    app_motor_timer_init();
     // PB1 TX   PB7 RX
     #if SHOUQUAN
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
@@ -562,8 +642,8 @@ OPERATE_RET tuya_init_last(VOID_T)
     tal_ble_advertising_start(&tal_adv_param);
 
     /* ---- DP 定时上报定时器 ---- */
-    // tal_sw_timer_create(dp_report_timeout_handler, NULL, &s_dp_report_timer_id);
-    // tal_sw_timer_start(s_dp_report_timer_id, 1000, TAL_TIMER_CYCLE);
+    tal_sw_timer_create(dp_report_timeout_handler, NULL, &s_dp_report_timer_id);
+    tal_sw_timer_start(s_dp_report_timer_id, 1000, TAL_TIMER_CYCLE);
 
     /* ---- 回调注册 ---- */
 
@@ -594,7 +674,7 @@ OPERATE_RET tuya_init_last(VOID_T)
     app_product_test_init();
 #endif // APP_PRODUCT_TEST
 #endif
-    // app_led_update();
+    app_led_update();
     // tuya_ble_device_factory_reset();
     return OPRT_OK;
 }
@@ -604,6 +684,10 @@ OPERATE_RET tuya_main_loop(VOID_T)
 #if !TUYA_BLE_USE_OS
     tuya_ble_main_tasks_exec();
 #endif
+    app_key_process();
+    app_charge_process();
+
+    // tuya_retention_sleep_process();
 
     /* 状态机周期性处理（待机超时检测等） */
     app_state_process();

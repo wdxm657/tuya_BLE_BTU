@@ -67,6 +67,10 @@ STATIC VOID_T app_led_apply(VOID_T)
         app_led_write(LED_B, TRUE);
         app_led_write(LED_G, FALSE);
         break;
+    case LED_MODE_GREEN_SOLID:
+        app_led_write(LED_B, FALSE);
+        app_led_write(LED_G, TRUE);
+        break;
     case LED_MODE_BLUE_BLINK:
         app_led_write(LED_B, s_blink_on);
         app_led_write(LED_G, FALSE);
@@ -158,16 +162,22 @@ VOID_T app_led_update(VOID_T)
 
     if (app_state_is_machine_powered_on()) {
 
-         if (!app_led_is_pairing()) 
-            status_mode = LED_MODE_BLUE_SOLID;
-        else if(!app_state_is_app_power_on()) {
-            status_mode = LED_MODE_OFF;
-        } else if (app_state_get() != DEV_STATE_SLEEP) {
-            status_mode = LED_MODE_GREEN_BLINK;
+        if (tuya_app_get_conn_handle() != 0xFFFF) {
+            if(app_state_is_app_power_on()) {
+                status_mode = LED_MODE_GREEN_SOLID;
+            }
+            else{
+                status_mode = LED_MODE_BLUE_SOLID;
+            }
         }else{
-            status_mode = LED_MODE_OFF;
+            if(app_state_is_app_power_on()) {
+                status_mode = LED_MODE_GREEN_BLINK;
+            }
+            else{
+                status_mode = LED_MODE_BLUE_BLINK;
+            }
         }
-
+    
         if (app_state_is_charging()) {
             power_mode = LED_MODE_RED_SOLID;
         } else if (app_state_is_charge_done()) {

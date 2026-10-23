@@ -101,6 +101,12 @@ STATIC VOID_T app_state_work_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     }
 
     app_state_set(DEV_STATE_SLEEP);
+    //15分钟达到且USB未插入，进入retention低功耗休眠
+    if (s_charging || s_charge_done)
+    {
+        tal_cpu_allow_sleep();
+    }
+    
     if (s_sleep_timer_id != NULL) {
         tal_sw_timer_start(s_sleep_timer_id, SLEEP_PERIOD_MS, TAL_TIMER_ONCE);
     }
@@ -114,6 +120,7 @@ STATIC VOID_T app_state_sleep_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 
     s_work_sleep_cycle_count++;
     if (s_work_sleep_cycle_count >= WORK_SLEEP_CYCLES) {
+        // 5次休眠循环结束后，保持retention低功耗运行
         s_cycle_limit_reached = TRUE;
         app_state_stop_cycle_timers();
         app_state_set(DEV_STATE_SLEEP);
@@ -121,6 +128,10 @@ STATIC VOID_T app_state_sleep_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
         TAL_PR_INFO("[state] cycle limit reached, power off");
         return;
     }
+
+    // 休眠结束，强制退出retention低功耗
+    tal_cpu_force_wakeup();
+    app_led_resume();
 
     app_state_set(DEV_STATE_WORK);
     app_state_start_work_timer();
@@ -202,6 +213,7 @@ BOOL_T app_state_set_app_power(BOOL_T on)
         app_state_set(DEV_STATE_WORK);
         app_state_start_work_timer();
     } else {
+        app_state_set(DEV_STATE_SLEEP);
         app_state_stop_cycle_timers();
         app_state_notify_run_if_needed();
     }

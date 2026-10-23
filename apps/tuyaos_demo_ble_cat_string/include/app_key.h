@@ -46,8 +46,9 @@ extern "C" {
  */
 VOID_T app_key_init(VOID_T);
 
-/* Call once on normal boot, after the software timer service is ready. */
+/* Create an idle timer once on normal boot. */
 VOID_T app_key_timer_init(VOID_T);
+VOID_T app_key_process(VOID_T);
 
 
 #ifdef __cplusplus

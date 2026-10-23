@@ -6,6 +6,7 @@
 #include "tal_log.h"
 #include "tal_sw_timer.h"
 #include "tal_gpio.h"
+#include "tal_system.h"
 
 #include "board.h"
 #include "app_charge.h"
@@ -22,6 +23,12 @@ typedef enum {
 
 STATIC TIMER_ID s_charge_timer_id = NULL;
 STATIC charge_state_t s_charge_state = CHG_STATE_NO_USB;
+STATIC volatile BOOL_T s_usb_irq_pending = FALSE;
+
+STATIC VOID_T app_charge_irq_handler(VOID_T *arg)
+{
+    s_usb_irq_pending = TRUE;
+}
 
 STATIC BOOL_T app_charge_read_usb(VOID_T)
 {
@@ -80,6 +87,9 @@ STATIC VOID_T app_charge_poll_handler(TIMER_ID timer_id, VOID_T *arg)
         TAL_PR_INFO("[charge] %d -> %d", s_charge_state, new_state);
         app_charge_apply_state(new_state);
     }
+    if (!usb) {
+        tal_sw_timer_stop(s_charge_timer_id);
+    }
 }
 
 VOID_T app_charge_init(VOID_T)
@@ -94,6 +104,11 @@ VOID_T app_charge_init(VOID_T)
         .direct = TUYA_GPIO_OUTPUT,
         .level = TUYA_GPIO_LEVEL_HIGH,
     };
+    TUYA_GPIO_IRQ_T irq_cfg = {
+        .mode = TUYA_GPIO_IRQ_RISE_FALL,
+        .cb = app_charge_irq_handler,
+        .arg = NULL,
+    };
 
     tal_gpio_init(USB_DET, &input_cfg);
     tal_gpio_init(CHARGE_STATE, &input_cfg);
@@ -102,6 +117,8 @@ VOID_T app_charge_init(VOID_T)
 
     tal_gpio_write(CHARGE_EN, TUYA_GPIO_LEVEL_HIGH);
     // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
+    tal_gpio_irq_init(USB_DET, &irq_cfg);
+    tal_gpio_irq_enable(USB_DET);
 }
 
 VOID_T app_charge_timer_init(VOID_T)
@@ -114,8 +131,40 @@ VOID_T app_charge_timer_init(VOID_T)
     if (tal_sw_timer_create(app_charge_poll_handler, NULL, &s_charge_timer_id) != OPRT_OK) {
         return;
     }
-    app_charge_poll_handler(s_charge_timer_id, NULL);
-    tal_sw_timer_start(s_charge_timer_id, CHARGE_POLL_MS, TAL_TIMER_CYCLE);
+    /* Check for USB already connected at boot. */
+    s_usb_irq_pending = TRUE;
+}
+
+VOID_T app_charge_process(VOID_T)
+{
+    UINT32_T irq_mask;
+    BOOL_T pending;
+
+    if (s_charge_timer_id == NULL) {
+        return;
+    }
+    irq_mask = tal_system_enter_critical();
+    pending = s_usb_irq_pending;
+    s_usb_irq_pending = FALSE;
+    tal_system_exit_critical(irq_mask);
+    if (!pending) {
+        return;
+    }
+
+    if (app_charge_read_usb()) {
+        // usb 插入时不进retention低功耗,若在低功耗则退出
+        if (tkl_cpu_is_sleep())
+        {
+            tal_cpu_force_wakeup();
+            app_led_resume();
+        }
+        if (!tal_sw_timer_is_running(s_charge_timer_id)) {
+            tal_sw_timer_start(s_charge_timer_id, CHARGE_POLL_MS, TAL_TIMER_CYCLE);
+        }
+    } else {
+        tal_sw_timer_stop(s_charge_timer_id);
+        app_charge_apply_state(CHG_STATE_NO_USB);
+    }
 }
 
 BOOL_T app_charge_is_detected(VOID_T)
