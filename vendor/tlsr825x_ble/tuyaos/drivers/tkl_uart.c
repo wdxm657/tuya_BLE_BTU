@@ -26,6 +26,7 @@
 
 #if FAQIUJI
     #define SHOUQUAN 0
+    // #define SHOUQUAN 1
     #if SHOUQUAN
     #define TKL_UART_TX_PIN_ID       9     // GPIO_PB1
     #define TKL_UART_RX_PIN_ID       15    // GPIO_PB7

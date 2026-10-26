@@ -110,7 +110,7 @@ _attribute_ram_code_ STATIC VOID_T app_power_management (VOID_T)
 #if (PM_DEEPSLEEP_RETENTION_ENABLE)
         if(tkl_ble_state == TY_BLE_STA_IDLE) {
             bls_pm_setWakeupSource(PM_WAKEUP_PAD);
-            cpu_sleep_wakeup(SUSPEND_MODE, PM_WAKEUP_PAD, 0);
+            cpu_sleep_wakeup(DEEPSLEEP_MODE, PM_WAKEUP_PAD, 0);
 
             // if(tkl_sw_timer_next_tick > 0){
             //     if (tkl_board_state_suspend) {
