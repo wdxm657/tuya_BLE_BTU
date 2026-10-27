@@ -64,6 +64,10 @@ UINT32_T tuya_ble_attach_ota_port_info_save(VOID_T);
  */
 UINT32_T tuya_ble_attach_ota_port_info_load(VOID_T);
 
+#if defined(FAQIUJI) && (FAQIUJI == 1)
+VOID_T tuya_ble_attach_ota_port_process(VOID_T);
+#endif
+
 /**
  * @brief tuya_ble_attach_ota_port_start_notify
  *

@@ -9,6 +9,7 @@
 #define FAQIUJI_CMD_OTA_END    0x33U
 #define FAQIUJI_CMD_OTA_ABORT  0x34U
 #define FAQIUJI_CMD_OTA_REBOOT 0x35U
+#define FAQIUJI_OTA_PROTOCOL_VERSION 2U
 
 void faqiuji_ota_handle(const FAQIUJI_FRAME_T *frame);
 void faqiuji_ota_poll(void);

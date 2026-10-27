@@ -37,7 +37,6 @@
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 #include "tuya_ble_bulkdata_demo.h"
 #endif
-
 #include "app_config.h"
 #include "app_dp_parser.h"
 #include "faqiuji_mcu_protocol.h"
@@ -390,8 +389,9 @@ OPERATE_RET tuya_init_last(VOID_T)
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
 
     (VOID_T)faqiuji_mcu_protocol_init();
-    tuya_ble_protocol_init();
     tal_uart_rx_reg_irq_cb(TUYA_UART_NUM_0, tuya_uart_irq_rx_cb);
+
+    tuya_ble_protocol_init();
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
     tal_sdk_test_init();

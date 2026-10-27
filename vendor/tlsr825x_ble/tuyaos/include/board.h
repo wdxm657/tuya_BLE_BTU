@@ -205,6 +205,7 @@ extern unsigned int ota_program_offset;
 #define USER_FLASH_ADDR_FAQIUJI            (0x3E000)
 
 #define TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE 1
+#define TUYA_BLE_ATTACH_OTA_PORT_NUM      (10)
 // PIN
 // #ifndef BOARD_POWER_ON_PIN
 // #define BOARD_POWER_ON_PIN                      (TUYA_GPIO_NUM_31) // D7 无用 测试引脚

@@ -453,6 +453,11 @@
               <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_gpio.c</FilePath>
             </File>
             <File>
+              <FileName>py32f040_hal_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_flash.c</FilePath>
+            </File>
+            <File>
               <FileName>py32f040_hal_rcc.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\resource\PY32F040_IAP_APP_Firmware\Drivers\PY32F040_HAL_Driver\Src\py32f040_hal_rcc.c</FilePath>

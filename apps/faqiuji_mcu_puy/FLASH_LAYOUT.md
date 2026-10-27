@@ -5,10 +5,10 @@ Flash, 256-byte program pages, and 8 KB erase sectors.
 
 | Region | Start | End | Size |
 | --- | ---: | ---: | ---: |
-| IAP | `0x08000000` | `0x08002000` | 8 KB |
-| APP A | `0x08002000` | `0x0800E000` | 48 KB |
-| APP B | `0x0800E000` | `0x0801A000` | 48 KB |
-| OTA metadata | `0x0801A000` | `0x0801E000` | 16 KB |
+| IAP | `0x08000000` | `0x08004000` | 16 KB |
+| APP A (execution) | `0x08004000` | `0x08010000` | 48 KB |
+| APP B (download) | `0x08010000` | `0x0801C000` | 48 KB |
+| OTA metadata | `0x0801C000` | `0x0801E000` | 8 KB |
 | Reserved configuration | `0x0801E000` | `0x08020000` | 8 KB |
 
 The canonical definitions and compile-time boundary checks are in
@@ -16,20 +16,19 @@ The canonical definitions and compile-time boundary checks are in
 
 ## Image Layout
 
-APP A and APP B are linked separately because their vector tables and code use
-absolute addresses. Keil projects are:
+All released firmware is linked for APP A. Keil projects are:
 
-- `faqiuji_mcu/MDK-ARM/Project.uvprojx`: APP A, link base `0x08002000`.
-- `faqiuji_mcu/MDK-ARM/Project_APP_B.uvprojx`: APP B, link base `0x0800E000`.
-- `faqiuji_bootloader/MDK-ARM/Project.uvprojx`: IAP, link base `0x08000000`.
+- `faqiuji_mcu/MDK-ARM/Project.uvprojx`: APP, link base `0x08004000`.
+- `faqiuji_iap/MDK-ARM/Project.uvprojx`: IAP, link base `0x08000000`.
 
-Build and package the matching slot image; an A-linked binary cannot be
-installed into B (or vice versa). `FAQIUJI_APP_VERSION` is the version reported
-by the currently running build and should be updated for releases.
+Publish `FAQIUJI_APP_A.bin` for every device. B stores the downloaded A-linked
+image and is never executed. The old APP B project is no longer a release
+target. Update the major/minor/patch macros for each release.
 
 ## Metadata and Selection
 
-Each slot owns one 8 KB metadata sector. The first three pages are reserved:
+Each area owns one 4 KB half of the 8 KB metadata region. The first three pages
+are reserved:
 
 | Page | Use |
 | --- | --- |
@@ -41,19 +40,22 @@ The descriptor contains magic, slot base, image size, image CRC32, version,
 generation, and a CRC32 over the descriptor fields. Image CRC32 is reflected
 IEEE CRC32 (`0xEDB88320`, initial and final XOR `0xFFFFFFFF`).
 
-The APP updater writes only the inactive slot. It first invalidates that slot's
-old descriptor, writes image pages, verifies image CRC and vectors, and writes
-the new descriptor last. IAP performs no OTA receive or Flash writes. At reset
-it validates committed descriptors, chooses the valid slot with the newest
-generation, and jumps to it. An untouched factory APP A with sane vectors may
+The APP updater writes only B. It invalidates B's descriptor, writes pages,
+verifies CRC and A-linked vectors, and commits a staged descriptor
+(`FAQIUJI_STAGED_IMAGE_MAGIC`). At reset IAP validates B and, if newer than A,
+sets A's permanent guard, invalidates A's descriptor, and copies B to A. It
+checks every programmed page and the complete A CRC, then commits A's normal
+descriptor last. B and its descriptor remain intact throughout installation;
+power loss causes installation to restart on the next boot. An A record of
+the same generation prevents unnecessary copying. IAP only jumps to A.
+An untouched factory APP A with sane vectors may
 be used only while its metadata pages, including the permanent guard, are
 erased. This supports first programming from a factory APP A image without
 pretending that it has an OTA CRC descriptor.
 
-Power loss or a failed update leaves the other slot's committed image intact.
-This is integrity fallback, not an application-health rollback: once an image
-has passed CRC/vector checks and is committed, a later runtime fault does not
-automatically restore the older version.
+Download failure leaves A intact. Once installation starts, B is the recovery
+source; the previous A image is overwritten. This provides installation
+recovery, not runtime health rollback.
 
 The last 8 KB is reserved for future PUYA-side configuration storage; this
 implementation does not write it. TUYA's own saved DP configuration remains
@@ -64,8 +66,9 @@ separate.
 IAP initializes only USART1 on PB8 TX / PB9 RX, AF9, 115200 8N1. It transmits
 the existing framed `DEBUG_STRING` (`CMD 0x22`) messages for boot, slot
 validation, and jump diagnostics. IAP does not receive OTA commands over UART.
-APP OTA data is handled by the APP protocol; the future TUYA attachment-OTA
-port must forward those commands over this UART while the APP is running.
+APP OTA data is handled by the APP protocol; TUYA attachment channel 10 forwards
+these commands while APP A is running. INFO protocol version 2 identifies the
+unified-image receiver.
 
 If IAP cannot find an eligible image, it repeats a debug log and waits. It has
 no serial recovery/update mode; recovery then requires SWD or another
@@ -73,11 +76,10 @@ programming method.
 
 ## Build and Flashing
 
-Use the Keil projects listed above. The helper
-`tools/update_keil_projects.ps1` verifies project source paths and Flash
-regions; it does not compile firmware. Flash IAP and an initial APP A image
-through SWD/programmer. Subsequent APP images are installed into the inactive
-slot through APP OTA.
+Use the Keil projects listed above. Flash the new IAP and an initial APP A
+through SWD/programmer before enabling this OTA flow. An old IAP cannot install
+staged descriptors. Subsequent releases use the same A-linked image: download
+to B through APP OTA, then install to A at reset.
 
 Do not download an APP A HEX as if it were an APP B image. Do not erase the
 entire chip during an APP-only update because that also destroys IAP, both

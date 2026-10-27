@@ -93,7 +93,7 @@ static uint8_t flush_page(void)
 static uint8_t begin(const FAQIUJI_FRAME_T *frame)
 {
   FAQIUJI_IMAGE_T current;
-  uint32_t base, size, meta, i;
+  uint32_t base, size, meta;
   if (frame->len != 16U) {
     return FAQIUJI_STATUS_BAD_LENGTH;
   }
@@ -107,8 +107,7 @@ static uint8_t begin(const FAQIUJI_FRAME_T *frame)
     }
     return FAQIUJI_STATUS_BUSY;
   }
-  if (base != (FAQIUJI_APP_BASE == FAQIUJI_FLASH_APP_A_BASE ?
-              FAQIUJI_FLASH_APP_B_BASE : FAQIUJI_FLASH_APP_A_BASE) ||
+  if (base != FAQIUJI_FLASH_APP_B_BASE ||
       size < 8U || size > FAQIUJI_FLASH_APP_A_SIZE) {
     return FAQIUJI_STATUS_BAD_PAYLOAD;
   }
@@ -127,23 +126,6 @@ static uint8_t begin(const FAQIUJI_FRAME_T *frame)
   faqiuji_device_set_enabled(0U);
   faqiuji_launcher_stop();
   meta = faqiuji_image_meta(base);
-  if (base == FAQIUJI_FLASH_APP_A_BASE) {
-    /* Keep factory fallback disabled across repeated interrupted A updates. */
-    for (i = 0U; i < FAQIUJI_FLASH_PAGE_SIZE; i += 4U) {
-      if (*(const volatile uint32_t *)(meta +
-          FAQIUJI_META_FACTORY_GUARD_OFFSET + i) != 0xFFFFFFFFUL) {
-        break;
-      }
-    }
-    if (i == FAQIUJI_FLASH_PAGE_SIZE) {
-      memset(sg_ota.page, 0xFF, sizeof(sg_ota.page));
-      sg_ota.page[0] = FAQIUJI_UPDATE_MARKER;
-      if (program_page(meta + FAQIUJI_META_FACTORY_GUARD_OFFSET) != HAL_OK) {
-        sg_ota.active = 0U;
-        return OTA_FLASH_ERROR;
-      }
-    }
-  }
   /*
    * Remove the old commit before invalidating the slot. The image is still
    * untouched if power fails here. Never erase the running slot's metadata.
@@ -160,8 +142,6 @@ static uint8_t begin(const FAQIUJI_FRAME_T *frame)
     return OTA_FLASH_ERROR;
   }
   memset(sg_ota.page, 0xFF, sizeof(sg_ota.page));
-  faqiuji_protocol_debug_string("OTA begin base=%08lX size=%lu",
-                                (unsigned long)base, (unsigned long)size);
   return FAQIUJI_STATUS_OK;
 }
 
@@ -225,12 +205,13 @@ static uint8_t finish(void)
     sg_ota.active = 0U;
     return OTA_FLASH_ERROR;
   }
-  if (!faqiuji_image_vectors_valid(sg_ota.base, sg_ota.size) ||
+  if (!faqiuji_image_vectors_valid_at(sg_ota.base,
+                                     FAQIUJI_FLASH_APP_A_BASE, sg_ota.size) ||
       faqiuji_crc32((const void *)sg_ota.base, sg_ota.size) != sg_ota.crc) {
     sg_ota.active = 0U;
     return OTA_CRC_ERROR;
   }
-  record.magic = FAQIUJI_IMAGE_MAGIC;
+  record.magic = FAQIUJI_STAGED_IMAGE_MAGIC;
   record.base = sg_ota.base;
   record.size = sg_ota.size;
   record.crc32 = sg_ota.crc;
@@ -247,7 +228,6 @@ static uint8_t finish(void)
   }
   sg_ota.active = 0U;
   sg_ota.ready = 1U;
-  faqiuji_protocol_debug_string("OTA verified; reboot command required");
   return FAQIUJI_STATUS_OK;
 }
 
@@ -255,6 +235,8 @@ void faqiuji_ota_handle(const FAQIUJI_FRAME_T *frame)
 {
   uint8_t reply[24] = {0};
   uint8_t length = 5U;
+  uint32_t finish_tick = 0U;
+  uint8_t finish_new = 0U;
   if (frame->cmd == FAQIUJI_CMD_OTA_INFO) {
     if (frame->len != 0U) {
       reply[0] = FAQIUJI_STATUS_BAD_LENGTH;
@@ -264,10 +246,9 @@ void faqiuji_ota_handle(const FAQIUJI_FRAME_T *frame)
       if (faqiuji_image_record(FAQIUJI_APP_BASE, &current)) {
         version = current.version;
       }
-      reply[1] = 1U;
+      reply[1] = FAQIUJI_OTA_PROTOCOL_VERSION;
       write32(reply + 2U, FAQIUJI_APP_BASE);
-      write32(reply + 6U, FAQIUJI_APP_BASE == FAQIUJI_FLASH_APP_A_BASE ?
-                           FAQIUJI_FLASH_APP_B_BASE : FAQIUJI_FLASH_APP_A_BASE);
+      write32(reply + 6U, FAQIUJI_FLASH_APP_B_BASE);
       write32(reply + 10U, FAQIUJI_FLASH_APP_A_SIZE);
       write32(reply + 14U, version);
       reply[18] = FAQIUJI_MAX_PAYLOAD - 4U;
@@ -282,7 +263,10 @@ void faqiuji_ota_handle(const FAQIUJI_FRAME_T *frame)
   } else if (frame->len != 0U) {
     reply[0] = FAQIUJI_STATUS_BAD_LENGTH;
   } else if (frame->cmd == FAQIUJI_CMD_OTA_END) {
+    finish_tick = HAL_GetTick();
+    finish_new = !sg_ota.ready;
     reply[0] = finish();
+    finish_tick = HAL_GetTick() - finish_tick;
   } else if (frame->cmd == FAQIUJI_CMD_OTA_ABORT) {
     /* A committed slot cannot be cancelled without erasing its commit. */
     if (sg_ota.ready &&
@@ -312,6 +296,16 @@ void faqiuji_ota_handle(const FAQIUJI_FRAME_T *frame)
   }
   faqiuji_protocol_send(frame->cmd | FAQIUJI_RESPONSE_FLAG, frame->seq,
                          reply, length);
+  /* Send the transaction ACK before diagnostic traffic on the shared UART. */
+  if (reply[0] == FAQIUJI_STATUS_OK && frame->cmd == FAQIUJI_CMD_OTA_BEGIN) {
+    faqiuji_protocol_debug_string("OTA begin base=%08lX size=%lu",
+                                  (unsigned long)sg_ota.base,
+                                  (unsigned long)sg_ota.size);
+  }
+  if (finish_new) {
+    faqiuji_protocol_debug_string("OTA END status=%u verify=%lu ms",
+                                  reply[0], (unsigned long)finish_tick);
+  }
 }
 
 void faqiuji_ota_poll(void)

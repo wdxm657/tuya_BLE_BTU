@@ -40,13 +40,22 @@
 #define FAQIUJI_META_FACTORY_GUARD_OFFSET  (2U * FAQIUJI_FLASH_PAGE_SIZE)
 
 #if defined(FAQIUJI_APP_SLOT_B)
-#define FAQIUJI_APP_BASE                   FAQIUJI_FLASH_APP_B_BASE
-#else
+#error "Unified OTA firmware must run from APP A; APP B is download storage"
+#endif
 #define FAQIUJI_APP_BASE                   FAQIUJI_FLASH_APP_A_BASE
+#define FAQIUJI_APP_VERSION_MAJOR          1
+#define FAQIUJI_APP_VERSION_MINOR          0
+#define FAQIUJI_APP_VERSION_PATCH          2
+
+#if (FAQIUJI_APP_VERSION_MAJOR < 0) || (FAQIUJI_APP_VERSION_MAJOR > 255) || \
+    (FAQIUJI_APP_VERSION_MINOR < 0) || (FAQIUJI_APP_VERSION_MINOR > 255) || \
+    (FAQIUJI_APP_VERSION_PATCH < 0) || (FAQIUJI_APP_VERSION_PATCH > 255)
+#error "Firmware version components must be in the range 0..255"
 #endif
-#ifndef FAQIUJI_APP_VERSION
-#define FAQIUJI_APP_VERSION                0x00010000UL
-#endif
+/* Tuya uses three bytes: major.minor.patch, e.g. 1.0.0 = 0x010000. */
+#define FAQIUJI_APP_VERSION                ((FAQIUJI_APP_VERSION_MAJOR * 0x10000UL) | \
+                                           (FAQIUJI_APP_VERSION_MINOR * 0x100UL) | \
+                                            FAQIUJI_APP_VERSION_PATCH)
 
 #if (FAQIUJI_FLASH_BOOT_BASE != FAQIUJI_FLASH_BASE) || \
     (FAQIUJI_FLASH_APP_A_BASE != FAQIUJI_FLASH_BOOT_END) || \

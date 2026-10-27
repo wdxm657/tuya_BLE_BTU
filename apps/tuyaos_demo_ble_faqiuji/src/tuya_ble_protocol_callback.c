@@ -22,6 +22,7 @@
 #include "tuya_ble_api.h"
 #include "tuya_ble_ota.h"
 #include "tuya_ble_attach_ota.h"
+#include "tuya_ble_attach_ota_port.h"
 #include "tuya_ble_bulkdata_demo.h"
 #include "tuya_ble_protocol_callback.h"
 #include "tuya_ble_main.h"
@@ -77,6 +78,12 @@ STATIC VOID_T tuya_ble_protocol_callback(tuya_ble_cb_evt_param_t* event)
                 TAL_PR_INFO("bonding and connecting");
 
                 tuya_ble_update_conn_param_timer_start();
+#if defined(TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE) && (TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE == 1)
+                if (tuya_ble_attach_ota_get_status() == -1) {
+                    TUYA_OTA_FIRMWARE_INFO_T *info;
+                    tuya_ble_attach_ota_port_get_old_firmware_info(&info);
+                }
+#endif
             }
         } break;
 
@@ -150,8 +157,7 @@ STATIC VOID_T tuya_ble_protocol_callback(tuya_ble_cb_evt_param_t* event)
 #if defined(TUYA_BLE_FEATURE_OTA_ENABLE) && (TUYA_BLE_FEATURE_OTA_ENABLE == 1)
                 tuya_ble_ota_handler(&event->ota_data);
 #endif
-            } else if (ota_channel == 1U ||
-                       (ota_channel >= 10U && ota_channel <= 19U)) {
+            } else if (ota_channel == 10U) {
 #if defined(TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE) && (TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE == 1)
                 tuya_ble_attach_ota_handler(&event->ota_data);
 #endif

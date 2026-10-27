@@ -70,22 +70,23 @@ TUYA 端使用 `TAL_PR_INFO` 输出为 `MCU DEBUG: ...`。格式化后的字符�
 
 ## PUYA APP OTA
 
-OTA 命令仅由运行中的 PUYA APP 处理，IAP 不接收或写入 OTA 数据。TUYA
-附件 OTA 转发尚未接入；本节定义 PUYA UART 侧的传输合同，供后续 TUYA port
-实现使用。
+OTA 命令仅由运行中的 PUYA APP 处理，IAP 不接收串口 OTA 数据。TUYA 端
+将 APP 附件 OTA 通道 10 的固件流通过本节 UART 协议转发到 PUYA。
 
 多字节整数均为小端。OTA DATA 使用 stop-and-wait：下一包的 offset 必须等于
 已接收字节数；完整重复的包仅在内容与已接收数据完全相同才视为成功，便于
 发送端在 ACK 丢失后重试。每包最多 60 字节图像数据，因此请求 payload 不超过
-64 字节。图像大小最多 48 KB，APP A/B 镜像必须分别链接到各自槽地址。
+64 字节。图像大小最多 48 KB，所有发布固件统一链接到 A 区 `0x08004000`。
+APP 始终在 A 区运行，下载只写 B 区 `0x08010000`；IAP 重启后将校验完整的
+B 区镜像安装到 A 区，再启动 A。B 区不执行固件。
 
 `OTA_INFO` 成功响应的 payload 长 24 字节：
 
 ```text
 0 status (0=OK)
-1 protocol version (1)
+1 protocol version (2: unified image, A execution / B download)
 2..5 running slot base
-6..9 inactive slot base
+6..9 download area base (B, 0x08010000)
 10..13 slot capacity
 14..17 running APP version
 18 max OTA_DATA image bytes (60)
@@ -99,14 +100,16 @@ OTA 命令仅由运行中的 PUYA APP 处理，IAP 不接收或写入 OTA 数据
 不同参数的 BEGIN 在会话期间返回 BUSY。活动传输 30 秒无成功 BEGIN/DATA
 后超时，未提交槽不参与启动。
 
-推荐主机流程：查询 INFO，确认目标为 inactive slot 并核对固件链接地址；
+推荐主机流程：查询 INFO，确认协议版本为 2、运行区为 A、下载区为 B；
 发送 BEGIN；按 60 字节以内严格连续下发 DATA，每包等待相同 SEQ 的应答；
 发送 END 并确认成功；再单独发送 REBOOT。ACK 丢失时使用原 SEQ 和原 payload
 重试。ABORT 撤销已提交但尚未重启的新槽。写入、CRC 校验和入口向量检查通过
-后才提交启动记录。旧槽不会因下载失败而擦除。
+后才提交 B 区待安装记录。下载失败时 A 不会被擦除。IAP 安装时保留 B 镜像和
+记录，复制后验证 A 的 CRC 并最后提交 A 的启动记录；安装中断电后重新安装。
+成功安装后保留 B，A 的同代有效记录可避免重复安装。
 
 APP A 的 OTA metadata 第三页是永久 factory-fallback guard。第一次把 A 作为
-备用槽更新时会置位；不可擦除这页作为常规清理操作，否则空 metadata 下的
+运行区安装新固件前由 IAP 置位；不可擦除这页作为常规清理操作，否则空 metadata 下的
 工厂向量回退判断可能再次生效。
 
 状态码：

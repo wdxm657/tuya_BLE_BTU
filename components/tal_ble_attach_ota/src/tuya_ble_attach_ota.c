@@ -28,6 +28,7 @@
 #include "tuya_ble_api.h" //tuya_ble_ota_response
 #include "tuya_ble_attach_ota.h"
 #include "tuya_ble_attach_ota_port.h"
+#include "tuya_ble_ota.h"
 #include "tuya_ble_main.h"
 #include "tuya_ble_secure.h"
 #include "tbs_crypto_micro_ecc.h"
@@ -201,9 +202,16 @@ STATIC UINT32_T tuya_ble_attach_ota_enter(VOID_T)
     conn_param.connection_timeout = 0;
     tal_ble_conn_param_update(peer_info, &conn_param);
 
-    tuya_ble_attach_ota_port_start_notify(0, TUYA_OTA_FULL, TUYA_OTA_PATH_BLE);
-
-    return OPRT_OK;
+#if defined(TUYA_BLE_OTA_SIGNATURE_ENABLE) && (TUYA_BLE_OTA_SIGNATURE_ENABLE == 1)
+    memset(&sg_attach_signature_data, 0, sizeof(sg_attach_signature_data));
+#if defined(FAQIUJI) && (FAQIUJI == 1)
+    if (tuya_ble_ota_sha256_create_init(&sg_attach_ctx) != OPRT_OK ||
+        tuya_ble_ota_sha256_starts_ret(sg_attach_ctx, 0) != OPRT_OK) {
+        return OPRT_COM_ERROR;
+    }
+#endif
+#endif
+    return tuya_ble_attach_ota_port_start_notify(0, TUYA_OTA_FULL, TUYA_OTA_PATH_BLE);
 }
 
 STATIC UINT32_T tuya_ble_attach_ota_exit(VOID_T)
@@ -213,6 +221,12 @@ STATIC UINT32_T tuya_ble_attach_ota_exit(VOID_T)
     }
 
     sg_attach_ota_state = TUYA_BLE_ATTACH_OTA_STATE_UNKNOWN;
+#if defined(FAQIUJI) && (FAQIUJI == 1) && (TUYA_BLE_OTA_SIGNATURE_ENABLE == 1)
+    if (sg_attach_ctx != NULL) {
+        tuya_ble_ota_sha256_free(sg_attach_ctx);
+        sg_attach_ctx = NULL;
+    }
+#endif
 
     return OPRT_OK;
 }
@@ -261,7 +275,15 @@ STATIC UINT32_T tuya_ble_attach_ota_req_handler(UINT8_T* cmd, UINT16_T cmd_size,
 
     tuya_ble_attach_ota_pri_param.p_attach_ota_idx = &sg_attach_ota_idx;
 
-    tuya_ble_attach_ota_enter();
+    if (sg_attach_ota_idx >= TUYA_BLE_ATTACH_OTA_PORT_NUM ||
+        tuya_ble_attach_ota_enter() != OPRT_OK) {
+        tuya_ble_attach_ota_req_rsp_t refused = {0};
+        refused.flag = 1;
+        refused.type = sg_attach_ota_type;
+        tuya_ble_attach_ota_rsp(rsp, &refused, SIZEOF(refused));
+        tuya_ble_attach_ota_exit();
+        return OPRT_COM_ERROR;
+    }
 
     tuya_ble_attach_ota_req_rsp_t req_rsp = {0};
     req_rsp.flag = 0; //accept ota
@@ -271,10 +293,12 @@ STATIC UINT32_T tuya_ble_attach_ota_req_handler(UINT8_T* cmd, UINT16_T cmd_size,
     tal_util_reverse_byte((VOID_T*)&req_rsp.version, SIZEOF(UINT32_T));
     req_rsp.package_maxlen = TUYA_BLE_ATTACH_OTA_PKG_LEN;
     tal_util_reverse_byte((VOID_T*)&req_rsp.package_maxlen, SIZEOF(UINT16_T));
+#if defined(TUYA_BLE_OTA_SIGNATURE_ENABLE) && (TUYA_BLE_OTA_SIGNATURE_ENABLE == 1)
     req_rsp.flag2 = 0x01; // bit0 = 1, support signature_algorithm
     req_rsp.sign_info_len = 2;
     req_rsp.sign_info_data.signature_algorithm = 1;
     req_rsp.sign_info_data.key_version = sg_signature_key_info.key_version;
+#endif
     tuya_ble_attach_ota_rsp(rsp, &req_rsp, SIZEOF(tuya_ble_attach_ota_req_rsp_t));
 
     sg_attach_ota_state = TUYA_BLE_OTA_FILE_INFO;
@@ -433,9 +457,20 @@ STATIC UINT32_T tuya_ble_attach_ota_data_handler(UINT8_T* cmd, UINT16_T cmd_size
 
             tal_ota_data.pri_data = &tuya_ble_attach_ota_pri_param;
 
-            if (tuya_ble_attach_ota_port_data_process(&tal_ota_data, NULL) != OPRT_OK) {
+            OPERATE_RET port_ret = tuya_ble_attach_ota_port_data_process(&tal_ota_data, NULL);
+            if (port_ret != OPRT_OK) {
+                TAL_PR_ERR("attachment OTA port failed: ret=%d offset=%u len=%u",
+                           port_ret, tal_ota_data.offset, tal_ota_data.len);
                 ota_data_rsp.state = 4; //unknow error
             }
+#if defined(FAQIUJI) && (FAQIUJI == 1) && (TUYA_BLE_OTA_SIGNATURE_ENABLE == 1)
+            if (ota_data_rsp.state == 0 &&
+                tuya_ble_ota_sha256_update_ret(sg_attach_ctx, tal_ota_data.data,
+                                              tal_ota_data.len) != OPRT_OK) {
+                TAL_PR_ERR("attachment OTA SHA256 update failed");
+                ota_data_rsp.state = 4;
+            }
+#endif
 
             tal_free(tal_ota_data.data);
         } else {
@@ -443,16 +478,16 @@ STATIC UINT32_T tuya_ble_attach_ota_data_handler(UINT8_T* cmd, UINT16_T cmd_size
             ota_data_rsp.state = 4; //unknow error
         }
 
-        sg_attach_data_offset += ota_data->len;
-
-        if (sg_attach_data_offset < sg_attach_firmware_len) {
-            sg_attach_ota_state = TUYA_BLE_OTA_DATA;
-        } else if (sg_attach_data_offset == sg_attach_firmware_len) {
-            sg_attach_ota_state = TUYA_BLE_OTA_END;
+        if (ota_data_rsp.state == 0) {
+            sg_attach_data_offset += ota_data->len;
+            if (sg_attach_data_offset < sg_attach_firmware_len) {
+                sg_attach_ota_state = TUYA_BLE_OTA_DATA;
+            } else if (sg_attach_data_offset == sg_attach_firmware_len) {
+                sg_attach_ota_state = TUYA_BLE_OTA_END;
+            }
+            sg_attach_data_package_id++;
+            TAL_PR_INFO("sg_attach_data_package_id: %d", sg_attach_data_package_id);
         }
-
-        sg_attach_data_package_id++;
-        TAL_PR_INFO("sg_attach_data_package_id: %d", sg_attach_data_package_id);
     }
 
     tuya_ble_attach_ota_rsp(rsp, &ota_data_rsp, SIZEOF(tuya_ble_attach_ota_data_rsp_t));
@@ -492,15 +527,31 @@ STATIC UINT32_T tuya_ble_attach_ota_end_handler(UINT8_T* cmd, UINT16_T cmd_size,
     tuya_ble_attach_ota_end_rsp_t end_rsp = {0};
     end_rsp.type = sg_attach_ota_type;
 
-    UINT32_T ret = tuya_ble_attach_ota_port_end_notify(TRUE);
+    UINT32_T ret;
+#if defined(FAQIUJI) && (FAQIUJI == 1) && (TUYA_BLE_OTA_SIGNATURE_ENABLE == 1)
+    /* Verify forwarded bytes before PUYA commits or reboots. */
+    if (sg_attach_signature_data.signature_len != 0 &&
+        tuya_ble_attach_ota_get_signature_in_flash() != OPRT_OK) {
+        end_rsp.state = 3;
+        tuya_ble_attach_ota_rsp(rsp, &end_rsp, SIZEOF(end_rsp));
+        tuya_ble_attach_ota_exit();
+        return OPRT_COM_ERROR;
+    }
+#endif
+    ret = tuya_ble_attach_ota_port_end_notify(TRUE);
     if (ret == 1) {
         end_rsp.state = 1; //total size error
     } else if (ret == 2) {
         end_rsp.state = 2; //crc error
+    } else if (ret != OPRT_OK) {
+        end_rsp.state = 3;
     } else {
 #if defined(TUYA_BLE_OTA_SIGNATURE_ENABLE) && (TUYA_BLE_OTA_SIGNATURE_ENABLE == 1)
         if (sg_attach_signature_data.signature_len != 0) {
-            uint32_t verify_ret = tuya_ble_attach_ota_get_signature_in_flash();
+            uint32_t verify_ret = 0;
+#if !defined(FAQIUJI) || (FAQIUJI != 1)
+            verify_ret = tuya_ble_attach_ota_get_signature_in_flash();
+#endif
             if (verify_ret == 0) {
                 end_rsp.state = 0;
 
@@ -557,7 +608,7 @@ STATIC UINT32_T tuya_ble_attach_ota_signature_data_handler(UINT8_T* cmd, UINT16_
         TAL_PR_ERR("%s ota_state error: %d", __FUNCTION__, sg_attach_ota_state);
 
         tuya_ble_attach_ota_signature_data_rsp_t signature_data_rsp = {0};
-        signature_data_rsp.type = 0;
+        signature_data_rsp.type = sg_attach_ota_type;
         signature_data_rsp.state = 3; //unknow error
         tuya_ble_attach_ota_rsp(rsp, &signature_data_rsp, SIZEOF(tuya_ble_attach_ota_signature_data_rsp_t));
 
@@ -575,7 +626,7 @@ STATIC UINT32_T tuya_ble_attach_ota_signature_data_handler(UINT8_T* cmd, UINT16_
 
     // rsp
     tuya_ble_attach_ota_signature_data_rsp_t signature_data_rsp = {0};
-    signature_data_rsp.type = 0;
+    signature_data_rsp.type = sg_attach_ota_type;
     signature_data_rsp.state = 0;
 
     if (cmd_param->signature_algorithm != 1) {
@@ -608,6 +659,26 @@ UINT32_T tuya_ble_attach_ota_init(VOID_T)
 
 UINT32_T tuya_ble_attach_ota_handler(tuya_ble_ota_data_t* ota)
 {
+    if (ota == NULL || ota->p_data == NULL || ota->data_len < 1U) {
+        return OPRT_INVALID_PARM;
+    }
+    if ((ota->type == TUYA_BLE_OTA_FILE_INFO &&
+         ota->data_len != SIZEOF(tuya_ble_attach_ota_file_info_t)) ||
+        (ota->type == TUYA_BLE_OTA_FILE_OFFSET_REQ &&
+         ota->data_len != SIZEOF(tuya_ble_attach_ota_file_offset_t)) ||
+        (ota->type == TUYA_BLE_OTA_DATA &&
+         (ota->data_len <= 7U || ota->data_len > 7U + TUYA_BLE_ATTACH_OTA_PKG_LEN))) {
+        tuya_ble_attach_ota_exit();
+        return OPRT_INVALID_PARM;
+    }
+#if defined(TUYA_BLE_OTA_SIGNATURE_ENABLE) && (TUYA_BLE_OTA_SIGNATURE_ENABLE == 1)
+    if (ota->type == TUYA_BLE_OTA_SIGNATURE_DATA &&
+        (ota->data_len != SIZEOF(tuya_ble_attach_ota_signature_data_t) + 64U ||
+         ota->p_data[11] != 64U || ota->p_data[0] != sg_attach_ota_type)) {
+        tuya_ble_attach_ota_exit();
+        return OPRT_INVALID_PARM;
+    }
+#endif
     tuya_ble_ota_response_t rsp;
     rsp.type = ota->type;
 
@@ -675,7 +746,9 @@ INT32_T tuya_ble_attach_ota_get_status(VOID_T)
 static OPERATE_RET tuya_ble_attach_ota_get_signature_in_flash(void)
 {
     OPERATE_RET ret = OPRT_OK;
+    uint8_t hash[32];
 
+#if !defined(FAQIUJI) || (FAQIUJI != 1)
     // init
     ret = tuya_ble_ota_sha256_create_init(&sg_attach_ctx);
     if (OPRT_OK != ret) {
@@ -726,14 +799,16 @@ static OPERATE_RET tuya_ble_attach_ota_get_signature_in_flash(void)
     }
 
     // check
-    uint8_t hash[32];
+#endif
 
     ret = tuya_ble_ota_sha256_finish_ret(sg_attach_ctx, hash);
     if (OPRT_OK != ret) {
         tuya_ble_ota_sha256_free(sg_attach_ctx);
+        sg_attach_ctx = NULL;
         return ret;
     }
     tuya_ble_ota_sha256_free(sg_attach_ctx);
+    sg_attach_ctx = NULL;
 
     uint8_t true_signature_key[64] = {0};
     tal_util_xor((void*)rand_num, (void*)sg_signature_key_info.key, 64, true_signature_key);

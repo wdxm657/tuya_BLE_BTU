@@ -25,17 +25,24 @@ uint32_t faqiuji_image_meta(uint32_t base)
 
 uint8_t faqiuji_image_vectors_valid(uint32_t base, uint32_t size)
 {
+  return faqiuji_image_vectors_valid_at(base, base, size);
+}
+
+uint8_t faqiuji_image_vectors_valid_at(uint32_t storage, uint32_t execution,
+                                      uint32_t size)
+{
   const uint32_t *vectors;
   uint32_t entry;
-  if (faqiuji_image_meta(base) == 0U || size < 8U ||
+  if (faqiuji_image_meta(storage) == 0U ||
+      faqiuji_image_meta(execution) == 0U || size < 8U ||
       size > FAQIUJI_FLASH_APP_A_SIZE) {
     return 0U;
   }
-  vectors = (const uint32_t *)base;
+  vectors = (const uint32_t *)storage;
   entry = vectors[1] & ~1UL;
   return vectors[0] >= 0x20000000UL && vectors[0] <= 0x20004000UL &&
          (vectors[0] & 7U) == 0U && (vectors[1] & 1U) != 0U &&
-         entry >= base && entry < base + size;
+         entry >= execution && entry < execution + size;
 }
 
 uint8_t faqiuji_image_record(uint32_t base, FAQIUJI_IMAGE_T *record)

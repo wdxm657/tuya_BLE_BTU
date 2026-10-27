@@ -6,6 +6,7 @@
 #include "tuya_sdk_callback.h"
 #include "faqiuji_mcu_protocol.h"
 #include "app_dp_parser.h"
+#include "tuya_ble_attach_ota_port.h"
 
 #define FAQIUJI_MCU_PORT TUYA_UART_NUM_0
 #define FAQIUJI_MCU_FRAME_QUEUE_SIZE 4U
@@ -35,6 +36,9 @@ STATIC UINT32_T sg_key_press_ms;
 STATIC BOOL_T sg_factory_reset_pending = FALSE;
 STATIC volatile BOOL_T sg_response_valid = FALSE;
 STATIC volatile FAQIUJI_MCU_FRAME_T sg_response_frame;
+STATIC volatile BOOL_T sg_response_waiting;
+STATIC volatile UINT8_T sg_response_cmd;
+STATIC volatile UINT8_T sg_response_seq;
 
 STATIC VOID_T faqiuji_mcu_key_event(UINT8_T pressed)
 {
@@ -150,7 +154,7 @@ STATIC VOID_T faqiuji_mcu_frame_cb(CONST FAQIUJI_MCU_FRAME_T *frame)
         case FAQIUJI_MCU_EVENT_RADAR:
         {
             UINT8_T radar_dp = value ? 0U : 1U;
-            TAL_PR_INFO("MCU RADAR: %d dp=%u", value, radar_dp);
+            // TAL_PR_INFO("MCU RADAR: %d dp=%u", value, radar_dp);
             (VOID_T)app_dp_report(DP_ID_RADAR_SENSE, &radar_dp, 1U);
             break;
         }
@@ -239,7 +243,8 @@ STATIC VOID_T faqiuji_mcu_frame_done(UINT8_T crc_l, UINT8_T crc_h)
     memcpy(&crc_buf[4], sg_mcu.payload, sg_mcu.len);
     crc = faqiuji_crc16(crc_buf, (UINT16_T)(4 + sg_mcu.len));
     if ((UINT8_T)crc == crc_l && (UINT8_T)(crc >> 8) == crc_h) {
-        if ((sg_mcu.cmd & FAQIUJI_MCU_RESPONSE_FLAG) != 0U) {
+        if (sg_response_waiting && !sg_response_valid &&
+            sg_mcu.cmd == sg_response_cmd && sg_mcu.seq == sg_response_seq) {
             sg_response_frame.cmd = sg_mcu.cmd;
             sg_response_frame.seq = sg_mcu.seq;
             sg_response_frame.len = sg_mcu.len;
@@ -270,6 +275,9 @@ VOID_T faqiuji_mcu_protocol_process(VOID_T)
 {
     FAQIUJI_MCU_FRAME_T frame;
 
+#if defined(TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE) && (TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE == 1)
+    tuya_ble_attach_ota_port_process();
+#endif
     while (sg_frame_queue_count > 0U) {
         frame = sg_frame_queue[sg_frame_queue_read];
         sg_frame_queue_read++;
@@ -378,7 +386,7 @@ OPERATE_RET faqiuji_mcu_send_frame(UINT8_T cmd, UINT8_T seq,
     crc = faqiuji_crc16(&frame[1], (UINT16_T)(4 + len));
     frame[5 + len] = (UINT8_T)crc;
     frame[6 + len] = (UINT8_T)(crc >> 8);
-    return (tal_uart_write(FAQIUJI_MCU_PORT, frame, (UINT32_T)(7 + len)) < 0) ?
+    return (tal_uart_write(FAQIUJI_MCU_PORT, frame, (UINT32_T)(7 + len)) != 7 + len) ?
            OPRT_COM_ERROR : OPRT_OK;
 }
 
@@ -398,26 +406,37 @@ OPERATE_RET faqiuji_mcu_send_wait_response(UINT8_T cmd,
     }
 
     seq = ++sg_mcu_seq;
+    sg_response_waiting = FALSE;
+    sg_response_cmd = cmd | FAQIUJI_MCU_RESPONSE_FLAG;
+    sg_response_seq = seq;
+    /* Keep a late ACK across retries of the same sequence number. */
+    sg_response_valid = FALSE;
+    sg_response_waiting = TRUE;
     for (attempt = 0U; attempt < 3U; attempt++) {
-        sg_response_valid = FALSE;
         if (faqiuji_mcu_send_frame(cmd, seq, payload, len) != OPRT_OK) {
+            sg_response_waiting = FALSE;
             return OPRT_COM_ERROR;
         }
 
         start = tkl_system_get_millisecond();
-        while ((tkl_system_get_millisecond() - start) < timeout_ms) {
+        for (;;) {
             if (sg_response_valid) {
                 received = sg_response_frame;
                 sg_response_valid = FALSE;
                 if (received.cmd == (UINT8_T)(cmd | FAQIUJI_MCU_RESPONSE_FLAG) &&
                     received.seq == seq) {
                     *response = received;
+                    sg_response_waiting = FALSE;
                     return OPRT_OK;
                 }
+            }
+            if (tkl_system_get_millisecond() - start >= timeout_ms) {
+                break;
             }
             tkl_system_delay(1U);
         }
     }
+    sg_response_waiting = FALSE;
     return OPRT_TIMEOUT;
 }
 

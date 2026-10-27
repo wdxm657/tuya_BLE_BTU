@@ -419,7 +419,8 @@ void faqiuji_device_sensor_task(void *argument)
                  1U : 0U;
       radar = (HAL_GPIO_ReadPin(GPIOA, LEIDA_IN_O) == GPIO_PIN_SET) ?
               1U : 0U;
-
+      data[0] = charging;
+      faqiuji_protocol_status_event(FAQIUJI_EVENT_CHARGE, data, 1U);
       if (usb != sg_usb_last) {
         sg_usb_last = usb;
         data[0] = usb;
