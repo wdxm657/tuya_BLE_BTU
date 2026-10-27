@@ -82,9 +82,9 @@ extern unsigned int ota_program_offset;
 #define APP_DATA_FLASH_ADDR 0x7F000
 
 #define LASER_BUG 0
-#define CAT_STRING 0
+#define CAT_STRING 1
 #define BLE_BALL 0
-#define FAQIUJI 1
+#define FAQIUJI 0
 
 #if LASER_BUG
 

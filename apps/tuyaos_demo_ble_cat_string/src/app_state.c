@@ -5,8 +5,15 @@
 
 #include "tal_log.h"
 #include "tal_sw_timer.h"
+#include "tal_system.h"
 
 #include "app_state.h"
+#include "app_battery.h"
+#include "app_charge.h"
+#include "app_led.h"
+
+extern VOID_T tal_cpu_force_wakeup(VOID_T);
+extern VOID_T tal_cpu_allow_sleep(VOID_T);
 
 STATIC dev_state_t s_dev_state = DEV_STATE_WORK;
 STATIC BOOL_T s_machine_powered = TRUE;
@@ -25,6 +32,13 @@ STATIC VOID_T (*s_run_on_cb)(VOID_T) = NULL;
 STATIC VOID_T (*s_run_off_cb)(VOID_T) = NULL;
 STATIC VOID_T (*s_machine_on_cb)(VOID_T) = NULL;
 STATIC VOID_T (*s_machine_off_cb)(VOID_T) = NULL;
+
+VOID_T app_state_force_retention_wakeup(VOID_T)
+{
+    tal_cpu_force_wakeup();
+    app_battery_resume();
+    app_led_resume();
+}
 
 STATIC BOOL_T app_state_should_run(VOID_T)
 {
@@ -130,8 +144,7 @@ STATIC VOID_T app_state_sleep_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     }
 
     // 休眠结束，强制退出retention低功耗
-    tal_cpu_force_wakeup();
-    app_led_resume();
+    app_state_force_retention_wakeup();
 
     app_state_set(DEV_STATE_WORK);
     app_state_start_work_timer();

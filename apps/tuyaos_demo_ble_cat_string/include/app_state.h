@@ -14,8 +14,8 @@ extern "C" {
 
 #define WORK_PERIOD_MIN 15 * 60
 #define SLEEP_PERIOD_MIN 120 * 60
-#define WORK_PERIOD_MS      (WORK_PERIOD_MIN * 1000UL)
-#define SLEEP_PERIOD_MS     (SLEEP_PERIOD_MIN * 1000UL)
+#define WORK_PERIOD_MS      (5 * 1000UL)
+#define SLEEP_PERIOD_MS     (10 * 1000UL)
 #define WORK_SLEEP_CYCLES   5
 
 typedef enum {
@@ -28,6 +28,7 @@ typedef enum {
 
 VOID_T app_state_init(VOID_T);
 dev_state_t app_state_get(VOID_T);
+VOID_T app_state_force_retention_wakeup(VOID_T);
 
 BOOL_T app_state_toggle_power(VOID_T);
 BOOL_T app_state_set_power(BOOL_T on);

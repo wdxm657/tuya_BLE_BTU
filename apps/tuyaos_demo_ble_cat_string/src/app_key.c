@@ -33,6 +33,7 @@
 #include "tuya_sdk_callback.h"
 
 #include "app_key.h"
+#include "app_charge.h"
 #include "app_state.h"
 
 /***********************************************************************
@@ -203,8 +204,7 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                                 // 如果按键按下时在retention休眠状态，则退出retention
                                 if (tkl_cpu_is_sleep())
                                 {
-                                    tal_cpu_force_wakeup();
-                                    app_led_resume();
+                                    app_state_force_retention_wakeup();
                                     // 如果是关机状态，则开机
                                     if (!app_state_is_app_power_on())
                                     {

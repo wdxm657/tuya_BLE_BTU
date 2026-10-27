@@ -155,8 +155,7 @@ VOID_T app_charge_process(VOID_T)
         // usb 插入时不进retention低功耗,若在低功耗则退出
         if (tkl_cpu_is_sleep())
         {
-            tal_cpu_force_wakeup();
-            app_led_resume();
+            app_state_force_retention_wakeup();
         }
         if (!tal_sw_timer_is_running(s_charge_timer_id)) {
             tal_sw_timer_start(s_charge_timer_id, CHARGE_POLL_MS, TAL_TIMER_CYCLE);

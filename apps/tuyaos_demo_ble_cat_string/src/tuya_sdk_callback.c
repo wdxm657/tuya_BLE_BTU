@@ -619,9 +619,9 @@ OPERATE_RET tuya_init_last(VOID_T)
     OPERATE_RET ret;
     
     app_battery_timer_init();
+    app_led_timer_init();
     app_key_timer_init();
     app_charge_timer_init();
-    app_led_timer_init();
     app_motor_timer_init();
     // PB1 TX   PB7 RX
     #if SHOUQUAN

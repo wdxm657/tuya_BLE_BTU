@@ -203,6 +203,9 @@ VOID_T app_led_update(VOID_T)
 
 VOID_T app_led_prepare_sleep(VOID_T)
 {
+    if (s_led_timer_id != NULL) {
+        tal_sw_timer_stop(s_led_timer_id);
+    }
     s_led_suspended = TRUE;
     s_status_mode = LED_MODE_OFF;
     s_power_mode = LED_MODE_OFF;
@@ -225,6 +228,10 @@ VOID_T app_led_resume(VOID_T)
     s_blink_on = FALSE;
     s_led_suspended = FALSE;
     app_led_update();
+    if (s_led_timer_id != NULL &&
+        !tal_sw_timer_is_running(s_led_timer_id)) {
+        tal_sw_timer_start(s_led_timer_id, LED_BLINK_PERIOD_MS, TAL_TIMER_CYCLE);
+    }
 }
 
 led_mode_t app_led_get_mode(VOID_T)

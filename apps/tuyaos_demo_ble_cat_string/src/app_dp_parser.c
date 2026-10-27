@@ -58,8 +58,7 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         }else{
             if (tkl_cpu_is_sleep())
             {
-                tal_cpu_force_wakeup();
-                app_led_resume();
+                app_state_force_retention_wakeup();
             }
         }
         
