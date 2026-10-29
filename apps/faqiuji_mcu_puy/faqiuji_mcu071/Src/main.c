@@ -1,0 +1,261 @@
+#include "main.h"
+#include "faqiuji_protocol.h"
+#include "faqiuji_launcher.h"
+#include "faqiuji_device.h"
+#include "faqiuji_ota.h"
+#include "gpio_config.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include <string.h>
+
+UART_HandleTypeDef UartHandle;
+#define UART_RX_DMA_SIZE 256U
+static uint8_t uart_rx_dma_buffer[UART_RX_DMA_SIZE];
+static uint16_t uart_rx_read;
+static volatile uint8_t uart_rx_restart_required;
+
+static void APP_UartService(void)
+{
+  uint16_t dma_write;
+
+  if (UartHandle.hdmarx == NULL) {
+    return;
+  }
+
+  if (uart_rx_restart_required != 0U) {
+    uart_rx_restart_required = 0U;
+    uart_rx_read = 0U;
+    (void)HAL_UART_DMAStop(&UartHandle);
+    __HAL_UART_CLEAR_OREFLAG(&UartHandle);
+    (void)HAL_UART_Receive_DMA(&UartHandle, uart_rx_dma_buffer,
+                               UART_RX_DMA_SIZE);
+    return;
+  }
+
+  dma_write = (uint16_t)(UART_RX_DMA_SIZE -
+                         __HAL_DMA_GET_COUNTER(UartHandle.hdmarx));
+  if (dma_write >= UART_RX_DMA_SIZE) {
+    dma_write = 0U;
+  }
+
+  while (uart_rx_read != dma_write) {
+    faqiuji_protocol_input(uart_rx_dma_buffer[uart_rx_read]);
+    uart_rx_read++;
+    if (uart_rx_read >= UART_RX_DMA_SIZE) {
+      uart_rx_read = 0U;
+    }
+  }
+}
+
+static void APP_KeyTask(void *argument)
+{
+  static uint8_t raw_state;
+  static uint8_t stable_state;
+  static uint8_t stable_count;
+  static uint8_t initialized;
+  uint8_t pressed;
+  (void)argument;
+
+  for (;;) {
+    pressed = (HAL_GPIO_ReadPin(GPIOC, KEY) == GPIO_PIN_RESET) ? 1U : 0U;
+
+    if (!initialized) {
+      raw_state = pressed;
+      stable_state = pressed;
+      initialized = 1U;
+      stable_count = 0U;
+    } else if (pressed != raw_state) {
+      raw_state = pressed;
+      stable_count = 1U;
+    } else if (stable_count > 0U && stable_count < 3U) {
+      stable_count++;
+    }
+
+    if (stable_count >= 3U && stable_state != raw_state) {
+      stable_state = raw_state;
+      stable_count = 0U;
+      faqiuji_protocol_key_event(stable_state);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10U));
+  }
+}
+
+static void APP_UartTask(void *argument)
+{
+  (void)argument;
+  for (;;) {
+    APP_UartService();
+    faqiuji_ota_poll();
+    vTaskDelay(pdMS_TO_TICKS(1U));
+  }
+}
+
+static void APP_GpioInit(void)
+{
+  GPIO_InitTypeDef gpio = {0};
+
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOF_CLK_ENABLE();
+
+  gpio.Mode = GPIO_MODE_OUTPUT_PP;
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Speed = GPIO_SPEED_FREQ_LOW;
+
+  gpio.Pin = MOTOR_PWM | LED_LOW | LED_MIDDLE | LED_HIGH | IE_PWM | IR_CON;
+  HAL_GPIO_Init(GPIOA, &gpio);
+  gpio.Pin = CHARGE_EN | LED_G | LED_R;
+  HAL_GPIO_Init(GPIOB, &gpio);
+  gpio.Pin = DCT_CON;
+  HAL_GPIO_Init(GPIOC, &gpio);
+
+  HAL_GPIO_WritePin(GPIOA,  LED_LOW  | LED_MIDDLE | LED_HIGH, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, MOTOR_PWM | IE_PWM | IR_CON, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB,  LED_G , GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB,  LED_R , GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, CHARGE_EN ,GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOC, DCT_CON, GPIO_PIN_RESET);
+
+  gpio.Mode = GPIO_MODE_INPUT;
+  gpio.Pull = GPIO_PULLUP;
+  gpio.Pin = KEY;
+  HAL_GPIO_Init(GPIOC, &gpio);
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Pin = CHARGE_STATE;
+  HAL_GPIO_Init(GPIOB, &gpio);
+  gpio.Pin = USB_DET;
+  HAL_GPIO_Init(GPIOF, &gpio);
+  gpio.Pull = GPIO_PULLUP;
+  gpio.Pin = LEIDA_IN_O | IR;
+  HAL_GPIO_Init(GPIOA, &gpio);
+
+  gpio.Mode = GPIO_MODE_OUTPUT_PP;
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Pin = NTC_CON;
+  HAL_GPIO_Init(GPIOB, &gpio);
+  HAL_GPIO_WritePin(GPIOB, NTC_CON, GPIO_PIN_SET);
+}
+
+static void APP_UartInit(void)
+{
+  uart_rx_read = 0U;
+  uart_rx_restart_required = 0U;
+  memset(uart_rx_dma_buffer, 0, sizeof(uart_rx_dma_buffer));
+  UartHandle.Instance = USART1;
+  UartHandle.Init.BaudRate = 115200;
+  UartHandle.Init.WordLength = UART_WORDLENGTH_8B;
+  UartHandle.Init.StopBits = UART_STOPBITS_1;
+  UartHandle.Init.Parity = UART_PARITY_NONE;
+  UartHandle.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  UartHandle.Init.Mode = UART_MODE_TX_RX;
+  UartHandle.Init.OverSampling = UART_OVERSAMPLING_16;
+  UartHandle.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+
+  if (HAL_UART_Init(&UartHandle) != HAL_OK) {
+    APP_ErrorHandler();
+  }
+
+  faqiuji_protocol_init(&UartHandle);
+  if (HAL_UART_Receive_DMA(&UartHandle, uart_rx_dma_buffer,
+                           UART_RX_DMA_SIZE) != HAL_OK) {
+    APP_ErrorHandler();
+  }
+}
+
+static void APP_SystemClockConfig(void);
+
+int main(void)
+{
+  HAL_Init();
+  APP_SystemClockConfig();
+  APP_GpioInit();
+  APP_UartInit();
+  if (faqiuji_launcher_init() != HAL_OK) {
+    APP_ErrorHandler();
+  }
+
+  APP_AdcConfig();
+  APP_TimConfig();
+  faqiuji_device_init();
+
+  (void)xTaskCreate(APP_UartTask, "uart", 256, NULL, 3, NULL);
+  (void)xTaskCreate(APP_KeyTask, "key", 192, NULL, 2, NULL);
+  (void)xTaskCreate(faqiuji_launcher_task, "launch", 256, NULL, 2, NULL);
+  (void)xTaskCreate(faqiuji_device_sensor_task, "sensor", 256, NULL, 3, NULL);
+  (void)xTaskCreate(faqiuji_device_power_task, "power", 256, NULL, 2, NULL);
+  (void)xTaskCreate(faqiuji_device_ir_task, "ir", 192, NULL, 2, NULL);
+  (void)xTaskCreate(faqiuji_device_led_task, "led", 192, NULL, 1, NULL);
+  (void)xTaskCreate(faqiuji_device_control_task, "control", 256, NULL, 2, NULL);
+  vTaskStartScheduler();
+  APP_ErrorHandler();
+}
+
+/**
+  * @brief  System clock configuration function.
+  * @param  None
+  * @retval None
+  */
+static void APP_SystemClockConfig(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  /* Oscillator configuration */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE | RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_LSI | RCC_OSCILLATORTYPE_LSE; /* Select oscillator HSE, HSI, LSI, LSE */
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;                          /* Enable HSI */
+  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;                          /* HSI 1 frequency division */
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_8MHz;  /* Configure HSI clock at 8MHz */
+  RCC_OscInitStruct.HSEState = RCC_HSE_OFF;                         /* Close HSE */
+  /*RCC_OscInitStruct.HSEFreq = RCC_HSE_16_32MHz;*/
+  RCC_OscInitStruct.LSIState = RCC_LSI_OFF;                         /* Close LSI */
+  RCC_OscInitStruct.LSEState = RCC_LSE_OFF;                         /* Close LSE */
+  /*RCC_OscInitStruct.LSEDriver = RCC_LSEDRIVE_MEDIUM;*/
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_OFF;                     /* Close PLL */
+  /*RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_NONE;*/
+  /*RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL2;*/
+  /* Configure oscillator */
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+
+  /* Clock source configuration */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1; /* Choose to configure clock HCLK, SYSCLK, PCLK1 */
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSISYS; /* Select HSI as the system clock */
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;     /* AHB clock 1 division */
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;      /* APB clock 1 division */
+  /* Configure clock source */
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+  if (huart == &UartHandle) {
+    /*
+     * DMA reception is continuous. Recover from an overrun/framing error
+     * from the UART task instead of calling locking HAL APIs in the ISR.
+     */
+    uart_rx_restart_required = 1U;
+  }
+}
+
+void APP_ErrorHandler(void)
+{
+  __disable_irq();
+  while (1) {
+  }
+}
+
+#ifdef USE_FULL_ASSERT
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  (void)file;
+  (void)line;
+  APP_ErrorHandler();
+}
+#endif

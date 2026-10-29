@@ -1,0 +1,81 @@
+#ifndef FAQIUJI_PROTOCOL_H
+#define FAQIUJI_PROTOCOL_H
+
+#include "main.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define FAQIUJI_FRAME_HEAD          0xAAU
+#define FAQIUJI_FRAME_VERSION       0x01U
+#define FAQIUJI_MAX_PAYLOAD         64U
+#define FAQIUJI_RESPONSE_FLAG       0x80U
+#define FAQIUJI_CONFIG_SYNC_VERSION 0x01U
+
+typedef enum
+{
+  FAQIUJI_CMD_PING       = 0x01,
+  FAQIUJI_CMD_CONFIG_SET  = 0x14,
+  FAQIUJI_CMD_CONTROL_SET = 0x15,
+  FAQIUJI_CMD_CONFIG_SYNC = 0x16,
+  FAQIUJI_CMD_DUTY_SET = 0x17,
+  FAQIUJI_CMD_KEY_EVENT  = 0x20,
+  FAQIUJI_CMD_STATUS_EVENT = 0x21,
+  FAQIUJI_CMD_DEBUG_STRING = 0x22,
+} FAQIUJI_CMD_E;
+
+typedef enum
+{
+  FAQIUJI_EVENT_KEY = 0x01U,
+  FAQIUJI_EVENT_USB = 0x02U,
+  FAQIUJI_EVENT_CHARGE = 0x03U,
+  FAQIUJI_EVENT_BATTERY = 0x04U,
+  FAQIUJI_EVENT_BALL = 0x05U,
+  FAQIUJI_EVENT_RADAR = 0x06U,
+  FAQIUJI_EVENT_TEMPERATURE = 0x07U,
+  FAQIUJI_EVENT_WORK = 0x08U,
+  FAQIUJI_EVENT_COUNT = 0x09U,
+} FAQIUJI_EVENT_TYPE_E;
+
+typedef enum
+{
+  FAQIUJI_STATUS_OK           = 0x00,
+  FAQIUJI_STATUS_BAD_LENGTH   = 0x01,
+  FAQIUJI_STATUS_BAD_PAYLOAD  = 0x02,
+  FAQIUJI_STATUS_UNKNOWN_CMD  = 0x03,
+  FAQIUJI_STATUS_BUSY         = 0x04,
+} FAQIUJI_STATUS_E;
+
+typedef enum
+{
+  FAQIUJI_WORK_RUNNING = 0x00,
+  FAQIUJI_WORK_STANDBY = 0x01,
+  FAQIUJI_WORK_CHARGING = 0x02,
+  FAQIUJI_WORK_CHARGE_DONE = 0x03,
+  FAQIUJI_WORK_STOPPED = 0x04,
+} FAQIUJI_WORK_STATE_E;
+
+typedef struct
+{
+  uint8_t cmd;
+  uint8_t seq;
+  uint8_t len;
+  uint8_t payload[FAQIUJI_MAX_PAYLOAD];
+} FAQIUJI_FRAME_T;
+
+void faqiuji_protocol_init(UART_HandleTypeDef *huart);
+void faqiuji_protocol_input(uint8_t value);
+void faqiuji_protocol_send(uint8_t cmd, uint8_t seq,
+                           const uint8_t *payload, uint8_t len);
+void faqiuji_protocol_key_event(uint8_t pressed);
+void faqiuji_protocol_debug_string(const char *format, ...);
+void faqiuji_protocol_status_event(FAQIUJI_EVENT_TYPE_E type,
+                                   const uint8_t *data,
+                                   uint8_t len);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

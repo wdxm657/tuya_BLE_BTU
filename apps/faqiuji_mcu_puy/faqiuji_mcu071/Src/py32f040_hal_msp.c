@@ -1,0 +1,183 @@
+/**
+  ******************************************************************************
+  * @file    py32f040_hal_msp.c
+  * @author  MCU Application Team
+  * @brief   This file provides code for the MSP Initialization
+  *          and de-Initialization codes.
+  ******************************************************************************
+  * @attention
+  *
+  * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
+  * All rights reserved.</center></h2>
+  *
+  * This software component is licensed by Puya under BSD 3-Clause license,
+  * the "License"; You may not use this file except in compliance with the
+  * License. You may obtain a copy of the License at:
+  *                        opensource.org/licenses/BSD-3-Clause
+  *
+  ******************************************************************************
+  * @attention
+  *
+  * <h2><center>&copy; Copyright (c) 2016 STMicroelectronics.
+  * All rights reserved.</center></h2>
+  *
+  * This software component is licensed by ST under BSD 3-Clause license,
+  * the "License"; You may not use this file except in compliance with the
+  * License. You may obtain a copy of the License at:
+  *                        opensource.org/licenses/BSD-3-Clause
+  *
+  ******************************************************************************
+  */
+
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+
+/* Private typedef -----------------------------------------------------------*/
+/* Private define ------------------------------------------------------------*/
+/* Private macro -------------------------------------------------------------*/
+/* Private variables ---------------------------------------------------------*/
+DMA_HandleTypeDef hdma_usart1_rx;
+/* Private function prototypes -----------------------------------------------*/
+/* External functions --------------------------------------------------------*/
+/**
+  * @brief Initialize the MSP
+  */
+void HAL_MspInit(void)
+{
+  __HAL_RCC_SYSCFG_CLK_ENABLE();
+  __HAL_RCC_PWR_CLK_ENABLE();
+}
+
+/**
+  * @brief Initialize USART related MSP
+  * @param  huart：USART handle
+  */
+void HAL_UART_MspInit(UART_HandleTypeDef *huart)
+{
+  GPIO_InitTypeDef  GPIO_InitStruct = {0};
+
+  if (huart->Instance == USART1)
+  {
+    /* Enable USART1 clock */
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_USART1_CLK_ENABLE();
+    __HAL_RCC_DMA_CLK_ENABLE();
+    __HAL_RCC_SYSCFG_CLK_ENABLE();
+    /* Initialize GPIO
+    PB8     ------> USART1_TX
+    PB9     ------> USART1_RX
+    */
+    GPIO_InitStruct.Pin       = GPIO_PIN_8;
+    GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull      = GPIO_PULLUP;
+    GPIO_InitStruct.Speed     = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF9_USART1;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Alternate = GPIO_AF9_USART1;
+    GPIO_InitStruct.Pin = GPIO_PIN_9;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    /* USART1 RX DMA configuration. */
+    hdma_usart1_rx.Instance = DMA1_Channel2;
+    hdma_usart1_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
+    hdma_usart1_rx.Init.PeriphInc = DMA_PINC_DISABLE;
+    hdma_usart1_rx.Init.MemInc = DMA_MINC_ENABLE;
+    hdma_usart1_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+    hdma_usart1_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+    hdma_usart1_rx.Init.Mode = DMA_CIRCULAR;
+    hdma_usart1_rx.Init.Priority = DMA_PRIORITY_HIGH;
+    if (HAL_DMA_Init(&hdma_usart1_rx) != HAL_OK) {
+      APP_ErrorHandler();
+    }
+    __HAL_LINKDMA(huart, hdmarx, hdma_usart1_rx);
+    HAL_DMA_ChannelMap(&hdma_usart1_rx, DMA_CHANNEL_MAP_USART1_RD);
+
+    /* Enable USART1 interrupt */
+    HAL_NVIC_SetPriority(USART1_IRQn, 0, 1);
+    HAL_NVIC_EnableIRQ(USART1_IRQn);
+    HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 1, 1);
+    HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
+  }
+}
+
+void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART1) {
+    HAL_GPIO_DeInit(GPIOB, UART_TX | UART_RX);
+    HAL_DMA_DeInit(huart->hdmarx);
+    __HAL_RCC_USART1_CLK_DISABLE();
+  }
+}
+
+void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
+{
+  GPIO_InitTypeDef gpio = {0};
+
+  if (htim->Instance == TIM2) {
+    __HAL_RCC_TIM2_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+
+    gpio.Pin = MOTOR_PWM;
+    gpio.Mode = GPIO_MODE_AF_PP;
+    gpio.Pull = GPIO_NOPULL;
+    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio.Alternate = GPIO_AF2_TIM2;
+    HAL_GPIO_Init(GPIOA, &gpio);
+  } else if (htim->Instance == TIM1) {
+    __HAL_RCC_TIM1_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+
+    gpio.Pin = IE_PWM;
+    gpio.Mode = GPIO_MODE_AF_PP;
+    gpio.Pull = GPIO_NOPULL;
+    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio.Alternate = GPIO_AF2_TIM1;
+    HAL_GPIO_Init(GPIOA, &gpio);
+  }
+}
+
+void HAL_TIM_PWM_MspDeInit(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM2) {
+    HAL_GPIO_DeInit(GPIOA, MOTOR_PWM);
+    __HAL_RCC_TIM2_CLK_DISABLE();
+  } else if (htim->Instance == TIM1) {
+    HAL_GPIO_DeInit(GPIOA, IE_PWM);
+    __HAL_RCC_TIM1_CLK_DISABLE();
+  }
+}
+
+void HAL_ADC_MspInit(ADC_HandleTypeDef *hadc)
+{
+  GPIO_InitTypeDef gpio = {0};
+  RCC_PeriphCLKInitTypeDef RCC_PeriphCLKInit = {0};
+
+  /* Enable ADC clock */
+  __HAL_RCC_ADC_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  
+  RCC_PeriphCLKInit.PeriphClockSelection= RCC_PERIPHCLK_ADC;
+  RCC_PeriphCLKInit.ADCClockSelection   = RCC_ADCCLKSOURCE_PCLK_DIV4;
+  HAL_RCCEx_PeriphCLKConfig(&RCC_PeriphCLKInit);
+
+  /* PA7 is the battery input: ADC_IN7. */
+  gpio.Pin = AD_BAT;
+  gpio.Mode = GPIO_MODE_ANALOG;
+  gpio.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &gpio);
+}
+
+void HAL_TIM_Base_MspInit(TIM_HandleTypeDef *htim)
+{
+  __HAL_RCC_TIM15_CLK_ENABLE();                                       /* TIM15 clock enable */
+}
+
+void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM15) {
+    __HAL_RCC_TIM15_CLK_DISABLE();
+  }
+}
+
+/************************ (C) COPYRIGHT Puya *****END OF FILE******************/
