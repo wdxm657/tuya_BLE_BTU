@@ -49,11 +49,15 @@ class PyOcdBackend:
         pack_path: Path,
         probe_uid: str | None = None,
         frequency: int = config.SWD_FREQUENCY_HZ,
+        target_name: str = config.DEFAULT_TARGET_NAME,
         log: LogCallback | None = None,
     ) -> None:
         self.pack_path = pack_path.expanduser().resolve()
         self.probe_uid = probe_uid or None
         self.frequency = frequency
+        if target_name not in config.TARGETS:
+            raise FlashError(f"Unsupported target: {target_name}")
+        self.target_name = target_name
         self.log = log or (lambda _message: None)
 
         if not self.pack_path.exists():
@@ -65,7 +69,7 @@ class PyOcdBackend:
     def _session(self) -> Iterator[object]:
         ConnectHelper, _, _ = _pyocd_api()
         options = {
-            "target_override": config.TARGET_NAME,
+            "target_override": self.target_name,
             "pack": [str(self.pack_path)],
             "frequency": self.frequency,
             "chip_erase": "sector",
@@ -88,7 +92,7 @@ class PyOcdBackend:
         )
         if session is None:
             raise FlashError("No compatible SWD probe was selected or detected.")
-        self.log(f"Connecting to {config.TARGET_NAME} over SWD...")
+        self.log(f"Connecting to {self.target_name} over SWD...")
         with session:
             yield session
         self.log("Probe disconnected.")
@@ -104,7 +108,7 @@ class PyOcdBackend:
         ):
             raise FlashError(
                 "The selected target's flash map does not contain the expected "
-                "128 KB PY32F040 address range."
+                "128 KB PY32F040xB/PY32F071xB address range."
             )
 
     def erase_all(self) -> None:

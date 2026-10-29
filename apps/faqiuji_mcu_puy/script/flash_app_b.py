@@ -15,7 +15,7 @@ from script.pyocd_backend import FlashError, PyOcdBackend
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Program an APP A-linked PY32F040 image into APP_B."
+        description="Program an APP A-linked PY32F0 image into APP_B."
     )
     parser.add_argument(
         "--bin",
@@ -25,6 +25,12 @@ def main() -> int:
     )
     parser.add_argument("--pack", type=Path, default=config.default_pack_path())
     parser.add_argument("--probe", help="SWD probe UID.")
+    parser.add_argument(
+        "--target",
+        choices=config.TARGETS,
+        default=config.DEFAULT_TARGET_NAME,
+        help="PUYA MCU model used to select the pyOCD target and flash algorithm.",
+    )
     parser.add_argument(
         "--frequency",
         type=int,
@@ -56,6 +62,7 @@ def main() -> int:
             pack_path=args.pack,
             probe_uid=args.probe,
             frequency=args.frequency,
+            target_name=args.target,
             log=print,
         )
         backend.program("app_b", args.bin)

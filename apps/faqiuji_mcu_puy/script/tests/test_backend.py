@@ -50,9 +50,11 @@ class FakeSession:
 
 class FakeConnectHelper:
     target = FakeTarget()
+    last_options: dict[str, object] = {}
 
     @classmethod
     def session_with_chosen_probe(cls, **_kwargs: object) -> FakeSession:
+        cls.last_options = _kwargs.get("options", {})
         return FakeSession(cls.target)
 
 
@@ -110,6 +112,7 @@ class BackendTests(unittest.TestCase):
         self.backend = PyOcdBackend(
             Path("."),
             probe_uid="fake-probe",
+            target_name=config.DEFAULT_TARGET_NAME,
             log=lambda _message: None,
         )
 
@@ -172,6 +175,33 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(target.reset_count, 1)
         self.assertEqual(target.flash, bytearray(b"\xA5" * config.FLASH_SIZE))
         self.assertEqual(FakeFlashEraser.erased_addresses, [])
+        self.assertEqual(
+            FakeConnectHelper.last_options["target_override"],
+            config.DEFAULT_TARGET_NAME,
+        )
+
+    def test_selected_target_is_passed_to_pyocd(self) -> None:
+        target_name = "PY32F071xB"
+        backend = PyOcdBackend(
+            Path("."),
+            probe_uid="fake-probe",
+            target_name=target_name,
+            log=lambda _message: None,
+        )
+
+        backend.reset_target()
+
+        self.assertEqual(
+            FakeConnectHelper.last_options["target_override"],
+            target_name,
+        )
+
+    def test_unknown_target_is_rejected(self) -> None:
+        with self.assertRaisesRegex(FlashError, "Unsupported target"):
+            PyOcdBackend(
+                Path("."),
+                target_name="PY32F099x9",
+            )
 
     def test_program_app_b_writes_full_slot_and_verifies_it(self) -> None:
         target = FakeConnectHelper.target

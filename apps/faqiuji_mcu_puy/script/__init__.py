@@ -1,1 +1,1 @@
-"""PY32F040 programming tools."""
+"""PY32F0 programming tools."""

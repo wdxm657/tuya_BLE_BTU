@@ -28,6 +28,7 @@ class FlashWorker(QThread):
         pack_path: Path,
         probe_uid: str | None,
         frequency: int,
+        target_name: str,
         arguments: dict[str, object] | None = None,
     ) -> None:
         super().__init__()
@@ -35,6 +36,7 @@ class FlashWorker(QThread):
         self.pack_path = pack_path
         self.probe_uid = probe_uid
         self.frequency = frequency
+        self.target_name = target_name
         self.arguments = arguments or {}
 
     def run(self) -> None:
@@ -43,6 +45,7 @@ class FlashWorker(QThread):
                 pack_path=self.pack_path,
                 probe_uid=self.probe_uid,
                 frequency=self.frequency,
+                target_name=self.target_name,
                 log=self.log_message.emit,
             )
             if self.operation == "erase_all":

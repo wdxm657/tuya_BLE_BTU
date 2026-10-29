@@ -28,7 +28,7 @@ from .worker import FlashWorker, ProbeScanWorker
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("PY32F040 Flash Utility")
+        self.setWindowTitle("PY32F0 Flash Utility")
         self.resize(780, 720)
         self.worker: FlashWorker | ProbeScanWorker | None = None
         self.image_inputs: dict[str, QLineEdit] = {}
@@ -43,6 +43,14 @@ class MainWindow(QMainWindow):
 
         connection_box = QGroupBox("Connection")
         connection_form = QFormLayout(connection_box)
+        self.target_combo = QComboBox()
+        for target_name in config.TARGETS:
+            self.target_combo.addItem(target_name, target_name)
+        default_target_index = self.target_combo.findData(config.DEFAULT_TARGET_NAME)
+        if default_target_index >= 0:
+            self.target_combo.setCurrentIndex(default_target_index)
+        connection_form.addRow("PUYA MCU", self.target_combo)
+
         pack_row = QHBoxLayout()
         self.pack_input = QLineEdit()
         pack = config.default_pack_path()
@@ -320,6 +328,7 @@ class MainWindow(QMainWindow):
             pack_path=pack_path,
             probe_uid=self.probe_combo.currentData(),
             frequency=self.frequency_input.value(),
+            target_name=self.target_combo.currentData(),
             arguments=arguments,
         )
         worker.log_message.connect(self._log)
@@ -347,6 +356,7 @@ class MainWindow(QMainWindow):
             widget.setEnabled(not busy)
         self.pack_input.setEnabled(not busy)
         self.probe_combo.setEnabled(not busy)
+        self.target_combo.setEnabled(not busy)
         self.frequency_input.setEnabled(not busy)
         for field in self.image_inputs.values():
             field.setEnabled(not busy)
