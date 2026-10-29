@@ -24,6 +24,10 @@ OTA_META_BASE = 0x0801C000
 OTA_META_SIZE = 0x2000
 CONFIG_BASE = 0x0801E000
 CONFIG_SIZE = 0x2000
+TEST_AUDIO_BASE = 0x08004000
+TEST_AUDIO_SIZE = FLASH_BASE + FLASH_SIZE - TEST_AUDIO_BASE
+TEST_AUDIO_SAMPLE_RATE = 16_000
+TEST_AUDIO_HEADER_SIZE = 16
 
 META_B_BASE = 0x0801D000
 META_B_DIRECT_CHECK_SIZE = 0x200
@@ -36,6 +40,9 @@ MCU_ROOT = SCRIPT_DIR.parent
 IAP_BIN_DEFAULT = MCU_ROOT / "faqiuji_iap" / "MDK-ARM" / "Project.bin"
 APP_A_BIN_DEFAULT = MCU_ROOT / "faqiuji_mcu" / "MDK-ARM" / "FAQIUJI_APP_A.bin"
 APP_B_BIN_DEFAULT = MCU_ROOT / "faqiuji_mcu" / "MDK-ARM" / "FAQIUJI_APP_B.bin"
+TEST_AUDIO_BIN_DEFAULT = (
+    MCU_ROOT / "faqiuji_mcu071" / "Audio" / "huahai_5s_16k_pcm.bin"
+)
 
 
 @dataclass(frozen=True)
@@ -60,6 +67,8 @@ REGIONS = {
     "metadata": FlashRegion("OTA metadata", OTA_META_BASE, OTA_META_SIZE),
     "config": FlashRegion("configuration", CONFIG_BASE, CONFIG_SIZE),
 }
+
+TEST_AUDIO_REGION = FlashRegion("test audio", TEST_AUDIO_BASE, TEST_AUDIO_SIZE)
 
 
 def default_pack_path() -> Path | None:

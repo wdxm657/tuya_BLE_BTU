@@ -107,6 +107,12 @@ class MainWindow(QMainWindow):
             "APP_B BIN",
             config.APP_B_BIN_DEFAULT,
         )
+        self._add_file_row(
+            files_form,
+            "test_audio",
+            "F071 test audio BIN",
+            config.TEST_AUDIO_BIN_DEFAULT,
+        )
         root.addWidget(files_box)
 
         destructive_box = QGroupBox("Erase")
@@ -175,6 +181,15 @@ class MainWindow(QMainWindow):
         )
         self.factory_button.clicked.connect(self._confirm_factory_setup)
         program_grid.addWidget(self.factory_button, 1, 0, 1, 3)
+        self._add_action_button(
+            program_grid,
+            "Program test audio (0x08004000, 112 KB)",
+            "program_test_audio",
+            2,
+            0,
+            "This erases/replaces the 112 KB test audio area from "
+            "0x08004000 to the end of Flash. Continue?",
+        )
         root.addWidget(program_box)
 
         log_box = QGroupBox("Operation log")
@@ -319,6 +334,8 @@ class MainWindow(QMainWindow):
         if operation.startswith("program:"):
             region_key = operation.partition(":")[2]
             arguments["image"] = self.image_inputs[region_key].text().strip()
+        elif operation == "program_test_audio":
+            arguments["image"] = self.image_inputs["test_audio"].text().strip()
         elif operation == "factory_setup":
             arguments["iap_image"] = self.image_inputs["iap"].text().strip()
             arguments["app_a_image"] = self.image_inputs["app_a"].text().strip()

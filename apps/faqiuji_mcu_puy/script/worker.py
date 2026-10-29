@@ -57,6 +57,8 @@ class FlashWorker(QThread):
             elif self.operation.startswith("program:"):
                 region = self.operation.partition(":")[2]
                 backend.program(region, Path(self.arguments["image"]))
+            elif self.operation == "program_test_audio":
+                backend.program_test_audio(Path(self.arguments["image"]))
             elif self.operation == "factory_setup":
                 backend.factory_setup(
                     Path(self.arguments["iap_image"]),

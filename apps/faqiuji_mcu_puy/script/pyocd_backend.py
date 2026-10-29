@@ -158,6 +158,49 @@ class PyOcdBackend:
         region = self._get_region(region_key)
         image_path = image_path.expanduser().resolve()
         image = self._validate_image(region_key, image_path)
+        self._program_image(region, image_path, image, region_key)
+
+    def program_test_audio(self, image_path: Path) -> None:
+        if self.target_name != "PY32F071xB":
+            raise FlashError(
+                "The test audio layout is reserved for the PY32F071xB DAC demo."
+            )
+        image_path = image_path.expanduser().resolve()
+        if not image_path.is_file():
+            raise FlashError(f"Audio BIN file not found: {image_path}")
+        image = image_path.read_bytes()
+        if len(image) < config.TEST_AUDIO_HEADER_SIZE:
+            raise FlashError("Audio BIN is missing its 16-byte FQA1 header.")
+        if len(image) > config.TEST_AUDIO_REGION.size:
+            raise FlashError(
+                f"Audio BIN exceeds the {config.TEST_AUDIO_REGION.size}-byte "
+                "test audio region."
+            )
+        magic = image[:4]
+        sample_rate = int.from_bytes(image[4:8], "little")
+        sample_count = int.from_bytes(image[8:12], "little")
+        if (
+            magic != b"FQA1"
+            or sample_rate != config.TEST_AUDIO_SAMPLE_RATE
+            or sample_count != len(image) - config.TEST_AUDIO_HEADER_SIZE
+        ):
+            raise FlashError(
+                "Invalid audio BIN. Expected FQA1 header, 16 kHz sample rate, "
+                "and a sample count matching the PCM data."
+            )
+        self._program_image(
+            config.TEST_AUDIO_REGION,
+            image_path,
+            image,
+        )
+
+    def _program_image(
+        self,
+        region: config.FlashRegion,
+        image_path: Path,
+        image: bytes,
+        region_key: str | None = None,
+    ) -> None:
         expected = image + b"\xFF" * (region.size - len(image))
         self.log(
             f"Program {region.name}: {image_path} ({len(image)} bytes), "
@@ -171,7 +214,8 @@ class PyOcdBackend:
                 _, _, FileProgrammer = _pyocd_api()
                 target = session.board.target
                 self._validate_target_flash(target)
-                self._check_direct_b_metadata(target, region_key)
+                if region_key is not None:
+                    self._check_direct_b_metadata(target, region_key)
                 FileProgrammer(
                     session,
                     chip_erase="sector",
@@ -196,7 +240,6 @@ class PyOcdBackend:
                         f"Verify failed at address 0x{region.start + mismatch:08X}."
                     )
                 self.log(f"{region.name} programming and read-back verification passed.")
-
                 if region_key == "app_b":
                     current_a = bytes(
                         target.read_memory_block8(config.APP_A_BASE, config.APP_A_SIZE)

@@ -217,6 +217,57 @@ class BackendTests(unittest.TestCase):
             app_image + b"\xFF" * (config.APP_B_SIZE - len(app_image)),
         )
 
+    def test_program_test_audio_writes_only_audio_flash_area(self) -> None:
+        target = FakeConnectHelper.target
+        pcm = bytes(range(32))
+        image = (
+            b"FQA1"
+            + config.TEST_AUDIO_SAMPLE_RATE.to_bytes(4, "little")
+            + len(pcm).to_bytes(4, "little")
+            + (1).to_bytes(4, "little")
+            + pcm
+        )
+        target.flash[: config.TEST_AUDIO_BASE - config.FLASH_BASE] = b"\xA5" * (
+            config.TEST_AUDIO_BASE - config.FLASH_BASE
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            image_path = Path(directory) / "test_audio.bin"
+            image_path.write_bytes(image)
+            self.backend.program_test_audio(image_path)
+
+        prefix = target.read_memory_block8(
+            config.FLASH_BASE,
+            config.TEST_AUDIO_BASE - config.FLASH_BASE,
+        )
+        self.assertEqual(prefix, [0xA5] * len(prefix))
+        actual = bytes(
+            target.read_memory_block8(
+                config.TEST_AUDIO_BASE,
+                config.TEST_AUDIO_REGION.size,
+            )
+        )
+        self.assertEqual(
+            actual,
+            image + b"\xFF" * (config.TEST_AUDIO_REGION.size - len(image)),
+        )
+
+    def test_program_test_audio_rejects_invalid_header(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            image_path = Path(directory) / "bad_audio.bin"
+            image_path.write_bytes(b"not-an-audio-image")
+            with self.assertRaisesRegex(FlashError, "Invalid audio BIN"):
+                self.backend.program_test_audio(image_path)
+
+    def test_program_test_audio_is_restricted_to_f071(self) -> None:
+        backend = PyOcdBackend(
+            Path("."),
+            probe_uid="fake-probe",
+            target_name="PY32F040xB",
+            log=lambda _message: None,
+        )
+        with self.assertRaisesRegex(FlashError, "reserved for the PY32F071xB"):
+            backend.program_test_audio(Path("unused.bin"))
+
     def test_default_images_have_valid_vectors_for_their_regions(self) -> None:
         PyOcdBackend._validate_image("iap", config.IAP_BIN_DEFAULT)
         PyOcdBackend._validate_image("app_a", config.APP_A_BIN_DEFAULT)

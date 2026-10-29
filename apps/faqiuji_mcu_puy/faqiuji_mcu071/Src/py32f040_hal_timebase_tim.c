@@ -1,5 +1,6 @@
 #include "py32f0xx_hal.h"
-#include "py32f040_hal_tim.h"
+#include "py32f071_hal_tim.h"
+#include "faqiuji_audio.h"
 
 static TIM_HandleTypeDef sg_timebase_tim;
 
