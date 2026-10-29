@@ -1,0 +1,4 @@
+pyocd>=0.36,<0.39; python_version < "3.9"
+pyocd>=0.39; python_version >= "3.9"
+PyQt6>=6.5,<6.8; python_version < "3.9"
+PyQt6>=6.5; python_version >= "3.9"

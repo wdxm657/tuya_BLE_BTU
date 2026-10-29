@@ -36,6 +36,9 @@ int main(void)
 
   HAL_Init();
   APP_SystemClockConfig();
+
+  HAL_Delay(1000U);
+
   if (APP_USART_Init() != HAL_OK) {
     while (1) {
     }

@@ -124,6 +124,25 @@ static uint8_t APP_Bootloader_StagedValid(FAQIUJI_IMAGE_RECORD_T *record)
              (const void *)FAQIUJI_FLASH_APP_B_BASE, record->size);
 }
 
+static uint8_t APP_Bootloader_DirectBValid(void)
+{
+  uint32_t offset;
+
+  /*
+   * A direct programmer load has no staged descriptor. Keep it distinct from
+   * an OTA transfer, which writes the B marker before modifying the image.
+   */
+  for (offset = 0U; offset < 2U * FAQIUJI_FLASH_PAGE_SIZE; offset += 4U) {
+    if (*(const volatile uint32_t *)(FAQIUJI_META_B_BASE + offset) !=
+        0xFFFFFFFFUL) {
+      return 0U;
+    }
+  }
+  return APP_Bootloader_VectorValidAt(FAQIUJI_FLASH_APP_B_BASE,
+                                      FAQIUJI_FLASH_APP_A_BASE,
+                                      FAQIUJI_FLASH_APP_B_SIZE);
+}
+
 static uint8_t APP_Bootloader_ErasePage(uint32_t address)
 {
   FLASH_EraseInitTypeDef erase = {0};
@@ -215,6 +234,7 @@ uint32_t APP_Bootloader_Select(void)
   FAQIUJI_IMAGE_RECORD_T record_a;
   FAQIUJI_IMAGE_RECORD_T record_b;
   uint8_t valid_a;
+  uint32_t crc_a, crc_b;
 
   valid_a = APP_Bootloader_ImageValid(FAQIUJI_FLASH_APP_A_BASE, &record_a);
   if (APP_Bootloader_StagedValid(&record_b) &&
@@ -228,6 +248,32 @@ uint32_t APP_Bootloader_Select(void)
     APP_USART_Debug("IAP unified APP installed");
     return FAQIUJI_FLASH_APP_A_BASE;
   }
+  if (APP_Bootloader_DirectBValid()) {
+    crc_a = APP_Bootloader_Crc32((const void *)FAQIUJI_FLASH_APP_A_BASE,
+                                 FAQIUJI_FLASH_APP_B_SIZE);
+    crc_b = APP_Bootloader_Crc32((const void *)FAQIUJI_FLASH_APP_B_BASE,
+                                 FAQIUJI_FLASH_APP_B_SIZE);
+    if (!valid_a || crc_a != crc_b) {
+      record_b.magic = FAQIUJI_STAGED_IMAGE_MAGIC;
+      record_b.base = FAQIUJI_FLASH_APP_B_BASE;
+      record_b.size = FAQIUJI_FLASH_APP_B_SIZE;
+      record_b.crc32 = crc_b;
+      record_b.version = FAQIUJI_APP_VERSION;
+      record_b.generation = valid_a &&
+                            record_a.generation < 0xFFFFFFFEUL ?
+                            record_a.generation + 1U : 1U;
+      record_b.record_crc = APP_Bootloader_Crc32(
+          &record_b, offsetof(FAQIUJI_IMAGE_RECORD_T, record_crc));
+      APP_USART_Debug("IAP install direct APP B crc=%08lX",
+                      (unsigned long)crc_b);
+      if (!APP_Bootloader_Install(&record_b)) {
+        APP_USART_Debug("IAP direct APP install failed; B retained");
+        return 0U;
+      }
+      APP_USART_Debug("IAP direct APP B installed");
+      return FAQIUJI_FLASH_APP_A_BASE;
+    }
+  }
   if (valid_a != 0U) {
     APP_USART_Debug("IAP select APP A gen=%lu",
                     (unsigned long)record_a.generation);
@@ -238,7 +284,13 @@ uint32_t APP_Bootloader_Select(void)
     return FAQIUJI_FLASH_APP_A_BASE;
   }
 
-  APP_USART_Debug("IAP no valid APP");
+  APP_USART_Debug("IAP no valid APP SP=%08lX PC=%08lX",
+      (unsigned long)*(const volatile uint32_t *)FAQIUJI_FLASH_APP_A_BASE,
+      (unsigned long)*(const volatile uint32_t *)(FAQIUJI_FLASH_APP_A_BASE + 4U));
+  APP_USART_Debug("IAP META A=%08lX guard=%08lX",
+      (unsigned long)*(const volatile uint32_t *)FAQIUJI_META_A_BASE,
+      (unsigned long)*(const volatile uint32_t *)(FAQIUJI_META_A_BASE +
+                                               FAQIUJI_META_FACTORY_GUARD_OFFSET));
   return 0U;
 }
 
