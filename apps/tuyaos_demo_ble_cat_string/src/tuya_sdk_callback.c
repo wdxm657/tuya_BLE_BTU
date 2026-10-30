@@ -513,8 +513,6 @@ OPERATE_RET tuya_init_second(VOID_T)
     tal_sw_timer_init();
 
     tal_ble_bt_init(TAL_BLE_ROLE_PERIPERAL, tuya_ble_evt_callback);
-    // 从FLASH读取用户配置
-
     /* 1. 状态机（须在其他模块之前初始化） */
     app_state_init();
     return OPRT_OK;
@@ -548,17 +546,17 @@ OPERATE_RET tuya_init_third(VOID_T)
     tkl_wakeup_source_set(&usb_wakeup_cfg);
 /* ---- 模块初始化 ---- */
 
-    // #if !SHOUQUAN
-    // TUYA_GPIO_BASE_CFG_T output_cfg = {
-    //     .mode = TUYA_GPIO_PUSH_PULL,
-    //     .direct = TUYA_GPIO_OUTPUT,
-    //     .level = TUYA_GPIO_LEVEL_LOW,
-    // };
-    // tal_gpio_init(Set_Charg_I, &output_cfg);
+    #if !SHOUQUAN
+    TUYA_GPIO_BASE_CFG_T output_cfg = {
+        .mode = TUYA_GPIO_PUSH_PULL,
+        .direct = TUYA_GPIO_OUTPUT,
+        .level = TUYA_GPIO_LEVEL_LOW,
+    };
+    tal_gpio_init(Set_Charg_I, &output_cfg);
     // tal_gpio_init(AD_NTC_CON, &output_cfg);
-    // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
+    tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
     // tal_gpio_write(AD_NTC_CON, TUYA_GPIO_LEVEL_LOW);
-    // #endif
+    #endif
 
     // /* 2. 按键 */
     app_key_init();
@@ -581,15 +579,11 @@ OPERATE_RET tuya_init_third(VOID_T)
 STATIC VOID_T run_off_cb(VOID_T)
 {
     app_motor_stop();
-    // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
     app_led_update();
 }
 
 STATIC VOID_T run_on_cb(VOID_T)
 {
-    if (app_state_is_charging()) {
-        // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_HIGH);
-    }
     app_motor_start();
     app_led_update();
 }
@@ -625,6 +619,10 @@ OPERATE_RET tuya_init_last(VOID_T)
     app_key_timer_init();
     app_charge_timer_init();
     app_motor_timer_init();
+    ret = app_dp_load_persistent();
+    if (ret != OPRT_OK) {
+        TAL_PR_WARN("[dp] load config failed: %d", ret);
+    }
     // PB1 TX   PB7 RX
     #if SHOUQUAN
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);

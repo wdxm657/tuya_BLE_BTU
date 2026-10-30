@@ -213,6 +213,7 @@ BOOL_T app_state_is_machine_powered_on(VOID_T)
 
 BOOL_T app_state_set_app_power(BOOL_T on)
 {
+    tal_gpio_write(Set_Charg_I, on);
     if (s_app_powered == on) {
         app_state_notify_run_if_needed();
         return s_app_powered;

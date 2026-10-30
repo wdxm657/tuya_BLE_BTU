@@ -125,6 +125,9 @@ extern unsigned int ota_program_offset;
 #endif
 
 #if CAT_STRING
+// User data area: 0x2C000 - 0x3F000. Use the last 4K sector.
+#define USER_FLASH_ADDR_CAT_STRING            (0x3E000)
+
 // PIN
 // #ifndef BOARD_POWER_ON_PIN
 // #define BOARD_POWER_ON_PIN                      (TUYA_GPIO_NUM_31) // D7 无用 测试引脚
@@ -150,7 +153,7 @@ extern unsigned int ota_program_offset;
 #define LED_G           TUYA_GPIO_NUM_0  // A1 状态指示灯 绿色
 #define AD_Bat_CON      TUYA_GPIO_NUM_26 // D2 电量ADC控制开关 高电平开 低电平关
 // 以下两个在调试阶段暂时禁用
-// #define Set_Charg_I     TUYA_GPIO_NUM_9  // B1 充电电流限流开关 充电中且当电机运行时打拉高，电机停止时拉低
+#define Set_Charg_I     TUYA_GPIO_NUM_9  // B1 充电电流限流开关 充电中且当电机运行时打拉高，电机停止时拉低
 // #define AD_NTC_CON      TUYA_GPIO_NUM_15 // B7 电池NTC控制开关 高电平开 低电平关
 #define CHARGE_STATE    TUYA_GPIO_NUM_17 // C1 充电状态输入检测 低电平充电中高电平满电
 #define CHARGE_EN       TUYA_GPIO_NUM_28 // D4 充电芯片 高电平开 低电平关
