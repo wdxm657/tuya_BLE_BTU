@@ -6,7 +6,7 @@
         "vendor": "tlsr825x_ble",
         "fw": {
             "name": "tuyaos_demo_ble_cat_string",
-            "ver": "1.0.0"
+            "ver": "1.0.5"
         },
         "sdk": {
             "libs": []
