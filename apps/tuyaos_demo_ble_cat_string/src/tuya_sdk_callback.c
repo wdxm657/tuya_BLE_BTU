@@ -513,6 +513,8 @@ OPERATE_RET tuya_init_second(VOID_T)
     tal_sw_timer_init();
 
     tal_ble_bt_init(TAL_BLE_ROLE_PERIPERAL, tuya_ble_evt_callback);
+    // 从FLASH读取用户配置
+
     /* 1. 状态机（须在其他模块之前初始化） */
     app_state_init();
     return OPRT_OK;

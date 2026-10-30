@@ -184,6 +184,11 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                                     press_duration);
                         app_state_set_power(TRUE);
                         tuya_ble_device_factory_reset();
+                        // 若此时开机,则进入关机防止LED灯没有进入蓝色闪烁
+                        if (app_state_is_app_power_on())
+                        {
+                            app_state_set_app_power(0);
+                        }
                     } else {
                         /* 开机1s内的短按不做处理（防止唤醒按键被误认为进入低功耗） */
                         if (s_boot_tick_ms != 0 && (now_ms - s_boot_tick_ms) < 1000) {
