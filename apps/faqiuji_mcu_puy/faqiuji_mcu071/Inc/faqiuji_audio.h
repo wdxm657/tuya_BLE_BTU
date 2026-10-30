@@ -3,8 +3,13 @@
 
 #include "py32f0xx_hal.h"
 
+/* 1: built-in 1 kHz sine, 0: PCM audio stored in flash. */
+#ifndef FAQIUJI_AUDIO_SINE_TEST
+#define FAQIUJI_AUDIO_SINE_TEST 0U
+#endif
+
 #ifndef FAQIUJI_AUDIO_VOLUME_PERCENT
-#define FAQIUJI_AUDIO_VOLUME_PERCENT 20U
+#define FAQIUJI_AUDIO_VOLUME_PERCENT 10U
 #endif
 
 void faqiuji_audio_init(void);
