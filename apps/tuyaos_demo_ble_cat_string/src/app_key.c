@@ -34,6 +34,7 @@
 
 #include "app_key.h"
 #include "app_charge.h"
+#include "app_dp_parser.h"
 #include "app_state.h"
 
 /***********************************************************************
@@ -182,6 +183,7 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                         /* 长按松开 -> 进入配对模式 */
                         TAL_PR_INFO("[key] long press release (%dms) -> pairing",
                                     press_duration);
+                        app_dp_clear_persistent();
                         app_state_set_power(TRUE);
                         tuya_ble_device_factory_reset();
                         // 若此时开机,则进入关机防止LED灯没有进入蓝色闪烁

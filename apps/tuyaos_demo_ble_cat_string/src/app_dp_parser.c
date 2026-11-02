@@ -76,6 +76,21 @@ OPERATE_RET app_dp_load_persistent(VOID_T)
     return OPRT_OK;
 }
 
+OPERATE_RET app_dp_clear_persistent(VOID_T)
+{
+    OPERATE_RET ret = tal_flash_erase(USER_FLASH_ADDR_CAT_STRING, APP_DP_FLASH_ERASE_SIZE);
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("[dp] clear config failed: %d", ret);
+        return ret;
+    }
+
+    memset(&s_saved_config, 0, SIZEOF(s_saved_config));
+    s_saved_config_valid = FALSE;
+    s_config_write_failed = FALSE;
+    TAL_PR_INFO("[dp] saved config cleared");
+    return OPRT_OK;
+}
+
 STATIC OPERATE_RET app_dp_save_persistent(VOID_T)
 {
     app_dp_flash_data_t data = {0};

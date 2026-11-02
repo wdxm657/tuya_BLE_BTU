@@ -33,6 +33,7 @@ extern UINT32_T  g_sn;
 
 /* Normal boot only: restore user choices before registering run callbacks. */
 OPERATE_RET app_dp_load_persistent(VOID_T);
+OPERATE_RET app_dp_clear_persistent(VOID_T);
 OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size);
 OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T *buf, UINT32_T size);
 VOID_T app_dp_report_all(VOID_T);
