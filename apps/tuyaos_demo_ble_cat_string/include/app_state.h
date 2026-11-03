@@ -20,10 +20,8 @@ extern "C" {
 
 typedef enum {
     DEV_STATE_WORK        = 0,
-    DEV_STATE_STANDBY     = 1,
-    DEV_STATE_CHARGING    = 2,
-    DEV_STATE_CHARGE_DONE = 3,
-    DEV_STATE_SLEEP       = DEV_STATE_STANDBY,
+    DEV_STATE_SLEEP       = 1,
+    DEV_STATE_OFF         = 2,
 } dev_state_t;
 
 VOID_T app_state_init(VOID_T);

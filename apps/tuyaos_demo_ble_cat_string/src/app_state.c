@@ -42,12 +42,16 @@ VOID_T app_state_force_retention_wakeup(VOID_T)
 
 STATIC BOOL_T app_state_should_run(VOID_T)
 {
-    return (s_machine_powered && s_app_powered && !s_low_voltage_lock && !s_cycle_limit_reached && s_dev_state != DEV_STATE_SLEEP);
+    TAL_PR_INFO("app_state_should_run  %d %d %d %d %d", s_machine_powered, s_app_powered, s_low_voltage_lock, s_cycle_limit_reached,s_dev_state);
+    return (s_machine_powered && s_app_powered && !s_low_voltage_lock && !s_cycle_limit_reached &&
+            s_dev_state != DEV_STATE_SLEEP && s_dev_state != DEV_STATE_OFF);
 }
 
 STATIC VOID_T app_state_notify_run_if_needed(VOID_T)
 {
     BOOL_T should_run = app_state_should_run();
+    TAL_PR_INFO("should_run  %d %d ", should_run, s_run_active);
+
 
     if (should_run == s_run_active) {
         return;
@@ -135,9 +139,8 @@ STATIC VOID_T app_state_sleep_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     s_work_sleep_cycle_count++;
     if (s_work_sleep_cycle_count >= WORK_SLEEP_CYCLES) {
         // 3次休眠循环结束后，保持retention低功耗运行
+        // Stop cycling after the configured number of work/sleep cycles.
         s_cycle_limit_reached = TRUE;
-        app_state_stop_cycle_timers();
-        app_state_set(DEV_STATE_SLEEP);
         app_state_set_app_power(FALSE);
         TAL_PR_INFO("[state] cycle limit reached, power off");
         return;
@@ -227,7 +230,7 @@ BOOL_T app_state_set_app_power(BOOL_T on)
         app_state_set(DEV_STATE_WORK);
         app_state_start_work_timer();
     } else {
-        app_state_set(DEV_STATE_SLEEP);
+        app_state_set(DEV_STATE_OFF);
         app_state_stop_cycle_timers();
         app_state_notify_run_if_needed();
     }
@@ -249,7 +252,7 @@ VOID_T app_state_set_charging(BOOL_T charging)
 {
     if (charging)
     {
-        app_state_set(DEV_STATE_CHARGING);
+        // app_state_set(DEV_STATE_CHARGING);
     }
     s_charging = charging;
 }
@@ -263,7 +266,7 @@ VOID_T app_state_set_charge_done(BOOL_T done)
 {
     if (done)
     {
-        app_state_set(DEV_STATE_CHARGE_DONE);
+        // app_state_set(DEV_STATE_CHARGE_DONE);
     }
     s_charge_done = done;
 }
@@ -314,10 +317,10 @@ VOID_T app_state_process(VOID_T)
 
 UINT8_T app_state_get_dp_enum(VOID_T)
 {
-    return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
+    return s_dev_state;
     // if (s_app_powered)
     // {
-    //     return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
+    //     return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_OFF;
     // }
     // else{
     //     if (s_charge_done || s_charging)
@@ -329,7 +332,7 @@ UINT8_T app_state_get_dp_enum(VOID_T)
     //             return (UINT8_T)DEV_STATE_CHARGING;
     //         }
     //     }
-    //     return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_STANDBY;
+    //     return app_state_should_run() ? (UINT8_T)DEV_STATE_WORK : (UINT8_T)DEV_STATE_OFF;
     // }    
 }
 

@@ -212,11 +212,8 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                                 if (tkl_cpu_is_sleep())
                                 {
                                     app_state_force_retention_wakeup();
-                                    // 如果是关机状态，则开机
-                                    if (!app_state_is_app_power_on())
-                                    {
-                                        app_state_set_app_power(1);
-                                    }
+                                    app_state_set_power(TRUE);
+                                    app_state_set_app_power(1);
                                 }else{
                                     /* 短按松开 -> 进入超低功耗 */
                                     TAL_PR_INFO("[key] short press release (%dms) -> toggle machine power",

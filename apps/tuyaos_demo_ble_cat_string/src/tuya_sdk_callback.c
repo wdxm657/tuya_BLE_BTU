@@ -571,19 +571,21 @@ OPERATE_RET tuya_init_third(VOID_T)
     app_charge_init();
 
     // /* 6. 电机 (PWM 初始化) */
-    app_motor_init();
 
     return OPRT_OK;
 }
 
 STATIC VOID_T run_off_cb(VOID_T)
 {
+    TAL_PR_INFO("run_off_cb");
     app_motor_stop();
     app_led_update();
 }
 
 STATIC VOID_T run_on_cb(VOID_T)
 {
+    TAL_PR_INFO("run_on_cb");
+    app_motor_init();
     app_motor_start();
     app_led_update();
 }
@@ -619,10 +621,7 @@ OPERATE_RET tuya_init_last(VOID_T)
     app_key_timer_init();
     app_charge_timer_init();
     app_motor_timer_init();
-    ret = app_dp_load_persistent();
-    if (ret != OPRT_OK) {
-        TAL_PR_WARN("[dp] load config failed: %d", ret);
-    }
+
     // PB1 TX   PB7 RX
     #if SHOUQUAN
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
@@ -674,6 +673,10 @@ OPERATE_RET tuya_init_last(VOID_T)
 #endif // APP_PRODUCT_TEST
 #endif
     app_led_update();
+    ret = app_dp_load_persistent();
+    if (ret != OPRT_OK) {
+        TAL_PR_WARN("[dp] load config failed: %d", ret);
+    }
     // tuya_ble_device_factory_reset();
     return OPRT_OK;
 }

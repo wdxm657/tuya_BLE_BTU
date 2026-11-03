@@ -400,11 +400,6 @@ VOID_T app_motor_init(VOID_T)
 
     tal_pwm_init(MOTOR_PWM_CH_FOR, &pwm_cfg);
     tal_pwm_init(MOTOR_PWM_CH_REV, &pwm_cfg);
-    /* Restore the retained output without advancing the motor sequence. */
-    tal_pwm_duty_set(MOTOR_PWM_CH_FOR,
-                     s_current_direction == MOTOR_DIR_FORWARD ? s_current_duty : MOTOR_PWM_DUTY_0);
-    tal_pwm_duty_set(MOTOR_PWM_CH_REV,
-                     s_current_direction == MOTOR_DIR_REVERSE ? s_current_duty : MOTOR_PWM_DUTY_0);
 }
 
 VOID_T app_motor_timer_init(VOID_T)
