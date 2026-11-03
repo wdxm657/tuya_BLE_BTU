@@ -6,6 +6,7 @@
 #include "tal_log.h"
 #include "tal_sw_timer.h"
 #include "tal_pwm.h"
+#include "tal_system.h"
 
 #include "board.h"
 #include "app_motor.h"
@@ -20,6 +21,8 @@
 #define RANDOM_BURST_RAMP_STEPS 12
 #define RANDOM_BURST_STEP_MS (RANDOM_BURST_MS / RANDOM_BURST_RAMP_STEPS)
 #define RANDOM_STOP_MS 2000
+#define RANDOM_REVERSE_WAIT_MS 5000
+#define FIXED_INITIAL_DIRECTION_MS (4UL * 60UL * 1000UL)
 #define MOTOR_DUTY_MIN_PERCENT 30
 #define MOTOR_DUTY_MAX_PERCENT 50
 #define MOTOR_DUTY_DEFAULT_PERCENT 40
@@ -41,18 +44,22 @@ STATIC BOOL_T s_motor_running = FALSE;
 STATIC TIMER_ID s_motor_timer_id = NULL;
 STATIC UINT8_T s_seq_index = 0;
 STATIC UINT8_T s_var_seq_cycle_count = 0;
+STATIC UINT32_T s_fixed_start_ms = 0;
+STATIC BOOL_T s_fixed_seq_started = FALSE;
 #define BURST_SEQ_SIZE 20
 
 STATIC UINT8_T s_var_rand_seed = 0;
 STATIC UINT8_T s_var_burst_idx = 0;
 STATIC UINT8_T s_var_burst_step = 0;
 STATIC UINT8_T s_var_burst_dir = MOTOR_DIR_STOP;
+STATIC UINT8_T s_var_last_seq_dir = MOTOR_DIR_STOP;
 STATIC UINT8_T s_current_direction = MOTOR_DIR_STOP;
 STATIC UINT32_T s_current_duty = MOTOR_PWM_DUTY_0;
 
 typedef enum
 {
     VAR_SUB_SEQ,
+    VAR_SUB_BURST_WAIT,
     VAR_SUB_RANDOM,
     VAR_SUB_STOP,
 } var_substate_t;
@@ -66,55 +73,56 @@ typedef struct
     UINT16_T duration_ms;
 } sm_simple_seq_step_t;
 
-#define FIX_STOP 500
+#define FIX_STOP 1000
 STATIC const sm_simple_seq_step_t s_fixed_seq[] = {
+    // 4分钟运动结束后先停3秒
+    {MOTOR_DIR_STOP, FIX_STOP * 3},
     {MOTOR_DIR_FORWARD, 500},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_REVERSE, 500},
+    {MOTOR_DIR_REVERSE, 800},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_FORWARD, 500},
+    {MOTOR_DIR_FORWARD, 1300},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_REVERSE, 500},
+    {MOTOR_DIR_REVERSE, 1000},
     {MOTOR_DIR_STOP, FIX_STOP},
     {MOTOR_DIR_FORWARD, 2500},
     {MOTOR_DIR_STOP, FIX_STOP},
+    {MOTOR_DIR_REVERSE, 1200},
+    {MOTOR_DIR_STOP, FIX_STOP},
+    {MOTOR_DIR_FORWARD, 1400},
+    {MOTOR_DIR_STOP, FIX_STOP},
     {MOTOR_DIR_REVERSE, 500},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_FORWARD, 500},
-    {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_REVERSE, 500},
-    {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_FORWARD, 1000},
+    {MOTOR_DIR_FORWARD, 1300},
     {MOTOR_DIR_STOP, FIX_STOP},
     {MOTOR_DIR_REVERSE, 1500},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_FORWARD, 1000},
+    {MOTOR_DIR_FORWARD, 800},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_REVERSE, 1000},
+    {MOTOR_DIR_REVERSE, 700},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_FORWARD, 1000},
-    {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_REVERSE, 1000},
-    {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_FORWARD, 1000},
+    {MOTOR_DIR_FORWARD, 1200},
     {MOTOR_DIR_STOP, FIX_STOP},
     {MOTOR_DIR_REVERSE, 1500},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_FORWARD, 1000},
+    {MOTOR_DIR_FORWARD, 1700},
     {MOTOR_DIR_STOP, FIX_STOP},
     {MOTOR_DIR_REVERSE, 1000},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_FORWARD, 1000},
+    {MOTOR_DIR_FORWARD, 800},
     {MOTOR_DIR_STOP, FIX_STOP},
-    {MOTOR_DIR_REVERSE, 1000},
-    {MOTOR_DIR_STOP, 3000},
+    {MOTOR_DIR_REVERSE, 900},
+    {MOTOR_DIR_STOP, FIX_STOP},
+    {MOTOR_DIR_FORWARD, 1500},
+    {MOTOR_DIR_STOP, FIX_STOP},
+    {MOTOR_DIR_REVERSE, 700},
 };
 
 STATIC const sm_simple_seq_step_t s_variable_seq[VARIABLE_SEQ_STEPS] = {
     {MOTOR_DIR_FORWARD, 250},
-    {MOTOR_DIR_STOP, 100},
+    {MOTOR_DIR_STOP, 5000},
     {MOTOR_DIR_REVERSE, 250},
-    {MOTOR_DIR_STOP, 100},
+    {MOTOR_DIR_STOP, 5000},
 };
 
 /* 随机爆发序列 — 方向与挡位预编排，避免连续同方向 */
@@ -281,7 +289,22 @@ STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg)
 
     if (s_work_mode == WORK_MODE_FIXED)
     {
-        /* 固定模式：按 s_fixed_seq 表逐歩运动，占空比使用 DP30 映射值 */
+        if (!s_fixed_seq_started) {
+            UINT32_T elapsed_ms = tal_system_get_millisecond() - s_fixed_start_ms;
+
+            if (elapsed_ms < FIXED_INITIAL_DIRECTION_MS) {
+                app_motor_set_direction(MOTOR_DIR_FORWARD, NULL);
+                tal_sw_timer_start(s_motor_timer_id,
+                                   FIXED_INITIAL_DIRECTION_MS - elapsed_ms,
+                                   TAL_TIMER_ONCE);
+                return;
+            }
+
+            s_fixed_seq_started = TRUE;
+            s_seq_index = 0;
+        }
+
+        /* After the initial forward run, follow the fixed sequence until work timeout. */
         const sm_simple_seq_step_t *step = &s_fixed_seq[s_seq_index];
         app_motor_set_direction(step->dir,NULL);
         s_seq_index++;
@@ -299,6 +322,9 @@ STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg)
         /* s_variable_seq 循环 5 次 */
         const sm_simple_seq_step_t *step = &s_variable_seq[s_seq_index];
         app_motor_set_direction(step->dir,70 * MOTOR_PWM_DUTY_1);
+        if (step->dir != MOTOR_DIR_STOP) {
+            s_var_last_seq_dir = step->dir;
+        }
         s_seq_index++;
         if (s_seq_index >= VARIABLE_SEQ_STEPS)
         {
@@ -312,13 +338,27 @@ STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg)
                 const motor_burst_step_t *burst = &s_rand_burst_seq[s_var_burst_idx];
                 s_var_burst_dir = burst->dir;
                 s_var_burst_step = 0;
-                app_motor_start_random_burst_step();
                 s_var_burst_idx = (s_var_burst_idx + 1U) % BURST_SEQ_SIZE;
+                if (s_var_last_seq_dir != MOTOR_DIR_STOP &&
+                    s_var_burst_dir != s_var_last_seq_dir) {
+                    s_var_substate = VAR_SUB_BURST_WAIT;
+                    app_motor_set_direction(MOTOR_DIR_STOP, NULL);
+                    tal_sw_timer_start(s_motor_timer_id, RANDOM_REVERSE_WAIT_MS, TAL_TIMER_ONCE);
+                    return;
+                }
+                app_motor_start_random_burst_step();
+                s_var_substate = VAR_SUB_RANDOM;
                 tal_sw_timer_start(s_motor_timer_id, RANDOM_BURST_STEP_MS, TAL_TIMER_ONCE);
                 return;
             }
         }
         tal_sw_timer_start(s_motor_timer_id, step->duration_ms, TAL_TIMER_ONCE);
+    }
+    else if (s_var_substate == VAR_SUB_BURST_WAIT)
+    {
+        app_motor_start_random_burst_step();
+        s_var_substate = VAR_SUB_RANDOM;
+        tal_sw_timer_start(s_motor_timer_id, RANDOM_BURST_STEP_MS, TAL_TIMER_ONCE);
     }
     else if (s_var_substate == VAR_SUB_RANDOM)
     {
@@ -380,12 +420,15 @@ VOID_T app_motor_timer_init(VOID_T)
     s_motor_enabled = FALSE;
     s_motor_running = FALSE;
     s_seq_index = 0;
+    s_fixed_start_ms = 0;
+    s_fixed_seq_started = FALSE;
     s_var_substate = VAR_SUB_SEQ;
     s_var_seq_cycle_count = 0;
     s_var_rand_seed = 0;
     s_var_burst_idx = 0;
     s_var_burst_step = 0;
     s_var_burst_dir = MOTOR_DIR_STOP;
+    s_var_last_seq_dir = MOTOR_DIR_STOP;
     s_current_direction = MOTOR_DIR_STOP;
     s_current_duty = MOTOR_PWM_DUTY_0;
 
@@ -403,10 +446,13 @@ VOID_T app_motor_set_mode(work_mode_t mode)
 
     s_work_mode = mode;
     s_seq_index = 0;
+    s_fixed_seq_started = FALSE;
+    s_fixed_start_ms = tal_system_get_millisecond();
     s_var_substate = VAR_SUB_SEQ;
     s_var_seq_cycle_count = 0;
     s_var_burst_step = 0;
     s_var_burst_dir = MOTOR_DIR_STOP;
+    s_var_last_seq_dir = MOTOR_DIR_STOP;
     app_motor_restore_app_duty();
     s_var_rand_seed = (s_var_rand_seed * 13U + 7U) & 0xFFU;
     s_var_burst_idx = s_var_rand_seed % BURST_SEQ_SIZE;
@@ -451,10 +497,13 @@ VOID_T app_motor_start(VOID_T)
     }
     s_motor_enabled = TRUE;
     s_seq_index = 0;
+    s_fixed_start_ms = tal_system_get_millisecond();
+    s_fixed_seq_started = FALSE;
     s_var_substate = VAR_SUB_SEQ;
     s_var_seq_cycle_count = 0;
     s_var_burst_step = 0;
     s_var_burst_dir = MOTOR_DIR_STOP;
+    s_var_last_seq_dir = MOTOR_DIR_STOP;
     app_motor_restore_app_duty();
     s_var_rand_seed = (s_var_rand_seed * 13U + 7U) & 0xFFU;
     s_var_burst_idx = s_var_rand_seed % BURST_SEQ_SIZE;

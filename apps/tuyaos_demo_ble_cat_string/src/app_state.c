@@ -115,7 +115,7 @@ STATIC VOID_T app_state_work_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     }
 
     app_state_set(DEV_STATE_SLEEP);
-    //15分钟达到且USB未插入，进入retention低功耗休眠
+    //WORK_PERIOD_MIN达到且USB未插入，进入retention低功耗休眠
     if (!app_charge_read_usb())
     {
         tal_cpu_allow_sleep();
@@ -134,7 +134,7 @@ STATIC VOID_T app_state_sleep_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 
     s_work_sleep_cycle_count++;
     if (s_work_sleep_cycle_count >= WORK_SLEEP_CYCLES) {
-        // 5次休眠循环结束后，保持retention低功耗运行
+        // 3次休眠循环结束后，保持retention低功耗运行
         s_cycle_limit_reached = TRUE;
         app_state_stop_cycle_timers();
         app_state_set(DEV_STATE_SLEEP);
