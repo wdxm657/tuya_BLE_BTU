@@ -55,9 +55,11 @@ extern "C" {
  * @return OPRT_OK 成功
  */
 OPERATE_RET app_battery_init(VOID_T);
-/* Initial sampling and monitoring setup; excluded from retention wakeup. */
+/* Sample only when no valid RAM cache exists, then start monitoring. */
 OPERATE_RET app_battery_timer_init(VOID_T);
+/* Restart ADC monitoring using the retained RAM cache. */
 OPERATE_RET app_battery_resume(VOID_T);
+/* Stop ADC monitoring without clearing the cached battery data. */
 VOID_T app_battery_suspend(VOID_T);
 
 /**

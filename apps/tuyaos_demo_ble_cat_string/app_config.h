@@ -9,10 +9,10 @@
 //
 // APP
 //
-// CONFIG_ENABLE_LOG is not set
-// CONFIG_BOARD_ENABLE_LOG is not set
+#define ENABLE_LOG 1
+#define BOARD_ENABLE_LOG 1
 // CONFIG_TUYA_SDK_TEST is not set
-#define TUYA_SDK_DEBUG_MODE 0
+#define TUYA_SDK_DEBUG_MODE 1
 // end of APP
 
 //
@@ -23,8 +23,8 @@
 // FW_INFO
 //
 #define FIRMWARE_NAME           "tuyaos_demo_ble_cat_string"
-#define FIRMWARE_VERSION        "1.0.13"
-#define FIRMWARE_VERSION_HEX    0x0001000d
+#define FIRMWARE_VERSION        "1.0.14"
+#define FIRMWARE_VERSION_HEX    0x0001000e
 #define HARDWARE_VERSION        "0.1.0"
 #define HARDWARE_VERSION_HEX    0x00000100
 

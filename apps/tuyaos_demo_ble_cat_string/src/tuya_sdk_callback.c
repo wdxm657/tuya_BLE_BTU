@@ -554,7 +554,7 @@ OPERATE_RET tuya_init_third(VOID_T)
     };
     tal_gpio_init(Set_Charg_I, &output_cfg);
     // tal_gpio_init(AD_NTC_CON, &output_cfg);
-    tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
+    tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_HIGH);
     // tal_gpio_write(AD_NTC_CON, TUYA_GPIO_LEVEL_LOW);
     #endif
 

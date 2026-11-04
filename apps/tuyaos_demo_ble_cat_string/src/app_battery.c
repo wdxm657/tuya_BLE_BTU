@@ -49,6 +49,8 @@ STATIC BOOL_T   s_battery_critical = FALSE;
 #define PCT_BUDGET_PER_TICK 1       /* 每 tick (1s) 增加 0.1% */
 
 STATIC UINT8_T s_pct_budget = PCT_BUDGET_MAX;
+STATIC BOOL_T s_cache_valid = FALSE;
+STATIC BOOL_T s_suspended = FALSE;
 
 /* 临界低电回调（由 tuya_sdk_callback 注册） */
 STATIC VOID_T (*s_critical_cb)(VOID_T) = NULL;
@@ -197,7 +199,7 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
     BOOL_T charging_or_full;
 
     // retention休眠时不做AD采样
-    if (tkl_cpu_is_sleep())
+    if (s_suspended || !s_adc_inited || tkl_cpu_is_sleep())
     {
         return;
     }
@@ -252,10 +254,11 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
 
     /* 更新缓存 */
     s_cached_voltage = vol_mv;
-    if (s_cached_percent != filtered_percent) {
+    s_cache_valid = (vol_mv > 0);
+    // if (s_cached_percent != filtered_percent) {
         TAL_PR_INFO("[battery] sample: %dmV -> %d%% (raw=%d%%, charge=%d)",
                     vol_mv, filtered_percent, percent, app_state_is_charging());
-    }
+    // }
     
     s_cached_percent = filtered_percent;
 
@@ -325,17 +328,22 @@ OPERATE_RET app_battery_timer_init(VOID_T)
         return OPRT_COM_ERROR;
     }
 
-    tal_system_delay(10);  /* 等待电压稳定 */
+    /* Only initialize the cache once; retain filtered data across sleep/wakeup. */
+    if (!s_cache_valid) {
+        INT32_T init_mv = 0;
 
-    /* ---------- 首次采样初始化缓存 ---------- */
-    INT32_T init_mv = 0;
-    if (app_battery_sample(&init_mv) == OPRT_OK) {
-        s_cached_voltage = init_mv;
-        s_cached_percent = app_battery_voltage_to_percent(init_mv);
-        s_pct_budget = PCT_BUDGET_MAX;
-    TAL_PR_INFO("[battery] init: %dmV, %d%%", init_mv, s_cached_percent);
-    } else {
-        TAL_PR_WARN("[battery] init sample failed, use defaults");
+        tal_system_delay(10);
+        if (app_battery_sample(&init_mv) == OPRT_OK && init_mv > 0) {
+            s_cached_voltage = init_mv;
+            s_cached_percent = app_battery_voltage_to_percent(init_mv);
+            s_pct_budget = PCT_BUDGET_MAX;
+            s_battery_low = (s_cached_percent <= BATTERY_LOW_THRESHOLD);
+            s_battery_critical = (s_cached_percent <= BATTERY_CRITICAL_THRESHOLD);
+            s_cache_valid = TRUE;
+            TAL_PR_INFO("[battery] init: %dmV, %d%%", init_mv, s_cached_percent);
+        } else {
+            TAL_PR_WARN("[battery] init sample failed, use defaults");
+        }
     }
 
     /* ---------- 创建监测定时器（ BATTERY_MONITOR_INTERVAL_MS 周期） ---------- */
@@ -349,6 +357,7 @@ OPERATE_RET app_battery_timer_init(VOID_T)
     if (ret != OPRT_OK) {
         return ret;
     }
+    s_suspended = FALSE;
 
     TAL_PR_INFO("[battery] monitoring started, interval=%dms", BATTERY_MONITOR_INTERVAL_MS);
     return OPRT_OK;
@@ -357,14 +366,16 @@ OPERATE_RET app_battery_timer_init(VOID_T)
 OPERATE_RET app_battery_resume(VOID_T)
 {
     OPERATE_RET ret;
-
-    if (s_adc_inited && s_monitor_timer_id != NULL) {
-        return tal_sw_timer_start(s_monitor_timer_id, BATTERY_MONITOR_INTERVAL_MS, TAL_TIMER_CYCLE);
+    if (!s_suspended && s_adc_inited && s_monitor_timer_id != NULL &&
+        tal_sw_timer_is_running(s_monitor_timer_id)) {
+        return OPRT_OK;
     }
 
-    ret = app_battery_init();
-    if (ret != OPRT_OK) {
-        return ret;
+    if (!s_adc_inited) {
+        ret = app_battery_init();
+        if (ret != OPRT_OK) {
+            return ret;
+        }
     }
     return app_battery_timer_init();
 }
@@ -374,6 +385,7 @@ VOID_T app_battery_suspend(VOID_T)
     if (s_monitor_timer_id != NULL) {
         tal_sw_timer_stop(s_monitor_timer_id);
     }
+    s_suspended = TRUE;
     if (s_adc_inited) {
         tal_adc_deinit(TUYA_ADC_NUM_0);
         s_adc_inited = FALSE;

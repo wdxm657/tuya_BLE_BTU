@@ -42,7 +42,7 @@ VOID_T app_state_force_retention_wakeup(VOID_T)
 
 STATIC BOOL_T app_state_should_run(VOID_T)
 {
-    TAL_PR_INFO("app_state_should_run  %d %d %d %d %d", s_machine_powered, s_app_powered, s_low_voltage_lock, s_cycle_limit_reached,s_dev_state);
+    // TAL_PR_INFO("app_state_should_run  %d %d %d %d %d", s_machine_powered, s_app_powered, s_low_voltage_lock, s_cycle_limit_reached,s_dev_state);
     return (s_machine_powered && s_app_powered && !s_low_voltage_lock && !s_cycle_limit_reached &&
             s_dev_state != DEV_STATE_SLEEP && s_dev_state != DEV_STATE_OFF);
 }
@@ -50,7 +50,7 @@ STATIC BOOL_T app_state_should_run(VOID_T)
 STATIC VOID_T app_state_notify_run_if_needed(VOID_T)
 {
     BOOL_T should_run = app_state_should_run();
-    TAL_PR_INFO("should_run  %d %d ", should_run, s_run_active);
+    // TAL_PR_INFO("should_run  %d %d ", should_run, s_run_active);
 
 
     if (should_run == s_run_active) {
@@ -216,7 +216,7 @@ BOOL_T app_state_is_machine_powered_on(VOID_T)
 
 BOOL_T app_state_set_app_power(BOOL_T on)
 {
-    tal_gpio_write(Set_Charg_I, on);
+    tal_gpio_write(Set_Charg_I, !on);
     if (s_app_powered == on) {
         app_state_notify_run_if_needed();
         return s_app_powered;
