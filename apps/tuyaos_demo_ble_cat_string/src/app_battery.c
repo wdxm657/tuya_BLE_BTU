@@ -88,7 +88,7 @@ STATIC CONST struct {
     {3600,  25},
     {3560,  20},
     {3500,  10},
-    {3400,  5},
+    {3400,   5},
     {3250,   0},
     // {3000,   0},
 };
@@ -176,9 +176,9 @@ STATIC OPERATE_RET app_battery_sample(INT32_T *vol_mv)
         return OPRT_COM_ERROR;
     }
 
-    /* 计算平均值 → 换算电压 */
+    /* 计算平均值 → 换算电压 这边先固定+20mv*/
     INT32_T adc_avg = raw_sum / (INT32_T)valid_cnt;
-    *vol_mv = adc_avg * BATTERY_DIVIDER_RATIO;
+    *vol_mv = (adc_avg + 20) * BATTERY_DIVIDER_RATIO;
 
     return OPRT_OK;
 }
@@ -332,7 +332,7 @@ OPERATE_RET app_battery_timer_init(VOID_T)
     if (!s_cache_valid) {
         INT32_T init_mv = 0;
 
-        tal_system_delay(10);
+        tal_system_delay(500);
         if (app_battery_sample(&init_mv) == OPRT_OK && init_mv > 0) {
             s_cached_voltage = init_mv;
             s_cached_percent = app_battery_voltage_to_percent(init_mv);

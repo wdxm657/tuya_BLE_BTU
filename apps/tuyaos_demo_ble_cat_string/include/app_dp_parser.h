@@ -7,6 +7,7 @@
 #define __APP_DP_PARSER_H__
 
 #include "tuya_cloud_types.h"
+#include "app_motor_tuning_config.h"
 
 #ifdef __cplusplus
 extern "C" {

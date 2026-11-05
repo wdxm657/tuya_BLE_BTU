@@ -12,6 +12,7 @@
 #include "app_charge.h"
 #include "app_state.h"
 #include "app_led.h"
+#include "app_motor.h"
 
 #define CHARGE_POLL_MS 100
 
@@ -66,6 +67,7 @@ STATIC VOID_T app_charge_apply_state(charge_state_t state)
         // tal_gpio_write(Set_Charg_I, TUYA_GPIO_LEVEL_LOW);
     }
 
+    app_motor_refresh_duty();
     app_led_update();
 }
 

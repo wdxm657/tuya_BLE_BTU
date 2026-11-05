@@ -1,0 +1,257 @@
+{
+    "Pro_Key": "ytaqgucz",
+    "Dp_Data": [
+        {
+            "attr": 1664,
+            "code": "switch",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_power2",
+            "id": 1,
+            "mode": "rw",
+            "name": "开关",
+            "property": {
+                "type": "bool"
+            },
+            "subType": "bool",
+            "type": "obj"
+        },
+        {
+            "attr": 1664,
+            "code": "mode",
+            "defaultValue": "ConstantSpeed",
+            "desc": "ConstantSpeed：定速模式\nVariableSpeed：变速模式",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_mode",
+            "id": 4,
+            "mode": "rw",
+            "name": "工作模式",
+            "property": {
+                "range": [
+                    "ConstantSpeed",
+                    "VariableSpeed"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "bright_value",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-liangdu",
+            "id": 12,
+            "mode": "rw",
+            "name": "速度1",
+            "property": {
+                "max": 100,
+                "min": 0,
+                "scale": 0,
+                "step": 1,
+                "type": "value"
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "battery_percentage",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_battery",
+            "id": 18,
+            "mode": "ro",
+            "name": "电池电量",
+            "property": {
+                "max": 100,
+                "min": 0,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": "%"
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "movement_level",
+            "defaultValue": "0",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "id": 22,
+            "mode": "rw",
+            "name": "速度",
+            "property": {
+                "range": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "4"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
+            "type": "obj"
+        },
+        {
+            "attr": 1664,
+            "code": "work_state",
+            "defaultValue": "work",
+            "desc": "work：逗宠中\nstandby：待机中\nturnoff：关机",
+            "editPermission": true,
+            "extContent": "",
+            "id": 26,
+            "mode": "ro",
+            "name": "工作状态",
+            "property": {
+                "range": [
+                    "work",
+                    "standby",
+                    "turnoff"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "auto_tease_time",
+            "defaultValue": "10",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "id": 28,
+            "mode": "rw",
+            "name": "游戏间隔时长",
+            "property": {
+                "max": 120,
+                "min": 10,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": "min"
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "stepless_control",
+            "defaultValue": "1",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "id": 30,
+            "mode": "rw",
+            "name": "游戏速度",
+            "property": {
+                "max": 100,
+                "min": 1,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": ""
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "backlight_enum",
+            "defaultValue": "1",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "id": 35,
+            "mode": "rw",
+            "name": "循环游戏次数",
+            "property": {
+                "range": [
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                    "5",
+                    "unlimited"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
+            "type": "obj"
+        },
+        {
+            "attr": 0,
+            "code": "log_update",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": false,
+            "extContent": "",
+            "id": 101,
+            "mode": "ro",
+            "name": "日志上传",
+            "property": {
+                "maxlen": 255,
+                "type": "string"
+            },
+            "subType": "string",
+            "type": "obj"
+        },
+        {
+            "attr": 4096,
+            "code": "humidity_set",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": false,
+            "extContent": "",
+            "iconname": "icon-setting",
+            "id": 102,
+            "mode": "rw",
+            "name": "速度2",
+            "property": {
+                "max": 100,
+                "min": 0,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": "%"
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 4096,
+            "code": "dis_current",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": false,
+            "extContent": "",
+            "iconname": "icon-tcl_function_vs1",
+            "id": 103,
+            "mode": "rw",
+            "name": "速度3",
+            "property": {
+                "max": 100,
+                "min": 0,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": "m"
+            },
+            "subType": "value",
+            "type": "obj"
+        }
+    ]
+}

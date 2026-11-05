@@ -247,6 +247,22 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
             return OPRT_INVALID_PARM;
         }
         break;
+#if APP_ENABLE_MOTOR_TUNING_DPS
+    case DP_ID_DEBUG_MOTOR_DUTY_MIN:
+    case DP_ID_DEBUG_MOTOR_DUTY_MAX:
+    case DP_ID_DEBUG_DUTY_BOOST_MAX:
+        if (g_cmd.dp_type != DT_VALUE || g_cmd.dp_data_len != DT_VALUE_LEN ||
+            app_dp_get_value(g_cmd.dp_data) > 100U) {
+            return OPRT_INVALID_PARM;
+        }
+        if ((g_cmd.dp_id == DP_ID_DEBUG_MOTOR_DUTY_MIN &&
+             app_dp_get_value(g_cmd.dp_data) > app_motor_get_tuning_param(MOTOR_TUNING_DUTY_MAX)) ||
+            (g_cmd.dp_id == DP_ID_DEBUG_MOTOR_DUTY_MAX &&
+             app_dp_get_value(g_cmd.dp_data) < app_motor_get_tuning_param(MOTOR_TUNING_DUTY_MIN))) {
+            return OPRT_INVALID_PARM;
+        }
+        break;
+#endif
     default:
         break;
     }
@@ -294,6 +310,20 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         // app_state_reset_work_cycle();
         break;
     }
+#if APP_ENABLE_MOTOR_TUNING_DPS
+    case DP_ID_DEBUG_MOTOR_DUTY_MIN:
+    case DP_ID_DEBUG_MOTOR_DUTY_MAX:
+    case DP_ID_DEBUG_DUTY_BOOST_MAX: {
+        app_motor_tuning_param_t param =
+            g_cmd.dp_id == DP_ID_DEBUG_MOTOR_DUTY_MIN ? MOTOR_TUNING_DUTY_MIN :
+            g_cmd.dp_id == DP_ID_DEBUG_MOTOR_DUTY_MAX ? MOTOR_TUNING_DUTY_MAX :
+                                                        MOTOR_TUNING_DUTY_BOOST_MAX;
+        if (!app_motor_set_tuning_param(param, (UINT8_T)app_dp_get_value(g_cmd.dp_data))) {
+            return OPRT_INVALID_PARM;
+        }
+        break;
+    }
+#endif
     default:
         TAL_PR_DEBUG("[dp] unsupported id=%d", g_cmd.dp_id);
         break;
@@ -325,6 +355,11 @@ OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T *buf, UINT32_T size)
     case DP_ID_BATTERY:
     case DP_ID_STEPLESS_CONTROL:
     case DP_ID_GAME_INTERVAL:
+#if APP_ENABLE_MOTOR_TUNING_DPS
+    case DP_ID_DEBUG_MOTOR_DUTY_MIN:
+    case DP_ID_DEBUG_MOTOR_DUTY_MAX:
+    case DP_ID_DEBUG_DUTY_BOOST_MAX:
+#endif
         g_rsp.dp_type = DT_VALUE;
         g_rsp.dp_data_len = DT_VALUE_LEN;
         memcpy(g_rsp.dp_data, buf, DT_VALUE_LEN);
@@ -365,4 +400,13 @@ VOID_T app_dp_report_all(VOID_T)
 
     app_dp_set_value(value_buf, app_state_get_game_interval());
     app_dp_report(DP_ID_GAME_INTERVAL, value_buf, DT_VALUE_LEN);
+
+#if APP_ENABLE_MOTOR_TUNING_DPS
+    app_dp_set_value(value_buf, app_motor_get_tuning_param(MOTOR_TUNING_DUTY_MIN));
+    app_dp_report(DP_ID_DEBUG_MOTOR_DUTY_MIN, value_buf, DT_VALUE_LEN);
+    app_dp_set_value(value_buf, app_motor_get_tuning_param(MOTOR_TUNING_DUTY_MAX));
+    app_dp_report(DP_ID_DEBUG_MOTOR_DUTY_MAX, value_buf, DT_VALUE_LEN);
+    app_dp_set_value(value_buf, app_motor_get_tuning_param(MOTOR_TUNING_DUTY_BOOST_MAX));
+    app_dp_report(DP_ID_DEBUG_DUTY_BOOST_MAX, value_buf, DT_VALUE_LEN);
+#endif
 }
