@@ -255,10 +255,10 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
     /* 更新缓存 */
     s_cached_voltage = vol_mv;
     s_cache_valid = (vol_mv > 0);
-    // if (s_cached_percent != filtered_percent) {
+    if (s_cached_percent != filtered_percent) {
         TAL_PR_INFO("[battery] sample: %dmV -> %d%% (raw=%d%%, charge=%d)",
                     vol_mv, filtered_percent, percent, app_state_is_charging());
-    // }
+    }
     
     s_cached_percent = filtered_percent;
 

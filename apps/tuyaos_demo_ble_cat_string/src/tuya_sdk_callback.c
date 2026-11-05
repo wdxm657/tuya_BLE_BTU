@@ -229,6 +229,7 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
         if (force_report || repeat != s_last_game_repeat) {
             s_last_game_repeat = repeat;
             app_dp_report(DP_ID_GAME_REPEAT, &repeat, DT_ENUM_LEN);
+            TAL_PR_DEBUG("[dp] GAME_REPEAT report: %d", s_last_game_repeat);
         }
     }
 
@@ -241,6 +242,7 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
             buf[2] = (UINT8_T)(minutes >> 8);
             buf[3] = (UINT8_T)minutes;
             app_dp_report(DP_ID_GAME_INTERVAL, buf, DT_VALUE_LEN);
+            TAL_PR_DEBUG("[dp] GAME_INTERVAL report: %d", s_last_game_interval);
         }
     }
 }

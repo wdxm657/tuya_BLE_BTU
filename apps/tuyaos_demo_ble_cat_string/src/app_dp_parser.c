@@ -251,7 +251,7 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         break;
     }
 
-    TAL_PR_HEXDUMP_INFO("dp_cmd", (VOID_T *)&g_cmd, g_cmd.dp_data_len + 4);
+    // TAL_PR_HEXDUMP_INFO("dp_cmd", (VOID_T *)&g_cmd, g_cmd.dp_data_len + 4);
 
     switch (g_cmd.dp_id) {
     case DP_ID_SWITCH:

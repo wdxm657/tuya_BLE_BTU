@@ -23,9 +23,9 @@
 #define RANDOM_STOP_MS 2000
 #define RANDOM_REVERSE_WAIT_MS 5000
 #define FIXED_INITIAL_DIRECTION_MS (4UL * 60UL * 1000UL)
-#define MOTOR_DUTY_MIN_PERCENT 30
-#define MOTOR_DUTY_MAX_PERCENT 50
-#define MOTOR_DUTY_DEFAULT_PERCENT 40
+#define MOTOR_DUTY_MIN_PERCENT 20
+#define MOTOR_DUTY_MAX_PERCENT 48
+#define MOTOR_DUTY_DEFAULT_PERCENT (MOTOR_DUTY_MIN_PERCENT + MOTOR_DUTY_MAX_PERCENT) / 2
 #define MOTOR_STEPLESS_DEFAULT_PERCENT \
     (((MOTOR_DUTY_DEFAULT_PERCENT - MOTOR_DUTY_MIN_PERCENT) * 100) / \
      (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT))
@@ -197,10 +197,11 @@ STATIC UINT32_T app_motor_duty_for_stepless(UINT8_T percent)
         voltage = (INT32_T)BATTERY_VOLTAGE_MAX;
     }
 
-    /* 补偿量：4200mV→0, 3300mV→DUTY_BOOST_MAX（线性插值） */
+    /* 补偿量：4200mV→0, 3500mV→DUTY_BOOST_MAX（线性插值） */
     range = BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN;
     drop = (UINT32_T)(BATTERY_VOLTAGE_MAX - (UINT32_T)voltage);
     boost = (drop * DUTY_BOOST_MAX) / range;
+    TAL_PR_INFO("[motor] voltage %d base %d boost %d", voltage, base_percent,boost);
 
     /* Mapped base percent plus low-voltage boost, capped at 100%. */
     duty_percent = base_percent + boost;
@@ -476,7 +477,9 @@ VOID_T app_motor_set_stepless_percent(UINT8_T percent)
     if (s_motor_enabled && !s_random_duty_active) {
         app_motor_set_direction(s_current_direction,NULL);
     }
-    TAL_PR_INFO("[motor] stepless percent=%d", s_stepless_percent);
+    UINT8_T t = MOTOR_DUTY_MIN_PERCENT +
+                       ((UINT32_T)s_stepless_percent * (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT)) / 100;
+    TAL_PR_INFO("[motor] stepless percent=%d %d", s_stepless_percent, t);
 }
 
 UINT8_T app_motor_get_stepless_percent(VOID_T)
