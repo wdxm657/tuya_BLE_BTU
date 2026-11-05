@@ -17,6 +17,19 @@ extern "C" {
 #define WORK_PERIOD_MS      (WORK_PERIOD_MIN * 1000UL)
 #define SLEEP_PERIOD_MS     (SLEEP_PERIOD_MIN * 1000UL)
 #define WORK_SLEEP_CYCLES   3
+#define GAME_INTERVAL_DEFAULT_MIN 10U
+#define GAME_INTERVAL_MIN         10U
+#define GAME_INTERVAL_MAX         120U
+
+/* DP 35 uses enum indices, not literal game counts. */
+typedef enum {
+    GAME_REPEAT_1 = 0,
+    GAME_REPEAT_2,
+    GAME_REPEAT_3,
+    GAME_REPEAT_4,
+    GAME_REPEAT_5,
+    GAME_REPEAT_UNLIMITED,
+} game_repeat_t;
 
 typedef enum {
     DEV_STATE_WORK        = 0,
@@ -45,6 +58,10 @@ VOID_T app_state_set_low_voltage_lock(BOOL_T locked);
 BOOL_T app_state_is_low_voltage_locked(VOID_T);
 
 VOID_T app_state_reset_work_cycle(VOID_T);
+VOID_T app_state_set_game_repeat(game_repeat_t repeat);
+game_repeat_t app_state_get_game_repeat(VOID_T);
+VOID_T app_state_set_game_interval(UINT32_T minutes);
+UINT32_T app_state_get_game_interval(VOID_T);
 VOID_T app_state_process(VOID_T);
 UINT8_T app_state_get_dp_enum(VOID_T);
 

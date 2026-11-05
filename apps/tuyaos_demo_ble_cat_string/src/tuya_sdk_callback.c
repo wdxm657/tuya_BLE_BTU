@@ -77,6 +77,8 @@ STATIC UINT8_T s_last_switch = 0xFF;
 STATIC UINT8_T s_last_mode = 0xFF;
 STATIC UINT8_T s_last_stepless = 0xFF;
 STATIC UINT8_T s_last_work_state = 0xFF;
+STATIC UINT8_T s_last_game_repeat = 0xFF;
+STATIC UINT32_T s_last_game_interval = 0;
 
 STATIC TIMER_ID s_retention_timer_id = NULL;
 STATIC UINT32_T s_retention_start_ms = 0;
@@ -221,6 +223,26 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
             TAL_PR_DEBUG("[dp] work_state report: %d", state);
         }
     }
+
+    {
+        UINT8_T repeat = (UINT8_T)app_state_get_game_repeat();
+        if (force_report || repeat != s_last_game_repeat) {
+            s_last_game_repeat = repeat;
+            app_dp_report(DP_ID_GAME_REPEAT, &repeat, DT_ENUM_LEN);
+        }
+    }
+
+    {
+        UINT32_T minutes = app_state_get_game_interval();
+        if (force_report || minutes != s_last_game_interval) {
+            s_last_game_interval = minutes;
+            buf[0] = (UINT8_T)(minutes >> 24);
+            buf[1] = (UINT8_T)(minutes >> 16);
+            buf[2] = (UINT8_T)(minutes >> 8);
+            buf[3] = (UINT8_T)minutes;
+            app_dp_report(DP_ID_GAME_INTERVAL, buf, DT_VALUE_LEN);
+        }
+    }
 }
 
 STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
@@ -241,6 +263,8 @@ STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
             s_last_mode = 0xFF;
             s_last_stepless = 0xFF;
             s_last_work_state = 0xFF;
+            s_last_game_repeat = 0xFF;
+            s_last_game_interval = 0;
 
             tuya_ble_connected_handler();
             app_led_update();

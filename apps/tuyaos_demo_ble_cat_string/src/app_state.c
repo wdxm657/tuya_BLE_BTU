@@ -6,6 +6,7 @@
 #include "tal_log.h"
 #include "tal_sw_timer.h"
 #include "tal_system.h"
+#include "tal_gpio.h"
 
 #include "app_state.h"
 #include "app_battery.h"
@@ -26,6 +27,10 @@ STATIC TIMER_ID s_sleep_timer_id = NULL;
 STATIC BOOL_T s_run_active = FALSE;
 STATIC UINT8_T s_work_sleep_cycle_count = 0;
 STATIC BOOL_T s_cycle_limit_reached = FALSE;
+STATIC game_repeat_t s_game_repeat = GAME_REPEAT_1;
+STATIC UINT32_T s_game_interval_min = GAME_INTERVAL_DEFAULT_MIN;
+STATIC UINT8_T s_completed_games = 0;
+STATIC BOOL_T s_waiting_next_game = FALSE;
 
 STATIC VOID_T (*s_state_change_cb)(dev_state_t, dev_state_t) = NULL;
 STATIC VOID_T (*s_run_on_cb)(VOID_T) = NULL;
@@ -100,6 +105,8 @@ STATIC VOID_T app_state_reset_cycle_tracking(VOID_T)
 {
     s_work_sleep_cycle_count = 0;
     s_cycle_limit_reached = FALSE;
+    s_completed_games = 0;
+    s_waiting_next_game = FALSE;
 }
 
 STATIC VOID_T app_state_stop_cycle_timers(VOID_T)
@@ -114,7 +121,7 @@ STATIC VOID_T app_state_stop_cycle_timers(VOID_T)
 
 STATIC VOID_T app_state_work_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 {
-    if (!s_machine_powered || !s_app_powered || s_low_voltage_lock) {
+    if (!app_state_should_run()) {
         return;
     }
 
@@ -132,18 +139,42 @@ STATIC VOID_T app_state_work_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 
 STATIC VOID_T app_state_sleep_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 {
-    if (!s_machine_powered || !s_app_powered || s_low_voltage_lock) {
+    if (!s_machine_powered || !s_app_powered || s_low_voltage_lock ||
+        s_dev_state != DEV_STATE_SLEEP) {
         return;
     }
 
-    s_work_sleep_cycle_count++;
-    if (s_work_sleep_cycle_count >= WORK_SLEEP_CYCLES) {
-        // 3次休眠循环结束后，保持retention低功耗运行
-        // Stop cycling after the configured number of work/sleep cycles.
+    if (!s_waiting_next_game) {
+        s_work_sleep_cycle_count++;
+        if (s_work_sleep_cycle_count >= WORK_SLEEP_CYCLES) {
+            /* Saturate so unlimited operation cannot wrap the game counter. */
+            if (s_completed_games < GAME_REPEAT_UNLIMITED) {
+                s_completed_games++;
+            }
+            TAL_PR_INFO("[state] game complete: %d", s_completed_games);
+            if (s_game_repeat == GAME_REPEAT_UNLIMITED ||
+                s_completed_games < (UINT8_T)s_game_repeat + 1U) {
+                s_waiting_next_game = TRUE;
+                if (s_sleep_timer_id != NULL) {
+                    tal_sw_timer_start(s_sleep_timer_id, s_game_interval_min * 60000UL, TAL_TIMER_ONCE);
+                }
+                TAL_PR_INFO("[state] next game in %umin", s_game_interval_min);
+                return;
+            }
+        }
+    }
+
+    if (s_game_repeat != GAME_REPEAT_UNLIMITED &&
+        s_completed_games >= (UINT8_T)s_game_repeat + 1U) {
         s_cycle_limit_reached = TRUE;
         app_state_set_app_power(FALSE);
-        TAL_PR_INFO("[state] cycle limit reached, power off");
+        TAL_PR_INFO("[state] game limit reached, power off");
         return;
+    }
+
+    if (s_waiting_next_game) {
+        s_waiting_next_game = FALSE;
+        s_work_sleep_cycle_count = 0;
     }
 
     // 休眠结束，强制退出retention低功耗
@@ -164,6 +195,8 @@ VOID_T app_state_init(VOID_T)
     s_charge_done = FALSE;
     s_low_voltage_lock = FALSE;
     s_run_active = FALSE;
+    s_game_repeat = GAME_REPEAT_1;
+    s_game_interval_min = GAME_INTERVAL_DEFAULT_MIN;
     app_state_reset_cycle_tracking();
     s_dev_state = DEV_STATE_WORK;
     app_state_start_work_timer();
@@ -227,6 +260,7 @@ BOOL_T app_state_set_app_power(BOOL_T on)
 
     if (s_app_powered && s_machine_powered && !s_low_voltage_lock) {
         app_state_reset_cycle_tracking();
+        app_state_force_retention_wakeup();
         app_state_set(DEV_STATE_WORK);
         app_state_start_work_timer();
     } else {
@@ -286,6 +320,7 @@ VOID_T app_state_set_low_voltage_lock(BOOL_T locked)
     TAL_PR_WARN("[state] low voltage lock=%d", locked);
     if (locked) {
         app_state_set_app_power(FALSE);
+        app_state_set_power(FALSE);
     } else if (s_machine_powered && s_app_powered && !s_cycle_limit_reached) {
         app_state_reset_cycle_tracking();
         app_state_set(DEV_STATE_WORK);
@@ -301,7 +336,8 @@ BOOL_T app_state_is_low_voltage_locked(VOID_T)
 
 VOID_T app_state_reset_work_cycle(VOID_T)
 {
-    if (!s_machine_powered || !s_app_powered || s_low_voltage_lock) {
+    /* A mode update must not bypass a rest or the interval between games. */
+    if (!app_state_should_run()) {
         return;
     }
     if (s_cycle_limit_reached) {
@@ -313,6 +349,40 @@ VOID_T app_state_reset_work_cycle(VOID_T)
 
 VOID_T app_state_process(VOID_T)
 {
+}
+
+VOID_T app_state_set_game_repeat(game_repeat_t repeat)
+{
+    if ((UINT32_T)repeat > GAME_REPEAT_UNLIMITED) {
+        return;
+    }
+    TAL_PR_INFO("repeat %d", repeat);
+    s_game_repeat = repeat;
+}
+
+game_repeat_t app_state_get_game_repeat(VOID_T)
+{
+    return s_game_repeat;
+}
+
+VOID_T app_state_set_game_interval(UINT32_T minutes)
+{
+    if (minutes < GAME_INTERVAL_MIN || minutes > GAME_INTERVAL_MAX ||
+        minutes == s_game_interval_min) {
+        return;
+    }
+    TAL_PR_INFO("interval minutes %d", minutes);
+    s_game_interval_min = minutes;
+    /* Apply changes to an active interval, without starting the motor. */
+    if (s_waiting_next_game && s_machine_powered && s_app_powered &&
+        !s_low_voltage_lock && s_sleep_timer_id != NULL) {
+        tal_sw_timer_start(s_sleep_timer_id, minutes * 60000UL, TAL_TIMER_ONCE);
+    }
+}
+
+UINT32_T app_state_get_game_interval(VOID_T)
+{
+    return s_game_interval_min;
 }
 
 UINT8_T app_state_get_dp_enum(VOID_T)

@@ -15,8 +15,10 @@ extern "C" {
 #define DP_ID_SWITCH           1   /* bool rw: App on/off */
 #define DP_ID_MODE             4   /* enum rw: ConstantSpeed/VariableSpeed */
 #define DP_ID_BATTERY         18   /* value ro: 0~100 */
-#define DP_ID_WORK_STATE      26   /* enum ro: work/standby/charging/charge_done */
+#define DP_ID_WORK_STATE      26   /* enum ro: work/standby/turnoff */
+#define DP_ID_GAME_INTERVAL   28   /* value rw: 10~120 minutes */
 #define DP_ID_STEPLESS_CONTROL 30  /* value rw: control 0~100 maps to PWM duty 40~80 */
+#define DP_ID_GAME_REPEAT     35   /* enum rw: 1/2/3/4/5/unlimited (indices 0~5) */
 
 #pragma pack(1)
 typedef struct {
