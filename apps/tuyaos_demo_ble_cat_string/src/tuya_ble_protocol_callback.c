@@ -143,6 +143,11 @@ STATIC VOID_T tuya_ble_protocol_callback(tuya_ble_cb_evt_param_t* event)
             if (event->ota_data.p_data[0] == 0) {
 #if defined(TUYA_BLE_FEATURE_OTA_ENABLE) && (TUYA_BLE_FEATURE_OTA_ENABLE == 1)
                 tuya_ble_ota_handler(&event->ota_data);
+                if (&event->ota_data->type == TUYA_BLE_OTA_END)
+                {
+                    // OTA结束时要保存电量到FLASH中
+                    app_battery_save_percent();
+                }
 #endif
             } else {
 #if defined(TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE) && (TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE == 1)
