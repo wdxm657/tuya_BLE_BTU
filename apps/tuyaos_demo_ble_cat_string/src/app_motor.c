@@ -30,7 +30,7 @@
     (((MOTOR_DUTY_DEFAULT_PERCENT - MOTOR_DUTY_MIN_PERCENT) * 100) / \
      (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT))
 
-#define DUTY_BOOST_MAX          20      /* N 最大增加值 */
+#define DUTY_BOOST_MAX          12      /* N 最大增加值 */
 
 STATIC work_mode_t s_work_mode = WORK_MODE_FIXED;
 STATIC UINT8_T s_app_stepless_percent = MOTOR_STEPLESS_DEFAULT_PERCENT;

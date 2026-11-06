@@ -23,8 +23,8 @@
 // FW_INFO
 //
 #define FIRMWARE_NAME           "tuyaos_demo_ble_cat_string"
-#define FIRMWARE_VERSION        "1.0.29"
-#define FIRMWARE_VERSION_HEX    0x0001001d
+#define FIRMWARE_VERSION        "1.0.31"
+#define FIRMWARE_VERSION_HEX    0x0001001f
 #define HARDWARE_VERSION        "0.1.0"
 #define HARDWARE_VERSION_HEX    0x00000100
 
