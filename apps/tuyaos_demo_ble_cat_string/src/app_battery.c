@@ -289,7 +289,13 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
                     vol_mv, filtered_percent, percent, app_state_is_charging());
     }
     
-    s_cached_percent = filtered_percent;
+    if (app_state_is_charge_done())
+    {
+        s_cached_percent = 100;
+    }
+    else{
+        s_cached_percent = filtered_percent;
+    }
 
 
     /* ----- 低电量检测 ----- */

@@ -279,7 +279,7 @@ STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
 
         case TAL_BLE_EVT_DISCONNECT: {
             TAL_PR_INFO("disconnect: 0x%02x", p_event->ble_event.disconnect.reason);
-
+            app_battery_save_percent();
             tuya_ble_disconnected_handler();
 
 #if defined(TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE) && (TUYA_BLE_FEATURE_ATTACH_OTA_ENABLE == 1)

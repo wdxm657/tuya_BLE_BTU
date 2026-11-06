@@ -121,7 +121,7 @@ OPERATE_RET app_dp_clear_persistent(VOID_T)
     return OPRT_OK;
 }
 
-STATIC OPERATE_RET app_dp_save_persistent(VOID_T)
+STATIC OPERATE_RET app_dp_save_config(UINT8_T dp_id)
 {
     app_dp_flash_data_t data = {0};
     app_dp_flash_data_t verify;
@@ -138,7 +138,7 @@ STATIC OPERATE_RET app_dp_save_persistent(VOID_T)
                             app_motor_get_stepless_percent();
     data.game_repeat = (UINT8_T)app_state_get_game_repeat();
     data.game_interval_min = (UINT16_T)app_state_get_game_interval();
-    switch (g_cmd.dp_id) {
+    switch (dp_id) {
     case DP_ID_SWITCH:
         data.power = app_state_is_app_power_on() ? 1 : 0;
         break;
@@ -180,6 +180,12 @@ STATIC OPERATE_RET app_dp_save_persistent(VOID_T)
     s_saved_config_valid = TRUE;
     s_config_write_failed = FALSE;
     return OPRT_OK;
+}
+
+OPERATE_RET app_dp_save_persistent(VOID_T)
+{
+    /* Local power actions have no incoming DP command. */
+    return app_dp_save_config(DP_ID_SWITCH);
 }
 
 STATIC VOID_T app_dp_set_value(UINT8_T *buf, UINT32_T value)
@@ -329,7 +335,7 @@ OPERATE_RET app_dp_parser(UINT8_T *buf, UINT32_T size)
         break;
     }
 
-    OPERATE_RET ret = app_dp_save_persistent();
+    OPERATE_RET ret = app_dp_save_config(g_cmd.dp_id);
     app_dp_report(g_cmd.dp_id, g_cmd.dp_data, g_cmd.dp_data_len);
     return ret;
 }

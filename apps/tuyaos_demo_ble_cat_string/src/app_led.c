@@ -178,10 +178,10 @@ VOID_T app_led_update(VOID_T)
             }
         }
     
-        if (app_state_is_charging()) {
-            power_mode = LED_MODE_RED_SOLID;
-        } else if (app_state_is_charge_done() || app_battery_get_percent() == 100) {
+        if (app_battery_get_percent() == 100) {
             power_mode = LED_MODE_CHARGE_GREEN_SOLID;
+        } else if (app_state_is_charging()) {
+            power_mode = LED_MODE_RED_SOLID;
         } else if (app_state_is_low_voltage_locked() || app_battery_is_low()) {
             power_mode = LED_MODE_RED_BLINK;
         }else{

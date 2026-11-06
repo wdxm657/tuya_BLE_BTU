@@ -206,6 +206,10 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                                 }else{
                                     app_state_set_app_power(1);
                                 }
+                                OPERATE_RET ret = app_dp_save_persistent();
+                                if (ret != OPRT_OK) {
+                                    TAL_PR_ERR("[key] save power failed: %d", ret);
+                                }
                             }
                             else{
                                 // 如果按键按下时在retention休眠状态，则退出retention
