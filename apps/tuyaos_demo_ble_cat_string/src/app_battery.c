@@ -21,6 +21,7 @@
 #include "tal_sw_timer.h"
 #include "tal_gpio.h"
 #include "tal_system.h"
+#include "tal_flash.h"
 #include "board.h"
 
 #include "app_battery.h"
@@ -54,6 +55,34 @@ STATIC BOOL_T s_suspended = FALSE;
 
 /* 临界低电回调（由 tuya_sdk_callback 注册） */
 STATIC VOID_T (*s_critical_cb)(VOID_T) = NULL;
+
+#define BATTERY_FLASH_MAGIC      0x42415431UL
+#define BATTERY_FLASH_CHECK      0xA55A5AA5UL
+#define BATTERY_FLASH_ERASE_SIZE 0x1000U
+
+typedef struct {
+    UINT32_T magic;
+    UINT32_T percent;
+    UINT32_T checksum;
+} battery_flash_data_t;
+
+STATIC BOOL_T app_battery_load_percent(UINT8_T *percent)
+{
+    battery_flash_data_t data;
+    OPERATE_RET ret = tal_flash_read(USER_FLASH_ADDR_CAT_STRING_BATTERY,
+                                    (UCHAR_T *)&data, SIZEOF(data));
+    if (ret != OPRT_OK) {
+        TAL_PR_WARN("[battery] flash read failed: %d", ret);
+        return FALSE;
+    }
+    if (data.magic != BATTERY_FLASH_MAGIC || data.percent > 100U ||
+        data.checksum != (data.magic ^ data.percent ^ BATTERY_FLASH_CHECK)) {
+        return FALSE;
+    }
+
+    *percent = (UINT8_T)data.percent;
+    return TRUE;
+}
 
 /***********************************************************************
  ********************* static functions *********************************
@@ -335,7 +364,9 @@ OPERATE_RET app_battery_timer_init(VOID_T)
         tal_system_delay(500);
         if (app_battery_sample(&init_mv) == OPRT_OK && init_mv > 0) {
             s_cached_voltage = init_mv;
-            s_cached_percent = app_battery_voltage_to_percent(init_mv);
+            if (!app_battery_load_percent(&s_cached_percent)) {
+                s_cached_percent = app_battery_voltage_to_percent(init_mv);
+            }
             s_pct_budget = PCT_BUDGET_MAX;
             s_battery_low = (s_cached_percent <= BATTERY_LOW_THRESHOLD);
             s_battery_critical = (s_cached_percent <= BATTERY_CRITICAL_THRESHOLD);
@@ -397,6 +428,40 @@ VOID_T app_battery_suspend(VOID_T)
         .level  = TUYA_GPIO_LEVEL_LOW,
     };
     tal_gpio_init(AD_Bat_CON, &gpio_cfg);
+}
+
+OPERATE_RET app_battery_save_percent(VOID_T)
+{
+    battery_flash_data_t data;
+    battery_flash_data_t verify;
+    UINT8_T saved_percent;
+    OPERATE_RET ret;
+
+    if (!s_cache_valid || s_cached_percent > 100U) {
+        return OPRT_COM_ERROR;
+    }
+    if (app_battery_load_percent(&saved_percent) && saved_percent == s_cached_percent) {
+        return OPRT_OK;
+    }
+
+    data.magic = BATTERY_FLASH_MAGIC;
+    data.percent = s_cached_percent;
+    data.checksum = data.magic ^ data.percent ^ BATTERY_FLASH_CHECK;
+    ret = tal_flash_erase(USER_FLASH_ADDR_CAT_STRING_BATTERY, BATTERY_FLASH_ERASE_SIZE);
+    if (ret != OPRT_OK) {
+        return ret;
+    }
+    ret = tal_flash_write(USER_FLASH_ADDR_CAT_STRING_BATTERY,
+                         (CONST UCHAR_T *)&data, SIZEOF(data));
+    if (ret != OPRT_OK) {
+        return ret;
+    }
+    ret = tal_flash_read(USER_FLASH_ADDR_CAT_STRING_BATTERY,
+                        (UCHAR_T *)&verify, SIZEOF(verify));
+    if (ret != OPRT_OK) {
+        return ret;
+    }
+    return memcmp(&data, &verify, SIZEOF(data)) == 0 ? OPRT_OK : OPRT_COM_ERROR;
 }
 
 OPERATE_RET app_battery_read_voltage(INT32_T *vol_mv)

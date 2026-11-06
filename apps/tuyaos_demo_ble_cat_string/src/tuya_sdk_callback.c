@@ -618,12 +618,18 @@ STATIC VOID_T run_on_cb(VOID_T)
 
 STATIC VOID_T machine_power_off_cb(VOID_T)
 {
+    OPERATE_RET ret;
+
     if (tuya_app_get_conn_handle() != 0xFFFF) {
         tuya_ble_gap_disconnect();
         tal_system_sleep(1500);
         TAL_PR_INFO("[retention] tuya_ble_gap_disconnect after 1000 ms");
     }
     tal_ble_advertising_stop();
+    ret = app_battery_save_percent();
+    if (ret != OPRT_OK) {
+        TAL_PR_WARN("[battery] save before low power failed: %d", ret);
+    }
 
     app_battery_suspend();
     app_led_update();

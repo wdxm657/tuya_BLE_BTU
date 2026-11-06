@@ -127,6 +127,7 @@ extern unsigned int ota_program_offset;
 #if CAT_STRING
 // User data area: 0x2C000 - 0x3F000. Use the last 4K sector.
 #define USER_FLASH_ADDR_CAT_STRING            (0x3E000)
+#define USER_FLASH_ADDR_CAT_STRING_BATTERY    (0x3D000)
 
 // PIN
 // #ifndef BOARD_POWER_ON_PIN

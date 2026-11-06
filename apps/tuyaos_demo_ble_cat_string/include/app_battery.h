@@ -61,6 +61,8 @@ OPERATE_RET app_battery_timer_init(VOID_T);
 OPERATE_RET app_battery_resume(VOID_T);
 /* Stop ADC monitoring without clearing the cached battery data. */
 VOID_T app_battery_suspend(VOID_T);
+/* Save the valid cached percentage before entering ultra-low power. */
+OPERATE_RET app_battery_save_percent(VOID_T);
 
 /**
  * @brief 读取一次电池电压（AD_BAT_SWITCH 已常开，直接 ADC 采样）
