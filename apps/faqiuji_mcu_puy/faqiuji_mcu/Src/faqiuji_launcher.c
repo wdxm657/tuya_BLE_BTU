@@ -5,7 +5,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#define FAQIUJI_PWM_FREQUENCY_HZ             4500UL
+#define FAQIUJI_PWM_FREQUENCY_HZ             200UL
 #define FAQIUJI_MOTOR_BEFORE_DCT_MS          5500U
 #define FAQIUJI_DCT_ACTIVE_MS                 800U
 #define FAQIUJI_MOTOR_AFTER_DCT_MS           1000U

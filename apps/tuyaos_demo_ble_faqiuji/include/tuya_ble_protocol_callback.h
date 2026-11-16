@@ -33,9 +33,9 @@ extern "C" {
 #define TY_DEVICE_DID         "tuya07d9624bc2e5" //16Bytes
 #define TY_DEVICE_AUTH_KEY    "fs1RKoeL4W3AYNFSCRgCW2ev6tOFmeer" //32Bytes
 #endif
-#define TY_ADV_INTERVAL       20   //range: 20~10240ms
-#define TY_CONN_INTERVAL_MIN  15   //range: 7.5~4000ms
-#define TY_CONN_INTERVAL_MAX  15   //range: 7.5~4000ms
+#define TY_ADV_INTERVAL       600   //range: 20~10240ms
+#define TY_CONN_INTERVAL_MIN  450   //range: 7.5~4000ms
+#define TY_CONN_INTERVAL_MAX  450   //range: 7.5~4000ms
 
 //event id
 typedef enum {

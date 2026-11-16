@@ -218,7 +218,7 @@ extern unsigned int ota_program_offset;
 
 #if (BOARD_ENABLE_LOG)
 #ifndef BOARD_LOG_TX_PIN
-#define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_28) // C4 调试日志输出引脚
+#define BOARD_LOG_TX_PIN                        (TUYA_GPIO_NUM_28) // D4 调试日志输出引脚
 
 #endif
 #endif
@@ -237,9 +237,9 @@ extern unsigned int ota_program_offset;
 #define SPK_POWER_CON TUYA_GPIO_NUM_13 // PB5 音频芯片电源开关
 
 
-#define LED_G TUYA_GPIO_NUM_1   // 蓝牙指示灯绿色 PD4
+#define LED_G TUYA_GPIO_NUM_1   // 蓝牙指示灯绿色 PA1
 // LED IO暂时给调试日志输出使用
-// #define LED_B TUYA_GPIO_NUM_28  // 蓝牙指示灯蓝色 PA1
+// #define LED_B TUYA_GPIO_NUM_28  // 蓝牙指示灯蓝色 PD4
 
 #endif
 
