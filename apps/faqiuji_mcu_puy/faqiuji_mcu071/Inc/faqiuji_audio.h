@@ -9,7 +9,7 @@
 #endif
 
 #ifndef FAQIUJI_AUDIO_VOLUME_PERCENT
-#define FAQIUJI_AUDIO_VOLUME_PERCENT 10U
+#define FAQIUJI_AUDIO_VOLUME_PERCENT 50U
 #endif
 
 void faqiuji_audio_init(void);
