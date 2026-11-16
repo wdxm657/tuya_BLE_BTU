@@ -34,7 +34,7 @@ extern "C" {
  *  注：与 DP_ID_WORK_STATE 枚举值一致 */
 typedef enum {
     DEV_STATE_WORK        = 0,    /**< 工作中（可进行电机运动） */
-    DEV_STATE_STANDBY     = 1,    /**< 待机（开机但5分钟无操作/超时，指示灯熄灭，BLE可接收指令） */
+    DEV_STATE_STANDBY     = 1,    /**< 待机 */
     DEV_STATE_CHARGING    = 2,    /**< 充电中（最高优先级，电机不工作，红灯常亮，强制关机） */
     DEV_STATE_CHARGE_DONE = 3,    /**< 满电（指示灯熄灭，仅满电推送） */
 } dev_state_t;

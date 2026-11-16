@@ -95,11 +95,6 @@ STATIC VOID_T app_state_recalculate(VOID_T)
         return;
     }
 
-    if (s_charge_done) {
-        app_state_set(DEV_STATE_CHARGE_DONE);
-        return;
-    }
-
     if (!s_powered) {
         app_state_set(DEV_STATE_STANDBY);
         return;

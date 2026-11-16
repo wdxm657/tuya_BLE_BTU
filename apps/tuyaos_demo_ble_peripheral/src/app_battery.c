@@ -185,7 +185,8 @@ STATIC OPERATE_RET app_battery_sample(INT32_T *vol_mv)
 
     /* 计算平均值 → 换算电压 */
     INT32_T adc_avg = raw_sum / (INT32_T)valid_cnt;
-    *vol_mv = adc_avg * BATTERY_DIVIDER_RATIO;
+    // 固定+100mv
+    *vol_mv = adc_avg * BATTERY_DIVIDER_RATIO + 100;
 
     return OPRT_OK;
 }

@@ -234,11 +234,11 @@ VOID_T app_led_update(VOID_T)
     {
         new_mode = LED_MODE_RED_SOLID;
     }
-    /* 工作状态 */
     else if (app_battery_is_low())
     {
         new_mode = LED_MODE_RED_BLINK;
     }
+    /* 工作状态 */
     else if (!app_state_is_powered_on())
     {
         /* 关机：据配网状态区分指示 — 已配网则灭灯，未配网则蓝灯闪烁提示 */
@@ -251,17 +251,13 @@ VOID_T app_led_update(VOID_T)
             UINT8_T f_reset = 0xFF;
             tal_flash_read(APP_DATA_FLASH_ADDR, &f_reset, 1);
             if (f_reset == 0x03) {
-                TAL_PR_INFO("[boot] factory-reset flag detected, staying off");
+                // TAL_PR_INFO("[boot] factory-reset flag detected, staying off");
                 new_mode = LED_MODE_BLUE_BLINK;
             } else {
                 new_mode = LED_MODE_OFF;
             }
         }
     }
-    // else if (app_state_get() == DEV_STATE_CHARGE_DONE)
-    // {
-    //     new_mode = LED_MODE_OFF;
-    // }
     else if (app_state_get() == DEV_STATE_STANDBY)
     {
         new_mode = LED_MODE_OFF;

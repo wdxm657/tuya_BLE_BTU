@@ -60,6 +60,8 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             BOOL_T sw_on = (g_cmd.dp_data[0] != 0);
             TAL_PR_INFO("DP_ID_SWITCH: %s", sw_on ? "ON" : "OFF");
             app_state_set_power(sw_on);
+            /* 复位待机定时器 */
+            app_state_reset_standby_timer();
         } break;
 
         case DP_ID_MODE: {
@@ -69,6 +71,8 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             if (mode <= GAME_MODE_INTERACTIVE) {
                 app_motor_set_mode(mode);
             }
+            /* 复位待机定时器 */
+            app_state_reset_standby_timer();
         } break;
 
         case DP_ID_MOVEMENT_LEVEL: {
@@ -81,8 +85,6 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
         } break;
     }
 
-    /* 任何有效的 APP 指令都复位待机定时器 */
-    app_state_reset_standby_timer();
 
     /* 对 rw DP 回复确认上报 */
     app_dp_report(g_cmd.dp_id, g_cmd.dp_data, g_cmd.dp_data_len);

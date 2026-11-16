@@ -69,6 +69,10 @@ UINT16_T tal_app_server_conn_handle = 0xFFFF;
 /* 电池电量DP定时上报（向APP周期性通知） */
 STATIC TIMER_ID s_dp_report_timer_id = NULL;
 
+/* BLE 每次连接后连续强制全量上报的次数 */
+#define DP_CONNECT_FORCE_REPORT_COUNT  5U
+STATIC UINT8_T s_dp_force_report_count = 0;
+
 /* 设备状态DP定时上报（向APP周期性通知 work_state） */
 STATIC TIMER_ID s_work_state_report_timer_id = NULL;
 
@@ -132,14 +136,18 @@ STATIC VOID_T battery_critical_poweroff(VOID_T)
  ********************* DP 定时上报 **************************************
  **********************************************************************/
 
-/* DP定时上报：读取缓存值，仅上报有变更的DP */
+/* DP定时上报：状态变化时上报；BLE连接后连续5次强制全量上报 */
 STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 {
+    BOOL_T force_report;
+
     app_led_update();
 
-    if(tal_app_server_conn_handle == 0XFFFF){
+    if (tal_app_server_conn_handle == 0xFFFF) {
         return;
     }
+
+    force_report = (s_dp_force_report_count > 0U);
 
     static UINT8_T s_last_battery = 0xFF;
     static UINT8_T s_last_switch  = 0xFF;
@@ -151,7 +159,7 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     /* 电池电量 */
     {
         UINT8_T percent = app_battery_get_percent();
-        if (percent != s_last_battery) {
+        if (force_report || percent != s_last_battery) {
             s_last_battery = percent;
             /* DT_VALUE: 4字节小端 int，第4字节为有效值 */
             buf[3] = percent;
@@ -163,7 +171,7 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     /* 开关状态 */
     {
         UINT8_T power_on = app_state_is_powered_on() ? 1 : 0;
-        if (power_on != s_last_switch) {
+        if (force_report || power_on != s_last_switch) {
             s_last_switch = power_on;
             memset(buf, 0, DT_VALUE_LEN);
             buf[0] = power_on;
@@ -175,7 +183,7 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     /* 工作模式 */
     {
         UINT8_T mode = (UINT8_T)app_motor_get_mode();
-        if (mode != s_last_mode) {
+        if (force_report || mode != s_last_mode) {
             s_last_mode = mode;
             memset(buf, 0, DT_VALUE_LEN);
             buf[0] = mode;
@@ -187,11 +195,17 @@ STATIC VOID_T dp_report_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     /* 工作状态 */
     {
         UINT8_T state = app_state_get_dp_enum();
-        if (state != s_last_work_state) {
+        if (force_report || state != s_last_work_state) {
             s_last_work_state = state;
             app_dp_report(DP_ID_WORK_STATE, &state, DT_ENUM_LEN);
             TAL_PR_DEBUG("[dp] work_state report: %d", state);
         }
+    }
+
+    if (force_report) {
+        s_dp_force_report_count--;
+        TAL_PR_DEBUG("[dp] connection full report, remaining=%d",
+                     s_dp_force_report_count);
     }
 }
 
@@ -209,6 +223,9 @@ STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
             tal_app_server_conn_handle = p_event->ble_event.connect.peer.conn_handle;
 
             tuya_ble_connected_handler();
+            s_dp_force_report_count = DP_CONNECT_FORCE_REPORT_COUNT;
+            TAL_PR_INFO("[dp] schedule %d full reports after connection",
+                        DP_CONNECT_FORCE_REPORT_COUNT);
 
         } break;
 
@@ -234,6 +251,7 @@ STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
             tal_ble_advertising_start(&tal_adv_param);
 #endif
             tal_app_server_conn_handle = 0xFFFF;
+            s_dp_force_report_count = 0;
 
             /* BLE 断开 且关机状态 → 进入低功耗 */
             if (!app_state_is_powered_on()) {
