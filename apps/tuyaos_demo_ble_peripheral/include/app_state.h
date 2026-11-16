@@ -96,9 +96,16 @@ BOOL_T app_state_set_power(BOOL_T on);
 BOOL_T app_state_is_powered_on(VOID_T);
 
 /**
- * @brief 待机定时器复位（由触摸/按键/DP操作触发）
+ * @brief 重新开始5分钟工作周期；若处于待机则恢复工作状态
  */
 VOID_T app_state_reset_standby_timer(VOID_T);
+
+/**
+ * @brief 保持开机状态并立即进入待机，同时停止当前工作周期计时
+ *
+ * 主要供互动模式在完成一轮电机序列后调用。
+ */
+VOID_T app_state_enter_standby(VOID_T);
 
 /**
  * @brief 状态机周期性处理（由主循环调用）

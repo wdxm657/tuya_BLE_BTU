@@ -9,7 +9,7 @@
  * 设备状态优先级（高→低）：charging > work > standby > charge_done
  *   - charging：充电中，电机不工作，红灯常亮，强制关机
  *   - work：正常工作，电机可运动
- *   - standby：5分钟无操作进入待机，指示灯熄灭，BLE可接收指令
+ *   - standby：连续工作5分钟后进入待机，停止电机，BLE可接收指令；振动后重新工作5分钟
  *   - charge_done：满电，仅推送通知
  *
  * 电源架构（统一开关机）：
@@ -112,9 +112,9 @@ STATIC VOID_T app_state_standby_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     if (!s_powered) {
         return;
     }
-    /* 只有在 work 状态时才进入 standby */
+    /* 任意游戏模式均由统一的 work 状态计时，超时后进入 standby。 */
     if (s_dev_state == DEV_STATE_WORK) {
-        TAL_PR_INFO("[state] work timeout -> standby");
+        TAL_PR_INFO("[state] 5-minute work cycle complete -> standby");
         app_state_set(DEV_STATE_STANDBY);
     }
 }
@@ -246,7 +246,7 @@ VOID_T app_state_reset_standby_timer(VOID_T)
 
     /* 如果当前是 standby，恢复 work */
     if (s_dev_state == DEV_STATE_STANDBY) {
-        TAL_PR_INFO("[state] touch wakeup -> work");
+        TAL_PR_INFO("[state] activity wakeup -> work");
         app_state_set(DEV_STATE_WORK);
     }
 
@@ -255,6 +255,20 @@ VOID_T app_state_reset_standby_timer(VOID_T)
         tal_sw_timer_stop(s_standby_timer_id);
         tal_sw_timer_start(s_standby_timer_id, STANDBY_TIMEOUT_MS, TAL_TIMER_ONCE);
     }
+}
+
+VOID_T app_state_enter_standby(VOID_T)
+{
+    if (!s_powered || s_charging) {
+        return;
+    }
+
+    if (s_standby_timer_id != NULL) {
+        tal_sw_timer_stop(s_standby_timer_id);
+    }
+
+    TAL_PR_INFO("[state] enter standby");
+    app_state_set(DEV_STATE_STANDBY);
 }
 
 VOID_T app_state_process(VOID_T)

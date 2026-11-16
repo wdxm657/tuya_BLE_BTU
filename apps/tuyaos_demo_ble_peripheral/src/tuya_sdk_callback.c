@@ -116,11 +116,40 @@ STATIC TUYA_BLE_BULKDATA_CB_T tuya_ble_bulkdata_cb = {0};
  **********************************************************************/
 
 /**
- * @brief 状态变更 → LED 刷新（适配 app_state_register_change_cb 签名）
+ * @brief 状态变更处理：刷新 LED，并根据 work/standby 状态启停电机
  */
-STATIC VOID_T led_on_state_change(dev_state_t old_state, dev_state_t new_state)
+STATIC VOID_T device_on_state_change(dev_state_t old_state, dev_state_t new_state)
 {
     app_led_update();
+
+    /* 任意模式工作满 5 分钟进入待机后，都必须停止电机。 */
+    if (new_state == DEV_STATE_STANDBY) {
+        app_motor_stop();
+    } else if (old_state == DEV_STATE_STANDBY &&
+               new_state == DEV_STATE_WORK &&
+               app_state_is_powered_on()) {
+        /* 从待机恢复工作时，按当前模式重新启动电机。 */
+        app_motor_start();
+    }
+}
+
+/**
+ * @brief 振动处理：待机唤醒并重启5分钟工作周期；工作中触发互动模式
+ */
+STATIC VOID_T vibration_on_detected(VOID_T)
+{
+    if (!app_state_is_powered_on() || app_state_is_charging()) {
+        return;
+    }
+
+    if (app_state_get() == DEV_STATE_STANDBY) {
+        TAL_PR_INFO("[state] vibration wakeup -> restart 5-minute work cycle");
+        app_state_reset_standby_timer();
+        return;
+    }
+
+    /* 非待机状态下，保留互动模式原有的振动触发逻辑。 */
+    app_motor_interactive_trigger();
 }
 
 /**
@@ -529,11 +558,11 @@ OPERATE_RET tuya_init_last(VOID_T)
 
     /* ---- 回调注册 ---- */
 
-    /* 振动 → 互动模式触发 */
-    app_vibration_register_cb(app_motor_interactive_trigger);
+    /* 振动 → 待机唤醒；工作中用于互动模式触发 */
+    app_vibration_register_cb(vibration_on_detected);
 
-    /* 设备状态变更 → LED 刷新 */
-    app_state_register_change_cb(led_on_state_change);
+    /* 设备状态变更 → LED 刷新 + 工作/待机时电机启停 */
+    app_state_register_change_cb(device_on_state_change);
 
     /* 电源状态 → 电机启停（统一开关机，与物理按键/蓝牙 DP_SWITCH 一致） */
     app_state_register_power_cb(power_on_cb, power_off_cb);

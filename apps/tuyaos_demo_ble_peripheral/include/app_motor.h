@@ -94,7 +94,7 @@ VOID_T app_motor_start(VOID_T);
 VOID_T app_motor_stop(VOID_T);
 
 /**
- * @brief 互动模式：振动触发一次序列（仅在停止期间有效）
+ * @brief 互动模式：振动触发一次序列，完成后自动进入待机
  */
 VOID_T app_motor_interactive_trigger(VOID_T);
 

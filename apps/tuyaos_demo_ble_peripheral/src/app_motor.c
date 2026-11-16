@@ -191,6 +191,20 @@ STATIC VOID_T app_motor_seq_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
         total_steps = MOTOR_SEQ_FAST_STEPS;
     }
 
+    /* 上一步计时结束后再判断整轮序列是否完成。 */
+    if (s_seq_index >= total_steps) {
+        if (s_game_mode == GAME_MODE_INTERACTIVE) {
+            s_interactive_active = FALSE;
+            s_rotation_locked = FALSE;
+            TAL_PR_INFO("[motor] interactive sequence complete -> standby");
+            app_state_enter_standby();
+            return;
+        }
+
+        /* 快/慢模式完成一轮后继续从头循环，直到5分钟工作周期结束。 */
+        s_seq_index = 0;
+    }
+
     /* 获取当前步 */
     if (s_game_mode == GAME_MODE_INTERACTIVE) {
         direction   = g_motor_seq_interactive[s_seq_index].direction;
@@ -210,19 +224,6 @@ STATIC VOID_T app_motor_seq_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
 
     /* 前进到下一步 */
     s_seq_index++;
-
-    /* 判断是否循环或停止 */
-    if (s_seq_index >= total_steps) {
-        if (s_game_mode == GAME_MODE_INTERACTIVE) {
-            /* 互动模式：一次序列完成，停止 */
-            s_interactive_active = FALSE;
-            s_rotation_locked = FALSE;
-            TAL_PR_INFO("[motor] interactive sequence complete");
-            return;
-        }
-        /* 快/慢模式：从头循环 */
-        s_seq_index = 0;
-    }
 
     /* 重启定时器为本步持续时间 */
     tal_sw_timer_start(s_motor_timer_id, duration_ms, TAL_TIMER_ONCE);
