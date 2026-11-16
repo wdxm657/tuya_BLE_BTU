@@ -73,6 +73,19 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size);
  */
 OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T* buf, UINT32_T size);
 
+/**
+ * @brief 从 Flash 恢复用户 DP 配置，并应用模式配置
+ * @param[out] power_on 用户保存的开关状态
+ * @return TRUE=存在有效用户配置，FALSE=使用出厂默认配置
+ */
+BOOL_T app_dp_config_restore(BOOL_T *power_on);
+
+/**
+ * @brief 清除 Flash 中的用户 DP 配置，恢复出厂默认配置
+ * @return OPRT_OK 成功
+ */
+OPERATE_RET app_dp_config_factory_reset(VOID_T);
+
 
 #ifdef __cplusplus
 }

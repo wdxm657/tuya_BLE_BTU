@@ -196,8 +196,7 @@ STATIC VOID_T low_power_process(VOID_T)
     UINT32_T now_ms;
 
     /* 物理按键关机：不等待 BLE 断开或120秒倒计时。 */
-    if (app_state_take_immediate_sleep_request() &&
-        !app_state_is_powered_on()) {
+    if (app_state_take_immediate_sleep_request()) {
         s_low_power_waiting = FALSE;
         s_key_low_power_active = TRUE;
         TAL_PR_INFO("[power] key power-off -> enter low power immediately");
@@ -660,11 +659,13 @@ OPERATE_RET tuya_init_last(VOID_T)
     // 若标志位为0x03则认为是长按3秒后的复位启动，此时不能开机
     {
         UINT8_T f_reset = 0xFF;
+        BOOL_T user_power_on = TRUE;
         tal_flash_read(APP_DATA_FLASH_ADDR, &f_reset, 1);
         if (f_reset == 0x03) {
             TAL_PR_INFO("[boot] factory-reset flag detected, staying off");
         } else {
-            app_state_set_power(TRUE);
+            app_dp_config_restore(&user_power_on);
+            app_state_set_power(user_power_on);
         }
     }
     

@@ -171,6 +171,7 @@ extern unsigned int ota_program_offset;
 
 #if BLE_BALL
 // User data area: 0x2C000 - 0x3F000. 
+#define USER_DP_CONFIG_FLASH_ADDR        0x3D000U
 #define USER_BATTERY_FLASH_ADDR          0x3E000U
 // PIN
 #ifndef BOARD_POWER_ON_PIN

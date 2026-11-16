@@ -120,6 +120,7 @@ STATIC VOID_T tuya_ble_protocol_callback(tuya_ble_cb_evt_param_t* event)
 
         case TUYA_BLE_CB_EVT_UNBOUND: {
             TAL_PR_INFO("TUYA_BLE_CB_EVT_UNBOUND");
+            app_dp_config_factory_reset();
         } break;
 
         case TUYA_BLE_CB_EVT_ANOMALY_UNBOUND: {

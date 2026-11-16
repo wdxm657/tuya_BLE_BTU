@@ -12,7 +12,9 @@
 #include "string.h"
 
 #include "tal_log.h"
+#include "tal_flash.h"
 #include "tal_util.h"
+#include "board.h"
 
 #include "tuya_ble_api.h"
 #include "tuya_ble_mutli_tsf_protocol.h"
@@ -31,6 +33,24 @@
  ********************* struct ******************************************
  **********************************************************************/
 
+#define DP_CONFIG_MAGIC             0x44504346UL /* "DPCF" */
+#define DP_CONFIG_VERSION           1U
+#define DP_CONFIG_FLASH_SIZE        0x1000U
+#define DP_CONFIG_DEFAULT_SWITCH    1U
+#define DP_CONFIG_DEFAULT_MODE      GAME_MODE_FAST
+#define DP_CONFIG_DEFAULT_MOVEMENT  0U
+
+#pragma pack(1)
+typedef struct {
+    UINT32_T magic;
+    UINT8_T  version;
+    UINT8_T  power_on;
+    UINT8_T  mode;
+    UINT8_T  movement_level;
+    UINT8_T  checksum;
+} app_dp_config_t;
+#pragma pack()
+
 
 /***********************************************************************
  ********************* variable ****************************************
@@ -38,6 +58,70 @@
 demo_dp_t g_cmd = {0};
 demo_dp_t g_rsp = {0};
 UINT32_T  g_sn  = 0;
+
+STATIC app_dp_config_t s_dp_config = {
+    DP_CONFIG_MAGIC,
+    DP_CONFIG_VERSION,
+    DP_CONFIG_DEFAULT_SWITCH,
+    DP_CONFIG_DEFAULT_MODE,
+    DP_CONFIG_DEFAULT_MOVEMENT,
+    0,
+};
+
+STATIC UINT8_T app_dp_config_checksum(CONST app_dp_config_t *config)
+{
+    CONST UINT8_T *data = (CONST UINT8_T *)config;
+    UINT8_T checksum = 0;
+    UINT8_T i;
+
+    for (i = 0; i < (UINT8_T)(SIZEOF(app_dp_config_t) - 1U); i++) {
+        checksum = (UINT8_T)(checksum + data[i]);
+    }
+    return (UINT8_T)(checksum ^ 0xFFU);
+}
+
+STATIC BOOL_T app_dp_config_is_valid(CONST app_dp_config_t *config)
+{
+    return (config->magic == DP_CONFIG_MAGIC &&
+            config->version == DP_CONFIG_VERSION &&
+            config->power_on <= 1U &&
+            config->mode <= GAME_MODE_INTERACTIVE &&
+            config->movement_level <= 4U &&
+            config->checksum == app_dp_config_checksum(config));
+}
+
+STATIC OPERATE_RET app_dp_config_save(VOID_T)
+{
+    app_dp_config_t old_config;
+    OPERATE_RET ret;
+
+    s_dp_config.checksum = app_dp_config_checksum(&s_dp_config);
+    if (tal_flash_read(USER_DP_CONFIG_FLASH_ADDR,
+                       (UINT8_T *)&old_config,
+                       SIZEOF(old_config)) == OPRT_OK &&
+        memcmp(&old_config, &s_dp_config, SIZEOF(s_dp_config)) == 0) {
+        return OPRT_OK;
+    }
+
+    ret = tal_flash_erase(USER_DP_CONFIG_FLASH_ADDR, DP_CONFIG_FLASH_SIZE);
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("[dp_cfg] flash erase failed: %d", ret);
+        return ret;
+    }
+
+    ret = tal_flash_write(USER_DP_CONFIG_FLASH_ADDR,
+                          (CONST UINT8_T *)&s_dp_config,
+                          SIZEOF(s_dp_config));
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("[dp_cfg] flash write failed: %d", ret);
+        return ret;
+    }
+
+    TAL_PR_INFO("[dp_cfg] saved: switch=%d mode=%d movement=%d",
+                s_dp_config.power_on, s_dp_config.mode,
+                s_dp_config.movement_level);
+    return OPRT_OK;
+}
 
 /***********************************************************************
  ********************* function ****************************************
@@ -60,6 +144,8 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             BOOL_T sw_on = (g_cmd.dp_data[0] != 0);
             TAL_PR_INFO("DP_ID_SWITCH: %s", sw_on ? "ON" : "OFF");
             app_state_set_power(sw_on);
+            s_dp_config.power_on = sw_on ? 1U : 0U;
+            app_dp_config_save();
             /* 复位待机定时器 */
             app_state_reset_standby_timer();
         } break;
@@ -70,6 +156,8 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
             TAL_PR_INFO("DP_ID_MODE: %d", mode);
             if (mode <= GAME_MODE_INTERACTIVE) {
                 app_motor_set_mode(mode);
+                s_dp_config.mode = (UINT8_T)mode;
+                app_dp_config_save();
             }
             /* 复位待机定时器 */
             app_state_reset_standby_timer();
@@ -77,7 +165,10 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
 
         case DP_ID_MOVEMENT_LEVEL: {
             TAL_PR_INFO("DP_ID_MOVEMENT_LEVEL: %d", g_cmd.dp_data[0]);
-            /* 产品定义中未使用，保留扩展 */
+            if (g_cmd.dp_data[0] <= 4U) {
+                s_dp_config.movement_level = g_cmd.dp_data[0];
+                app_dp_config_save();
+            }
         } break;
 
         default: {
@@ -90,6 +181,58 @@ OPERATE_RET app_dp_parser(UINT8_T* buf, UINT32_T size)
     app_dp_report(g_cmd.dp_id, g_cmd.dp_data, g_cmd.dp_data_len);
 
     return OPRT_OK;
+}
+
+BOOL_T app_dp_config_restore(BOOL_T *power_on)
+{
+    app_dp_config_t config;
+
+    if (power_on == NULL) {
+        return FALSE;
+    }
+
+    if (tal_flash_read(USER_DP_CONFIG_FLASH_ADDR,
+                       (UINT8_T *)&config,
+                       SIZEOF(config)) != OPRT_OK ||
+        !app_dp_config_is_valid(&config)) {
+        s_dp_config.magic = DP_CONFIG_MAGIC;
+        s_dp_config.version = DP_CONFIG_VERSION;
+        s_dp_config.power_on = DP_CONFIG_DEFAULT_SWITCH;
+        s_dp_config.mode = DP_CONFIG_DEFAULT_MODE;
+        s_dp_config.movement_level = DP_CONFIG_DEFAULT_MOVEMENT;
+        s_dp_config.checksum = app_dp_config_checksum(&s_dp_config);
+        *power_on = (DP_CONFIG_DEFAULT_SWITCH != 0U);
+        TAL_PR_INFO("[dp_cfg] no valid config, use factory defaults");
+        return FALSE;
+    }
+
+    s_dp_config = config;
+    app_motor_set_mode((game_mode_t)s_dp_config.mode);
+    *power_on = (s_dp_config.power_on != 0U);
+    TAL_PR_INFO("[dp_cfg] restored: switch=%d mode=%d movement=%d",
+                s_dp_config.power_on, s_dp_config.mode,
+                s_dp_config.movement_level);
+    return TRUE;
+}
+
+OPERATE_RET app_dp_config_factory_reset(VOID_T)
+{
+    OPERATE_RET ret = tal_flash_erase(USER_DP_CONFIG_FLASH_ADDR,
+                                      DP_CONFIG_FLASH_SIZE);
+
+    s_dp_config.magic = DP_CONFIG_MAGIC;
+    s_dp_config.version = DP_CONFIG_VERSION;
+    s_dp_config.power_on = DP_CONFIG_DEFAULT_SWITCH;
+    s_dp_config.mode = DP_CONFIG_DEFAULT_MODE;
+    s_dp_config.movement_level = DP_CONFIG_DEFAULT_MOVEMENT;
+    s_dp_config.checksum = app_dp_config_checksum(&s_dp_config);
+
+    if (ret == OPRT_OK) {
+        TAL_PR_INFO("[dp_cfg] factory config cleared");
+    } else {
+        TAL_PR_ERR("[dp_cfg] factory clear failed: %d", ret);
+    }
+    return ret;
 }
 
 OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T* buf, UINT32_T size)
