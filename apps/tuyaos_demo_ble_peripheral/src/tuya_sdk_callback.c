@@ -227,6 +227,7 @@ STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
 
 #if defined(TUYA_BLE_FEATURE_OTA_ENABLE) && (TUYA_BLE_FEATURE_OTA_ENABLE == 1)
             if (tuya_ble_ota_disconn_handler() == 1) {
+                app_battery_save_percent();
                 tal_ble_advertising_start(&tal_adv_param);
             }
 #else
@@ -466,9 +467,8 @@ VOID_T power_off_cb(VOID_T){
     app_motor_stop();
     if(tal_app_server_conn_handle == 0XFFFF){
         // 蓝牙未连接则进入低功耗
-        // 清除配网标志位
-        tal_flash_erase(APP_DATA_FLASH_ADDR, 0x1000);
         // 关闭AD_BAT_SWITCH,把AD_BAT_SWITCH配置为输入下拉
+        app_battery_save_percent();
         TUYA_GPIO_BASE_CFG_T gpio_cfg = {
             .mode   = TUYA_GPIO_PULLDOWN,
             .direct = TUYA_GPIO_INPUT,

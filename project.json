@@ -5,8 +5,8 @@
         "kind": "apps",
         "vendor": "tlsr825x_ble",
         "fw": {
-            "name": "tuyaos_demo_ble_faqiuji",
-            "ver": "1.0.0"
+            "name": "tuyaos_demo_ble_peripheral",
+            "ver": "1.0.1"
         },
         "sdk": {
             "libs": []
@@ -14,16 +14,21 @@
     },
     "app": {
         "c_files": [
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/app_dp_parser.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/faqiuji_audio.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/faqiuji_ext_flash.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/faqiuji_mcu_protocol.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/tuya_ble_protocol_callback.c",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/src/tuya_sdk_callback.c"
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_battery.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_charge.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_dp_parser.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_key.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_led.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_motor.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_product_test.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_state.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_vibration.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/tuya_ble_protocol_callback.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/tuya_sdk_callback.c"
         ],
         "h_dir": [
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji",
-            "$PROJECT_ROOT/apps/tuyaos_demo_ble_faqiuji/include"
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/include"
         ],
         "l_files": []
     },

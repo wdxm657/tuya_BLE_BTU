@@ -170,6 +170,8 @@ extern unsigned int ota_program_offset;
 #endif
 
 #if BLE_BALL
+// User data area: 0x2C000 - 0x3F000. 
+#define USER_BATTERY_FLASH_ADDR          0x3E000U
 // PIN
 #ifndef BOARD_POWER_ON_PIN
 #define BOARD_POWER_ON_PIN                      (TUYA_GPIO_NUM_31) // D7 无用 测试引脚

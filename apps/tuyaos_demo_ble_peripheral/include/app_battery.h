@@ -32,7 +32,7 @@ extern "C" {
 
 /* ---------- ADC 参数 ---------- */
 #define BATTERY_ADC_CH              6       /**< 电池 ADC 通道号 (PB6) */
-#define BATTERY_DIVIDER_RATIO       2       /**< 硬件分压比 */
+#define BATTERY_DIVIDER_RATIO       6.6     /**< 硬件分压比 660k/100k */
 
 /* ---------- 采样滤波 ---------- */
 #define BATTERY_ADC_SAMPLES         8       /**< 每次读取的 ADC 次数（均值滤波） */
@@ -67,6 +67,15 @@ OPERATE_RET app_battery_read_voltage(INT32_T *vol_mv);
  * @return UINT8_T 0~100%
  */
 UINT8_T app_battery_get_percent(VOID_T);
+
+/**
+ * @brief 将最近一次显示电量保存到 Flash
+ *
+ * 可在进入低功耗前或 OTA 完成、设备重启前调用。
+ * 相同电量不会重复擦写 Flash。
+ * @return OPRT_OK 成功
+ */
+OPERATE_RET app_battery_save_percent(VOID_T);
 
 /**
  * @brief 获取缓存的电压 mV
