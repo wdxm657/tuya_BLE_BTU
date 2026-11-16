@@ -23,8 +23,8 @@
 // FW_INFO
 //
 #define FIRMWARE_NAME           "tuyaos_demo_ble_peripheral"
-#define FIRMWARE_VERSION        "1.0.5"
-#define FIRMWARE_VERSION_HEX    0x00010005
+#define FIRMWARE_VERSION        "1.0.6"
+#define FIRMWARE_VERSION_HEX    0x00010006
 #define HARDWARE_VERSION        "0.1.0"
 #define HARDWARE_VERSION_HEX    0x00000100
 

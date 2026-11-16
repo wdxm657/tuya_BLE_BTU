@@ -193,6 +193,11 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                             TAL_PR_INFO("[key] short press release (%dms) -> toggle power",
                                         press_duration);
                             app_state_toggle_power();
+                            // 蓝牙未连接则直接关机
+                            if (!tuya_app_get_conn_handle())
+                            {
+                                app_state_request_immediate_sleep();
+                            }
                         }
                     }
 

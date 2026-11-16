@@ -16,7 +16,9 @@
 #include "tkl_wakeup.h"
 
 #include "tal_log.h"
+#include "tal_adc.h"
 #include "tal_sleep.h"
+#include "tal_system.h"
 #include "tal_sw_timer.h"
 #include "tal_rtc.h"
 #include "tal_watchdog.h"
@@ -72,6 +74,13 @@ STATIC TIMER_ID s_dp_report_timer_id = NULL;
 /* BLE 每次连接后连续强制全量上报的次数 */
 #define DP_CONNECT_FORCE_REPORT_COUNT  5U
 STATIC UINT8_T s_dp_force_report_count = 0;
+
+/* 关机且 BLE 未连接持续 120 秒后才允许进入低功耗。 */
+#define LOW_POWER_DELAY_MS  (120UL * 1000UL)
+STATIC BOOL_T   s_low_power_waiting = FALSE;
+STATIC BOOL_T   s_low_power_entered = FALSE;
+STATIC BOOL_T   s_key_low_power_active = FALSE;
+STATIC UINT32_T s_low_power_start_tick_ms = 0;
 
 /* 设备状态DP定时上报（向APP周期性通知 work_state） */
 STATIC TIMER_ID s_work_state_report_timer_id = NULL;
@@ -150,6 +159,84 @@ STATIC VOID_T vibration_on_detected(VOID_T)
 
     /* 非待机状态下，保留互动模式原有的振动触发逻辑。 */
     app_motor_interactive_trigger();
+}
+
+/**
+ * @brief 执行低功耗前的统一硬件处理
+ */
+STATIC VOID_T enter_low_power_now(VOID_T)
+{
+    if (s_low_power_entered) {
+        return;
+    }
+
+    s_low_power_entered = TRUE;
+    app_battery_save_percent();
+    {
+        TUYA_GPIO_BASE_CFG_T gpio_cfg = {
+            .mode   = TUYA_GPIO_PULLDOWN,
+            .direct = TUYA_GPIO_INPUT,
+            .level  = TUYA_GPIO_LEVEL_LOW,
+        };
+        tal_gpio_init(AD_BAT_SWITCH, &gpio_cfg);
+    }
+    tal_adc_deinit(TUYA_ADC_NUM_0);
+    tal_cpu_allow_sleep();
+}
+
+/**
+ * @brief 处理延时低功耗状态
+ *
+ * 不依赖 BLE 断开事件，因此也能覆盖冷启动后从未连接过 BLE 的情况。
+ */
+STATIC VOID_T low_power_process(VOID_T)
+{
+    BOOL_T should_sleep = (!app_state_is_powered_on() &&
+                           tal_app_server_conn_handle == 0xFFFF);
+    UINT32_T now_ms;
+
+    /* 物理按键关机：不等待 BLE 断开或120秒倒计时。 */
+    if (app_state_take_immediate_sleep_request() &&
+        !app_state_is_powered_on()) {
+        s_low_power_waiting = FALSE;
+        s_key_low_power_active = TRUE;
+        TAL_PR_INFO("[power] key power-off -> enter low power immediately");
+        enter_low_power_now();
+        return;
+    }
+
+    if (!should_sleep) {
+        if (s_low_power_waiting) {
+            TAL_PR_INFO("[power] low-power countdown cancelled");
+        }
+        s_low_power_waiting = FALSE;
+
+        if (s_low_power_entered) {
+            s_low_power_entered = FALSE;
+            tal_cpu_force_wakeup();
+        }
+        return;
+    }
+
+    if (s_low_power_entered) {
+        return;
+    }
+
+    now_ms = tal_system_get_millisecond();
+    if (!s_low_power_waiting) {
+        s_low_power_waiting = TRUE;
+        s_low_power_start_tick_ms = now_ms;
+        TAL_PR_INFO("[power] off and BLE disconnected, enter low power in 120s");
+        return;
+    }
+
+    if ((UINT32_T)(now_ms - s_low_power_start_tick_ms) < LOW_POWER_DELAY_MS) {
+        return;
+    }
+
+    s_low_power_waiting = FALSE;
+    TAL_PR_INFO("[power] 120s elapsed -> enter low power");
+    // enter_low_power_now();
 }
 
 /**
@@ -510,30 +597,13 @@ OPERATE_RET tuya_init_third(VOID_T)
 }
 
 VOID_T power_off_cb(VOID_T){
-    //停止电机
+    /* 这里只停止负载；低功耗由主循环在条件持续120秒后统一处理。 */
     app_motor_stop();
-    if(tal_app_server_conn_handle == 0XFFFF){
-        // 蓝牙未连接则进入低功耗
-        // 关闭AD_BAT_SWITCH,把AD_BAT_SWITCH配置为输入下拉
-        app_battery_save_percent();
-        TUYA_GPIO_BASE_CFG_T gpio_cfg = {
-            .mode   = TUYA_GPIO_PULLDOWN,
-            .direct = TUYA_GPIO_INPUT,
-            .level  = TUYA_GPIO_LEVEL_LOW,
-        };
-        /* 初始化两个 GPIO（不进中断，纯输入轮询） */
-        tal_gpio_init(AD_BAT_SWITCH, &gpio_cfg);
-        TAL_PR_DEBUG("AD_BAT_SWITCH TUYA_GPIO_PULLDOWN");
-        tal_adc_deinit(TUYA_ADC_NUM_0);
-        TAL_PR_DEBUG("INTO LOW POWER");
-        tal_cpu_allow_sleep();
-    }else{
-        // 蓝牙连接保活，不需要操作
-        TAL_PR_DEBUG("ONLY CLOSE MOTOR");
-    }
+    TAL_PR_DEBUG("[power] motor stopped, waiting for low-power conditions");
 }
 
 VOID_T power_on_cb(VOID_T){
+    tal_cpu_force_wakeup();
     app_motor_start();
 }
 
@@ -609,6 +679,9 @@ OPERATE_RET tuya_main_loop(VOID_T)
 
     /* 状态机周期性处理（待机超时检测等） */
     app_state_process();
+
+    /* 关机且 BLE 未连接连续120秒后进入低功耗。 */
+    low_power_process();
 
 //    tal_watchdog_refresh();
     
