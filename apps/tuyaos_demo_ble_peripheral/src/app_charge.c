@@ -19,10 +19,12 @@
 #include "tal_log.h"
 #include "tal_sw_timer.h"
 #include "tal_gpio.h"
+#include "tal_system.h"
 #include "board.h"
 
 #include "app_charge.h"
 #include "app_state.h"
+#include "app_battery.h"
 
 /***********************************************************************
  ********************* constant ( macro and enum ) *********************
@@ -30,6 +32,7 @@
 
 /** GPIO 轮询间隔 ms */
 #define CHARGE_POLL_MS              100
+#define CHARGE_FULL_CONFIRM_MS      5000U
 
 /** 充电状态枚举 */
 typedef enum {
@@ -48,12 +51,45 @@ STATIC TIMER_ID s_charge_poll_timer_id = NULL;
 /* 当前充电状态 */
 STATIC charge_state_t s_charge_state = CHG_STATE_NO_USB;
 STATIC VOID_T (*s_usb_removed_cb)(VOID_T) = NULL;
+STATIC BOOL_T s_full_confirm_pending = FALSE;
+STATIC BOOL_T s_full_confirmed = FALSE;
+STATIC UINT32_T s_full_confirm_start_ms = 0;
 
 /***********************************************************************
  ********************* static function prototypes **********************
  **********************************************************************/
 
 STATIC VOID_T app_charge_poll_handler(TIMER_ID timer_id, VOID_T *arg);
+
+/* 独立于状态变化判断执行，满电引脚持续有效5秒后才校准目标。 */
+STATIC VOID_T app_charge_full_target_process(VOID_T)
+{
+    TUYA_GPIO_LEVEL_E usb_level = TUYA_GPIO_LEVEL_LOW;
+    TUYA_GPIO_LEVEL_E charge_level = TUYA_GPIO_LEVEL_LOW;
+    UINT32_T now_ms = tal_system_get_millisecond();
+
+    if (tal_gpio_read(USB_DET, &usb_level) != OPRT_OK ||
+        tal_gpio_read(CHARGE_STATE, &charge_level) != OPRT_OK ||
+        usb_level != TUYA_GPIO_LEVEL_HIGH ||
+        charge_level != TUYA_GPIO_LEVEL_HIGH) {
+        s_full_confirm_pending = FALSE;
+        s_full_confirmed = FALSE;
+        app_battery_set_full_target(FALSE);
+        return;
+    }
+    if (s_full_confirmed) {
+        return;
+    }
+    if (!s_full_confirm_pending) {
+        s_full_confirm_pending = TRUE;
+        s_full_confirm_start_ms = now_ms;
+        return;
+    }
+    if ((UINT32_T)(now_ms - s_full_confirm_start_ms) >= CHARGE_FULL_CONFIRM_MS) {
+        s_full_confirmed = TRUE;
+        app_battery_set_full_target(TRUE);
+    }
+}
 
 /***********************************************************************
  ********************* static functions *********************************
@@ -100,6 +136,8 @@ STATIC VOID_T app_charge_poll_handler(TIMER_ID timer_id, VOID_T *arg)
     BOOL_T is_active = app_charge_read_charge_state();
 
     charge_state_t new_state;
+
+    app_charge_full_target_process();
 
     if (!usb_in) {
         new_state = CHG_STATE_NO_USB;
@@ -198,6 +236,9 @@ BOOL_T app_charge_is_detected(VOID_T)
 
 VOID_T app_charge_suspend(VOID_T)
 {
+    s_full_confirm_pending = FALSE;
+    s_full_confirmed = FALSE;
+    app_battery_set_full_target(FALSE);
     if (s_charge_poll_timer_id != NULL) {
         tal_sw_timer_stop(s_charge_poll_timer_id);
     }
@@ -214,4 +255,9 @@ VOID_T app_charge_resume(VOID_T)
 VOID_T app_charge_register_usb_removed_cb(VOID_T (*cb)(VOID_T))
 {
     s_usb_removed_cb = cb;
+}
+
+VOID_T app_charge_refresh(VOID_T)
+{
+    app_charge_poll_handler(NULL, NULL);
 }

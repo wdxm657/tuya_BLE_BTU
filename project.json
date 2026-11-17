@@ -16,10 +16,13 @@
         "c_files": [
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_battery.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_charge.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_control.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_dp_parser.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_dp_report.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_key.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_led.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_motor.c",
+            "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_power_manager.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_product_test.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_state.c",
             "$PROJECT_ROOT/apps/tuyaos_demo_ble_peripheral/src/app_vibration.c",

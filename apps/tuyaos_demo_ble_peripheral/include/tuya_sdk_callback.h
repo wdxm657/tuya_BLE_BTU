@@ -49,11 +49,6 @@ extern TAL_BLE_ADV_PARAMS_T tal_adv_param;
  */
 UINT16_T tuya_app_get_conn_handle(VOID_T);
 
-/**
- * @brief 物理按键短按处理：retention 中唤醒开机，否则关机进入 retention
- */
-VOID_T tuya_key_short_press_handler(VOID_T);
-
 
 #ifdef __cplusplus
 }

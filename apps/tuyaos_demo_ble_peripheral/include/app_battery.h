@@ -71,6 +71,9 @@ OPERATE_RET app_battery_read_voltage(INT32_T *vol_mv);
  */
 UINT8_T app_battery_get_percent(VOID_T);
 
+/** 设置充电芯片确认的满电目标；仅影响目标值，显示仍按原速率上升。 */
+VOID_T app_battery_set_full_target(BOOL_T full);
+
 /**
  * @brief 将最近一次显示电量保存到 Flash
  *

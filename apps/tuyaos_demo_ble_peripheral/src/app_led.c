@@ -54,6 +54,9 @@ STATIC led_mode_t s_led_mode = LED_MODE_OFF;
 /* 当前 LED 亮灭状态（用于闪烁） */
 STATIC BOOL_T s_led_on = FALSE;
 
+/* 硬件临时唤醒仍保持熄灭，仅在业务退出 sleep 后解除。 */
+STATIC BOOL_T s_led_suspended = FALSE;
+
 /* 欠压提示：初始亮，之后灭/亮/灭，共快速闪烁两次。 */
 STATIC BOOL_T s_low_voltage_flash_active = FALSE;
 STATIC UINT8_T s_low_voltage_flash_step = 0;
@@ -69,10 +72,23 @@ STATIC TUYA_GPIO_LEVEL_E s_b_level = TUYA_GPIO_LEVEL_HIGH;
  **********************************************************************/
 
 STATIC VOID_T app_led_set_pins(TUYA_GPIO_LEVEL_E r, TUYA_GPIO_LEVEL_E g, TUYA_GPIO_LEVEL_E b);
+STATIC VOID_T app_led_force_off(VOID_T);
 
 /***********************************************************************
  ********************* static functions *********************************
  **********************************************************************/
+
+/** @brief 强制熄灭所有 LED，并同步引脚电平缓存。 */
+STATIC VOID_T app_led_force_off(VOID_T)
+{
+    /* 绕过电平缓存，确保 retention 唤醒后的硬件与缓存一致。 */
+    tal_gpio_write(LED_R, TUYA_GPIO_LEVEL_HIGH);
+    tal_gpio_write(LED_G, TUYA_GPIO_LEVEL_HIGH);
+    tal_gpio_write(LED_B, TUYA_GPIO_LEVEL_HIGH);
+    s_r_level = TUYA_GPIO_LEVEL_HIGH;
+    s_g_level = TUYA_GPIO_LEVEL_HIGH;
+    s_b_level = TUYA_GPIO_LEVEL_HIGH;
+}
 
 /**
  * @brief 设置 R/G/B 三引脚电平（LED 共阳，低电平点亮）
@@ -107,6 +123,10 @@ STATIC VOID_T app_led_set_pins(TUYA_GPIO_LEVEL_E r, TUYA_GPIO_LEVEL_E g, TUYA_GP
  */
 STATIC VOID_T app_led_blink_handler(TIMER_ID timer_id, VOID_T *arg)
 {
+    if (s_led_suspended) {
+        return;
+    }
+
     if (s_low_voltage_flash_active) {
         s_low_voltage_flash_step++;
 
@@ -174,16 +194,19 @@ VOID_T app_led_io_init(VOID_T)
         .level  = TUYA_GPIO_LEVEL_HIGH,
     };
 
+    /* 底层先使能输出再写电平，先预置 HIGH，避免共阳 LED 短暂点亮。 */
+    app_led_force_off();
     tal_gpio_init(LED_R, &gpio_out_high);
     tal_gpio_init(LED_G, &gpio_out_high);
     tal_gpio_init(LED_B, &gpio_out_high);
 
     /* GPIO 初始化阶段即保持所有 LED 熄灭。 */
-    app_led_set_pins(TUYA_GPIO_LEVEL_HIGH, TUYA_GPIO_LEVEL_HIGH, TUYA_GPIO_LEVEL_HIGH);
+    app_led_force_off();
 }
 
 VOID_T app_led_init(VOID_T)
 {
+    s_led_suspended = FALSE;
     /* 创建闪烁定时器 */
     tal_sw_timer_create(app_led_blink_handler, NULL, &s_led_timer_id);
 
@@ -197,11 +220,14 @@ VOID_T app_led_init(VOID_T)
 
 VOID_T app_led_prepare_sleep(VOID_T)
 {
+    s_led_suspended = TRUE;
     if (s_led_timer_id != NULL) {
         tal_sw_timer_stop(s_led_timer_id);
     }
-    app_led_set_pins(TUYA_GPIO_LEVEL_HIGH, TUYA_GPIO_LEVEL_HIGH,
-                     TUYA_GPIO_LEVEL_HIGH);
+    app_led_force_off();
+    s_low_voltage_flash_active = FALSE;
+    s_low_voltage_flash_step = 0;
+    s_low_voltage_flash_done_cb = NULL;
     s_led_mode = LED_MODE_OFF;
     s_led_on = FALSE;
 }
@@ -209,6 +235,7 @@ VOID_T app_led_prepare_sleep(VOID_T)
 VOID_T app_led_resume(VOID_T)
 {
     app_led_io_init();
+    s_led_suspended = FALSE;
     s_led_mode = LED_MODE_OFF;
     s_led_on = FALSE;
     app_led_update();
@@ -216,7 +243,7 @@ VOID_T app_led_resume(VOID_T)
 
 VOID_T app_led_set_mode(led_mode_t mode)
 {
-    if (s_low_voltage_flash_active) {
+    if (s_led_suspended || s_low_voltage_flash_active) {
         return;
     }
 
@@ -294,7 +321,7 @@ VOID_T app_led_update(VOID_T)
 {
     led_mode_t new_mode;
 
-    if (s_low_voltage_flash_active) {
+    if (s_led_suspended || s_low_voltage_flash_active) {
         return;
     }
 
@@ -345,7 +372,7 @@ led_mode_t app_led_get_mode(VOID_T)
 
 VOID_T app_led_red_flash_twice(VOID_T (*done_cb)(VOID_T))
 {
-    if (s_low_voltage_flash_active) {
+    if (s_led_suspended || s_low_voltage_flash_active) {
         return;
     }
 

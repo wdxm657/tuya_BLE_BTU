@@ -42,8 +42,9 @@ STATIC INT32_T  s_cached_voltage = 0;     /**< 最近一次有效电压 mV */
 STATIC UINT8_T  s_cached_percent = 50;    /**< 最近一次有效百分比 % */
 
 /* 电量显示变化限速：插入 USB 只升，拔出 USB 只降 */
-#define BATTERY_RISE_INTERVAL_MS   15 * 1000U /**< USB 插入时每 10 秒最多上升 1% */
-#define BATTERY_DROP_INTERVAL_MS   30 * 1000U /**< USB 拔出时每 5 秒最多下降 1% */
+#define BATTERY_RISE_INTERVAL_MS   (15U * 1000U) /**< USB 插入时每15秒最多上升1% */
+#define BATTERY_DROP_INTERVAL_MS   (60U * 1000U) /**< USB 拔出时每30秒最多下降1% */
+STATIC BOOL_T s_full_target = FALSE;
 
 STATIC BOOL_T   s_usb_state_inited = FALSE;
 STATIC BOOL_T   s_last_usb_in      = FALSE;
@@ -185,8 +186,8 @@ STATIC OPERATE_RET app_battery_sample(INT32_T *vol_mv)
 
     /* 计算平均值 → 换算电压 */
     INT32_T adc_avg = raw_sum / (INT32_T)valid_cnt;
-    // 固定+100mv
-    *vol_mv = adc_avg * BATTERY_DIVIDER_RATIO + 100;
+    // 固定+120mv
+    *vol_mv = adc_avg * BATTERY_DIVIDER_RATIO + 120;
 
     return OPRT_OK;
 }
@@ -225,21 +226,31 @@ STATIC OPERATE_RET app_battery_load_percent(UINT8_T *percent)
 /**
  * @brief 按 USB 状态对显示电量做单向限速
  *
- * USB 插入：目标值较高时，每 10 秒上升 1%，目标值较低时保持不变。
- * USB 拔出：目标值较低时，每 5 秒下降 1%，目标值较高时保持不变。
+ * USB 插入：每15秒最多上升1%，满电信号确认后目标为100%。
+ * USB 拔出：目标值较低时，每30秒下降1%，目标值较高时保持不变。
  */
-STATIC UINT8_T app_battery_limit_percent(UINT8_T target_percent)
+STATIC UINT8_T app_battery_limit_percent(UINT8_T target_percent,
+                                       UINT8_T *actual_target_percent)
 {
     TUYA_GPIO_LEVEL_E usb_level = TUYA_GPIO_LEVEL_LOW;
     UINT32_T now_ms = tal_system_get_millisecond();
     UINT32_T interval_ms;
     BOOL_T usb_in;
 
+    *actual_target_percent = target_percent;
+
     if (tal_gpio_read(USB_DET, &usb_level) != OPRT_OK) {
         TAL_PR_WARN("[battery] read USB_DET failed, keep %d%%", s_cached_percent);
         return s_cached_percent;
     }
     usb_in = (usb_level == TUYA_GPIO_LEVEL_HIGH);
+
+    if (!usb_in) {
+        s_full_target = FALSE;
+    } else if (s_full_target) {
+        target_percent = 100U;
+    }
+    *actual_target_percent = target_percent;
 
     /* 首次读取或 USB 插拔状态变化后重新计时，防止电量立即跳变。 */
     if (!s_usb_state_inited || usb_in != s_last_usb_in) {
@@ -281,6 +292,7 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
 {
     INT32_T vol_mv = 0;
     UINT8_T target_percent;
+    UINT8_T actual_target_percent;
     UINT8_T percent;
 
     /* 采样 */
@@ -290,16 +302,23 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
 
     /* 换算目标百分比，再根据 USB 状态进行单向限速。 */
     target_percent = app_battery_voltage_to_percent(vol_mv);
-    percent = app_battery_limit_percent(target_percent);
+    percent = app_battery_limit_percent(target_percent, &actual_target_percent);
 
     /* 更新缓存 */
     s_cached_voltage = vol_mv;
     // if (s_cached_percent != percent) {
-        TAL_PR_INFO("[battery] sample: %dmV, target=%d%%, display=%d%%",
-                    vol_mv, target_percent, percent);
+        TAL_PR_INFO("[battery] sample: %dmV, estimated_target=%d%%, actual_target=%d%%, display=%d%%",
+                    vol_mv, target_percent, actual_target_percent, percent);
     // }
     
     s_cached_percent = percent;
+
+    /* 实际显示升到100%时才保存，重启后不会从未到达的目标值开始。 */
+    if (s_full_target && percent == 100U) {
+        if (app_battery_save_percent() == OPRT_OK) {
+            s_full_target = FALSE;
+        }
+    }
 
 
     /* ----- 低电量检测 ----- */
@@ -356,6 +375,16 @@ OPERATE_RET app_battery_io_init(VOID_T)
     tal_gpio_write(AD_BAT_SWITCH, TUYA_GPIO_LEVEL_HIGH);
     s_adc_inited = TRUE;
     return OPRT_OK;
+}
+
+VOID_T app_battery_set_full_target(BOOL_T full)
+{
+    if (full && !s_full_target) {
+        s_last_percent_tick_ms = tal_system_get_millisecond();
+        TAL_PR_INFO("[battery] charge done confirmed, target=100%%, display=%d%%",
+                    s_cached_percent);
+    }
+    s_full_target = full;
 }
 
 OPERATE_RET app_battery_init(VOID_T)

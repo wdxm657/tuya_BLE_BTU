@@ -53,6 +53,8 @@ VOID_T app_charge_io_init(VOID_T);
 VOID_T app_charge_init(VOID_T);
 VOID_T app_charge_suspend(VOID_T);
 VOID_T app_charge_resume(VOID_T);
+/** 立即读取充电引脚并同步状态，不启动轮询定时器。 */
+VOID_T app_charge_refresh(VOID_T);
 VOID_T app_charge_register_usb_removed_cb(VOID_T (*cb)(VOID_T));
 
 /**
