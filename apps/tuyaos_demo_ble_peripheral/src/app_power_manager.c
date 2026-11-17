@@ -183,21 +183,36 @@ STATIC VOID_T tuya_retention_sleep_process(VOID_T)
     TAL_PR_INFO("[retention] enter ultra-low-power after 15 minutes");
 }
 
+/* 普通关机：充电或 BLE 连接时保持唤醒，其余情况进入 retention。
+ * 主循环也执行此检查，覆盖断开、重连及启动时未连接的情况。 */
+STATIC VOID_T app_update_sleep_policy(VOID_T)
+{
+    if (app_state_is_powered_on() || s_undervoltage_shutdown_active) {
+        return;
+    }
+
+    if (app_state_is_charging() || tuya_app_get_conn_handle() != 0xFFFF) {
+        if (tkl_cpu_is_sleep()) {
+            tal_cpu_force_wakeup();
+            s_retention_hw_wakeup_pending = FALSE;
+            s_retention_key_press_seen = FALSE;
+            app_peripherals_resume_after_sleep();
+            TAL_PR_DEBUG("[power] powered off, stay awake for charging/BLE");
+        }
+        return;
+    }
+
+    if (!tkl_cpu_is_sleep()) {
+        app_battery_save_percent();
+        tal_cpu_allow_sleep();
+        TAL_PR_DEBUG("[power] powered off and BLE disconnected -> enter retention");
+    }
+}
+
 STATIC VOID_T power_off_cb(VOID_T){
     app_motor_stop();
     app_battery_save_percent();
-    /* 欠压提示尚未完成，不能让 pre-sleep 停掉两闪定时器。 */
-    if (s_undervoltage_shutdown_active) {
-        return;
-    }
-    /* USB 插入引起的关机只停止负载，继续检测充电与拔线。 */
-    if (app_state_is_charging()) {
-        tal_cpu_force_wakeup();
-        TAL_PR_DEBUG("[power] motor stopped, stay awake for charging");
-        return;
-    }
-    tal_cpu_allow_sleep();
-    TAL_PR_DEBUG("[power] motor stopped, enter retention");
+    app_update_sleep_policy();
 }
 
 STATIC VOID_T app_peripherals_resume_after_sleep(VOID_T)
@@ -222,9 +237,8 @@ STATIC VOID_T usb_on_removed(VOID_T)
         return;
     }
 
-    TAL_PR_INFO("[power] USB removed while powered off -> enter retention");
-    app_battery_save_percent();
-    tal_cpu_allow_sleep();
+    TAL_PR_INFO("[power] USB removed while powered off -> check sleep conditions");
+    app_update_sleep_policy();
 }
 
 STATIC VOID_T power_on_cb(VOID_T){
@@ -326,5 +340,6 @@ VOID_T app_power_manager_process(VOID_T)
             return;
         }
     }
+    app_update_sleep_policy();
     tuya_retention_sleep_process();
 }

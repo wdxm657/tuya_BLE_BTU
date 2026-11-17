@@ -15,6 +15,7 @@
 #include "app_motor.h"
 #include "app_vibration.h"
 #include "app_control.h"
+#include "app_dp_parser.h"
 
 /**
  * @brief 状态变更处理：刷新 LED，并根据 work/standby 状态启停电机
@@ -64,6 +65,7 @@ VOID_T app_control_init(VOID_T)
     app_battery_init();
     app_charge_init();
     app_motor_init();
+    app_dp_config_restore();
     app_vibration_init();
 
     app_vibration_register_cb(vibration_on_detected);

@@ -208,15 +208,19 @@ BOOL_T app_state_set_power(BOOL_T on)
     TAL_PR_INFO("[state] power=%s", s_powered ? "ON" : "OFF");
 
     if (s_powered) {
+        /* 先退出 sleep 并恢复外设，再发出 WORK 状态通知。
+         * 电源回调可能因欠压再次关机，必须检查最终状态。 */
+        if (s_power_on_cb != NULL) {
+            s_power_on_cb();
+        }
+        if (!s_powered) {
+            return FALSE;
+        }
         /* 开机：重新计算设备状态 */
         app_state_recalculate();
         /* 启动待机定时器 */
         if (s_standby_timer_id != NULL) {
             tal_sw_timer_start(s_standby_timer_id, STANDBY_TIMEOUT_MS, TAL_TIMER_ONCE);
-        }
-        /* 回调：启动电机 + 恢复 BLE 广播等 */
-        if (s_power_on_cb != NULL) {
-            s_power_on_cb();
         }
     } else {
         /* 关机：进入低功耗模式，所有功能关闭 */

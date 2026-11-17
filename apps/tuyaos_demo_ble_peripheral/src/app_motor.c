@@ -184,6 +184,10 @@ STATIC VOID_T app_motor_seq_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
     UINT8_T  direction;
     UINT8_T  total_steps;
 
+    if (!s_motor_enabled || !app_state_is_powered_on()) {
+        return;
+    }
+
     /* 互动模式使用自己的时序表 */
     if (s_game_mode == GAME_MODE_INTERACTIVE) {
         total_steps = MOTOR_SEQ_INTERACTIVE_STEPS;
@@ -337,6 +341,11 @@ VOID_T app_motor_set_mode(game_mode_t mode)
         return;
     }
 
+    /* APP 重复同步同一模式时，保持当前序列继续运行。 */
+    if (mode == s_game_mode) {
+        return;
+    }
+
     /* 如果正在运行，先停止 */
     if (s_motor_enabled) {
         app_motor_seq_stop();
@@ -344,9 +353,9 @@ VOID_T app_motor_set_mode(game_mode_t mode)
 
     s_game_mode = mode;
 
-    // 模式设置完后，如果当前为开机状态，则自动启动新模式的序列
-    // 交互模式由检测到震动触发开关
-    if (app_state_is_powered_on() && s_game_mode != GAME_MODE_INTERACTIVE) {
+    /* 工作中切换任意模式都启动序列；互动模式完成一轮后再进待机。 */
+    if (s_motor_enabled && app_state_is_powered_on() &&
+        app_state_get() == DEV_STATE_WORK) {
         app_motor_seq_start();
     }
     TAL_PR_INFO("[motor] mode set to %d", mode);
@@ -359,9 +368,16 @@ game_mode_t app_motor_get_mode(VOID_T)
 
 VOID_T app_motor_start(VOID_T)
 {
-    if (!s_motor_enabled) {
+    /* 不能只相信使能标志；序列定时器未运行时也要重新启动。 */
+    if (!s_motor_enabled || !tal_sw_timer_is_running(s_motor_timer_id)) {
         s_motor_enabled = TRUE;
         app_motor_seq_start();
+        if (!tal_sw_timer_is_running(s_motor_timer_id)) {
+            s_motor_enabled = FALSE;
+            app_motor_set_direction(MOTOR_DIR_STOP);
+            TAL_PR_ERR("[motor] start failed: sequence timer is not running");
+            return;
+        }
         TAL_PR_INFO("[motor] started");
     }
 }
