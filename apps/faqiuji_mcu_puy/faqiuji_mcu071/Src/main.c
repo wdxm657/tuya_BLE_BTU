@@ -1,5 +1,6 @@
 #include "main.h"
 #include "faqiuji_audio.h"
+#include "faqiuji_record.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
@@ -11,6 +12,10 @@ int main(void)
   APP_SystemClockConfig();
   faqiuji_audio_init();
 
+  if (xTaskCreate(faqiuji_record_task, "record", 256, NULL, 2, NULL) !=
+      pdPASS) {
+    APP_ErrorHandler();
+  }
   if (xTaskCreate(faqiuji_audio_task, "audio", 192, NULL, 1, NULL) !=
       pdPASS) {
     APP_ErrorHandler();

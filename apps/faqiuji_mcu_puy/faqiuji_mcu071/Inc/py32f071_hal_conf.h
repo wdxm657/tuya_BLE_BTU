@@ -14,6 +14,7 @@ extern "C" {
 #define HAL_PWR_MODULE_ENABLED
 #define HAL_TIM_MODULE_ENABLED
 #define HAL_DAC_MODULE_ENABLED
+#define HAL_ADC_MODULE_ENABLED
 
 #define HSI_VALUE              ((uint32_t)8000000U)
 #define HSE_VALUE              ((uint32_t)24000000U)
@@ -55,6 +56,9 @@ extern "C" {
 #endif
 #ifdef HAL_DAC_MODULE_ENABLED
 #include "py32f071_hal_dac.h"
+#endif
+#ifdef HAL_ADC_MODULE_ENABLED
+#include "py32f071_hal_adc.h"
 #endif
 
 #ifdef __cplusplus
