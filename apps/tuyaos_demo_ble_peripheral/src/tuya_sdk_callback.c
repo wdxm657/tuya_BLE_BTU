@@ -80,6 +80,7 @@ STATIC UINT8_T s_dp_force_report_count = 0;
 STATIC BOOL_T   s_low_power_waiting = FALSE;
 STATIC BOOL_T   s_low_power_entered = FALSE;
 STATIC BOOL_T   s_key_low_power_active = FALSE;
+STATIC BOOL_T   s_undervoltage_shutdown_active = FALSE;
 STATIC UINT32_T s_low_power_start_tick_ms = 0;
 
 /* 设备状态DP定时上报（向APP周期性通知 work_state） */
@@ -204,37 +205,37 @@ STATIC VOID_T low_power_process(VOID_T)
         return;
     }
 
-    if (!should_sleep) {
-        if (s_low_power_waiting) {
-            TAL_PR_INFO("[power] low-power countdown cancelled");
-        }
-        s_low_power_waiting = FALSE;
+    // if (!should_sleep) {
+    //     if (s_low_power_waiting) {
+    //         TAL_PR_INFO("[power] low-power countdown cancelled");
+    //     }
+    //     s_low_power_waiting = FALSE;
 
-        if (s_low_power_entered) {
-            s_low_power_entered = FALSE;
-            tal_cpu_force_wakeup();
-        }
-        return;
-    }
+    //     if (s_low_power_entered) {
+    //         s_low_power_entered = FALSE;
+    //         tal_cpu_force_wakeup();
+    //     }
+    //     return;
+    // }
 
-    if (s_low_power_entered) {
-        return;
-    }
+    // if (s_low_power_entered) {
+    //     return;
+    // }
 
-    now_ms = tal_system_get_millisecond();
-    if (!s_low_power_waiting) {
-        s_low_power_waiting = TRUE;
-        s_low_power_start_tick_ms = now_ms;
-        TAL_PR_INFO("[power] off and BLE disconnected, enter low power in 120s");
-        return;
-    }
+    // now_ms = tal_system_get_millisecond();
+    // if (!s_low_power_waiting) {
+    //     s_low_power_waiting = TRUE;
+    //     s_low_power_start_tick_ms = now_ms;
+    //     TAL_PR_INFO("[power] off and BLE disconnected, enter low power in 120s");
+    //     return;
+    // }
 
-    if ((UINT32_T)(now_ms - s_low_power_start_tick_ms) < LOW_POWER_DELAY_MS) {
-        return;
-    }
+    // if ((UINT32_T)(now_ms - s_low_power_start_tick_ms) < LOW_POWER_DELAY_MS) {
+    //     return;
+    // }
 
-    s_low_power_waiting = FALSE;
-    TAL_PR_INFO("[power] 120s elapsed -> enter low power");
+    // s_low_power_waiting = FALSE;
+    // TAL_PR_INFO("[power] 120s elapsed -> enter low power");
     // enter_low_power_now();
 }
 
@@ -243,8 +244,25 @@ STATIC VOID_T low_power_process(VOID_T)
  */
 STATIC VOID_T battery_critical_poweroff(VOID_T)
 {
-    /* 硬件关机（进入低功耗保护） */
+    TAL_BLE_PEER_INFO_T peer = {0};
+
+    if (app_state_is_charging() || s_low_power_entered ||
+        s_undervoltage_shutdown_active) {
+        return;
+    }
+
+    s_undervoltage_shutdown_active = TRUE;
+
+    /* 欠压时停止产品工作。 */
     app_state_set_power(FALSE);
+
+    if (tal_app_server_conn_handle != 0xFFFF) {
+        peer.conn_handle = tal_app_server_conn_handle;
+        tal_ble_disconnect(peer);
+    }
+
+    /* 红灯快闪两次，完成后立即进入低功耗。 */
+    app_led_red_flash_twice(enter_low_power_now);
 }
 
 /***********************************************************************
@@ -603,6 +621,16 @@ VOID_T power_off_cb(VOID_T){
 
 VOID_T power_on_cb(VOID_T){
     tal_cpu_force_wakeup();
+
+    /* 欠压低功耗被按键唤醒时，不允许电机启动。 */
+    if (app_battery_is_critical() && !app_state_is_charging()) {
+        TAL_PR_WARN("[power] power-on rejected: battery undervoltage");
+        s_undervoltage_shutdown_active = FALSE;
+        s_low_power_entered = FALSE;
+        battery_critical_poweroff();
+        return;
+    }
+
     app_motor_start();
 }
 
@@ -637,7 +665,12 @@ OPERATE_RET tuya_init_last(VOID_T)
     app_state_register_power_cb(power_on_cb, power_off_cb);
 
     /* 临界低电 → 硬件关机保护 */
-    // app_battery_register_critical_cb(battery_critical_poweroff);
+    app_battery_register_critical_cb(battery_critical_poweroff);
+
+    /* 按键从欠压低功耗唤醒属于重新启动，首次采样后立即给出提示并休眠。 */
+    if (app_battery_is_critical() && !app_state_is_charging()) {
+        battery_critical_poweroff();
+    }
 
 #if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
     // if (tal_oled_init() == OPRT_OK) {
@@ -659,9 +692,11 @@ OPERATE_RET tuya_init_last(VOID_T)
     // 若标志位为0x03则认为是长按3秒后的复位启动，此时不能开机
     {
         UINT8_T f_reset = 0xFF;
-        BOOL_T user_power_on = TRUE;
+        BOOL_T user_power_on = FALSE;
         tal_flash_read(APP_DATA_FLASH_ADDR, &f_reset, 1);
-        if (f_reset == 0x03) {
+        if (app_battery_is_critical() && !app_state_is_charging()) {
+            TAL_PR_WARN("[boot] battery undervoltage, keep powered off");
+        } else if (f_reset == 0x03) {
             TAL_PR_INFO("[boot] factory-reset flag detected, staying off");
         } else {
             app_dp_config_restore(&user_power_on);

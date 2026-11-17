@@ -68,6 +68,12 @@ VOID_T app_led_update(VOID_T);
  */
 led_mode_t app_led_get_mode(VOID_T);
 
+/**
+ * @brief 红灯快速闪烁两次，结束后执行回调
+ * @param[in] done_cb 两次闪烁完成回调，可为 NULL
+ */
+VOID_T app_led_red_flash_twice(VOID_T (*done_cb)(VOID_T));
+
 #ifdef __cplusplus
 }
 #endif

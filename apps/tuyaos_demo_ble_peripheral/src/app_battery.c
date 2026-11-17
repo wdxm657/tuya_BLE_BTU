@@ -42,8 +42,8 @@ STATIC INT32_T  s_cached_voltage = 0;     /**< 最近一次有效电压 mV */
 STATIC UINT8_T  s_cached_percent = 50;    /**< 最近一次有效百分比 % */
 
 /* 电量显示变化限速：插入 USB 只升，拔出 USB 只降 */
-#define BATTERY_RISE_INTERVAL_MS   10 * 1000U /**< USB 插入时每 10 秒最多上升 1% */
-#define BATTERY_DROP_INTERVAL_MS    5 * 1000U /**< USB 拔出时每 5 秒最多下降 1% */
+#define BATTERY_RISE_INTERVAL_MS   15 * 1000U /**< USB 插入时每 10 秒最多上升 1% */
+#define BATTERY_DROP_INTERVAL_MS   30 * 1000U /**< USB 拔出时每 5 秒最多下降 1% */
 
 STATIC BOOL_T   s_usb_state_inited = FALSE;
 STATIC BOOL_T   s_last_usb_in      = FALSE;
@@ -313,10 +313,12 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
     }
 
     /* ----- 临界低电保护 ----- */
+    /* 欠压保护使用限速后的显示电量，避免电机运动瞬间压降误触发。 */
     if (percent <= BATTERY_CRITICAL_THRESHOLD) {
         if (!s_battery_critical) {
             s_battery_critical = TRUE;
-            TAL_PR_ERR("[battery] CRITICAL: %d%% — entering deep sleep!", percent);
+            TAL_PR_ERR("[battery] CRITICAL: display=%d%%, adc=%d%%",
+                       percent, target_percent);
         }
 
         /* 触发注册的临界低电回调（由 tuya_sdk_callback 注册关机逻辑） */
@@ -365,14 +367,17 @@ OPERATE_RET app_battery_init(VOID_T)
     /* ---------- 首次采样初始化缓存 ---------- */
     INT32_T init_mv = 0;
     if (app_battery_sample(&init_mv) == OPRT_OK) {
+        UINT8_T init_target_percent = app_battery_voltage_to_percent(init_mv);
         s_cached_voltage = init_mv;
         if (!saved_percent_valid) {
-            s_cached_percent = app_battery_voltage_to_percent(init_mv);
+            s_cached_percent = init_target_percent;
         }
+        /* 有 Flash 记录时优先使用保存电量判断，避免启动瞬时电压波动。 */
+        s_battery_critical = (s_cached_percent <= BATTERY_CRITICAL_THRESHOLD);
+        s_battery_low = (s_cached_percent <= BATTERY_LOW_THRESHOLD);
         s_last_percent_tick_ms = tal_system_get_millisecond();
         TAL_PR_INFO("[battery] init: %dmV, display=%d%%, adc=%d%%",
-                    init_mv, s_cached_percent,
-                    app_battery_voltage_to_percent(init_mv));
+                    init_mv, s_cached_percent, init_target_percent);
     } else {
         TAL_PR_WARN("[battery] init sample failed, use defaults");
     }
