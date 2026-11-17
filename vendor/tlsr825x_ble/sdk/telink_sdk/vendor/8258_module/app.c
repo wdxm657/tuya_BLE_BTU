@@ -108,7 +108,6 @@ _attribute_ram_code_ STATIC VOID_T app_power_management (VOID_T)
 
     if(tkl_cpu_is_sleep()) {
 #if (PM_DEEPSLEEP_RETENTION_ENABLE)
-        cpu_sleep_wakeup(DEEPSLEEP_MODE, PM_WAKEUP_PAD, 0);
         if(tkl_ble_state == TY_BLE_STA_IDLE) {
             bls_pm_setWakeupSource(PM_WAKEUP_PAD);
             cpu_sleep_wakeup(DEEPSLEEP_MODE, PM_WAKEUP_PAD, 0);
@@ -137,7 +136,7 @@ _attribute_ram_code_ STATIC VOID_T app_power_management (VOID_T)
             if(tkl_board_state_suspend) {
                 bls_pm_setSuspendMask(SUSPEND_ADV | SUSPEND_CONN);
             } else {
-                bls_pm_setSuspendMask (SUSPEND_ADV | DEEPSLEEP_RETENTION_ADV | SUSPEND_CONN | DEEPSLEEP_RETENTION_CONN);
+                bls_pm_setSuspendMask(SUSPEND_ADV | DEEPSLEEP_RETENTION_ADV | SUSPEND_CONN | DEEPSLEEP_RETENTION_CONN);
             }
             bls_pm_setWakeupSource(PM_WAKEUP_PAD);
         }

@@ -188,20 +188,13 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                             tal_flash_write(APP_DATA_FLASH_ADDR, &f_reset, 1);
                         }
                     } else {
-                        /* 开机3s内的短按不做处理（防止唤醒按键被误认为开关机） */
-                        if (s_boot_tick_ms != 0 && (now_ms - s_boot_tick_ms) < 3000) {
-                            TAL_PR_DEBUG("[key] short press ignored (within 3s of boot)");
+                        /* 开机1.5s内的短按不做处理（防止唤醒按键被误认为开关机） */
+                        if (s_boot_tick_ms != 0 && (now_ms - s_boot_tick_ms) < 1500) {
+                            TAL_PR_DEBUG("[key] short press ignored (within 1.5s of boot)");
                         } else {
-                            /* 短按松开 → 开关机 */
-                            TAL_PR_INFO("[key] short press release (%dms) -> toggle power",
+                            TAL_PR_INFO("[key] short press release (%dms)",
                                         press_duration);
                             app_state_toggle_power();
-                            // 蓝牙未连接则直接关机
-                            if (tuya_app_get_conn_handle() == 0xFFFF)
-                            {
-                                TAL_PR_INFO("app_state_request_immediate_sleep");
-                                app_state_request_immediate_sleep();
-                            }
                         }
                     }
 
@@ -230,7 +223,7 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
  ********************* public functions *********************************
  **********************************************************************/
 
-VOID_T app_key_init(VOID_T)
+VOID_T app_key_io_init(VOID_T)
 {
     TUYA_GPIO_BASE_CFG_T gpio_cfg = {
         .mode   = TUYA_GPIO_PULLUP,         /* 上拉输入 */
@@ -240,6 +233,10 @@ VOID_T app_key_init(VOID_T)
 
     /* 初始化 GPIO（不进中断，纯输入轮询） */
     tal_gpio_init(APP_KEY_PIN, &gpio_cfg);
+}
+
+VOID_T app_key_init(VOID_T)
+{
 
     /* 创建并启动 10ms 周期轮询定时器 */
     tal_sw_timer_create(app_key_poll_handler, NULL, &s_app_key_timer_id);
@@ -254,4 +251,22 @@ VOID_T app_key_init(VOID_T)
 
     TAL_PR_INFO("[key] custom driver initialized (poll %dms), pin %d",
                 KEY_POLL_MS, APP_KEY_PIN);
+}
+
+VOID_T app_key_suspend(VOID_T)
+{
+    if (s_app_key_timer_id != NULL) {
+        tal_sw_timer_stop(s_app_key_timer_id);
+    }
+}
+
+VOID_T app_key_resume(VOID_T)
+{
+    if (s_app_key_timer_id == NULL) {
+        return;
+    }
+    s_key_state = KEY_STATE_IDLE;
+    s_debounce_cnt = 0;
+    s_long_press_eligible = FALSE;
+    tal_sw_timer_start(s_app_key_timer_id, KEY_POLL_MS, TAL_TIMER_CYCLE);
 }

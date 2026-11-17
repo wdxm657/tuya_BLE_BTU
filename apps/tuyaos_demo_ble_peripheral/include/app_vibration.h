@@ -24,7 +24,10 @@ extern "C" {
 /**
  * @brief 初始化振动传感器（GPIO 中断注册）
  */
+VOID_T app_vibration_io_init(VOID_T);
 VOID_T app_vibration_init(VOID_T);
+VOID_T app_vibration_suspend(VOID_T);
+VOID_T app_vibration_resume(VOID_T);
 
 /**
  * @brief 注册振动触发回调（由 tuya_sdk_callback 调用，传入交互触发函数）

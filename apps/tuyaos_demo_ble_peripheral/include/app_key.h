@@ -44,7 +44,10 @@ extern "C" {
  *
  * @return OPRT_OK on success. Others on error, please refer to tuya_error_code.h
  */
+VOID_T app_key_io_init(VOID_T);
 VOID_T app_key_init(VOID_T);
+VOID_T app_key_suspend(VOID_T);
+VOID_T app_key_resume(VOID_T);
 
 
 #ifdef __cplusplus

@@ -39,9 +39,6 @@ STATIC BOOL_T  s_charging = FALSE;
 /* 满电标志 */
 STATIC BOOL_T  s_charge_done = FALSE;
 
-/* 物理按键关机触发的一次性立即低功耗请求 */
-STATIC BOOL_T  s_immediate_sleep_requested = FALSE;
-
 /* 待机定时器 */
 STATIC TIMER_ID s_standby_timer_id = NULL;
 /* 状态变更回调 */
@@ -135,7 +132,6 @@ VOID_T app_state_init(VOID_T)
     s_powered     = FALSE;
     s_charging    = FALSE;
     s_charge_done = FALSE;
-    s_immediate_sleep_requested = FALSE;
     s_dev_state   = DEV_STATE_STANDBY;  /* 默认待机，等待用户交互 */
 
     /* 启动待机定时器 */
@@ -240,18 +236,6 @@ BOOL_T app_state_set_power(BOOL_T on)
 BOOL_T app_state_is_powered_on(VOID_T)
 {
     return s_powered;
-}
-
-VOID_T app_state_request_immediate_sleep(VOID_T)
-{
-    s_immediate_sleep_requested = TRUE;
-}
-
-BOOL_T app_state_take_immediate_sleep_request(VOID_T)
-{
-    BOOL_T requested = s_immediate_sleep_requested;
-    s_immediate_sleep_requested = FALSE;
-    return requested;
 }
 
 VOID_T app_state_reset_standby_timer(VOID_T)

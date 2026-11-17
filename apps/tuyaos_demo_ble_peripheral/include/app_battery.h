@@ -53,7 +53,10 @@ extern "C" {
  * @brief 初始化电池 ADC + 开启 AD_BAT_SWITCH + 启动监测定时器
  * @return OPRT_OK 成功
  */
+OPERATE_RET app_battery_io_init(VOID_T);
 OPERATE_RET app_battery_init(VOID_T);
+VOID_T app_battery_suspend(VOID_T);
+OPERATE_RET app_battery_resume(VOID_T);
 
 /**
  * @brief 读取一次电池电压（AD_BAT_SWITCH 已常开，直接 ADC 采样）

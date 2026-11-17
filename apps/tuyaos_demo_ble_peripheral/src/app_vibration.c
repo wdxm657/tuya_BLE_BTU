@@ -81,7 +81,7 @@ STATIC VOID_T app_vibration_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                 s_triggered = TRUE;
                 s_debounce_cnt = 0;
                 s_last_trigger_tick = tal_system_get_millisecond();
-                TAL_PR_DEBUG("[vibration] detected");
+                // TAL_PR_DEBUG("[vibration] detected");
 
                 if (s_vibration_cb != NULL) {
                     s_vibration_cb();
@@ -100,7 +100,7 @@ STATIC VOID_T app_vibration_poll_handler(TIMER_ID timer_id, VOID_T *arg)
  ********************* public functions *********************************
  **********************************************************************/
 
-VOID_T app_vibration_init(VOID_T)
+VOID_T app_vibration_io_init(VOID_T)
 {
     TUYA_GPIO_BASE_CFG_T gpio_cfg = {
         .mode   = TUYA_GPIO_PULLUP,      /* 上拉输入，默认高电平 */
@@ -110,6 +110,10 @@ VOID_T app_vibration_init(VOID_T)
 
     /* 初始化 GPIO（不进中断，纯输入轮询） */
     tal_gpio_init(VIBRATION_SENSOR_PIN, &gpio_cfg);
+}
+
+VOID_T app_vibration_init(VOID_T)
+{
 
     /* 创建并启动 10ms 周期轮询定时器 */
     tal_sw_timer_create(app_vibration_poll_handler, NULL, &s_poll_timer_id);
@@ -132,4 +136,21 @@ VOID_T app_vibration_register_cb(VOID_T (*cb)(VOID_T))
 UINT32_T app_vibration_get_last_tick_ms(VOID_T)
 {
     return s_last_trigger_tick;
+}
+
+VOID_T app_vibration_suspend(VOID_T)
+{
+    if (s_poll_timer_id != NULL) {
+        tal_sw_timer_stop(s_poll_timer_id);
+    }
+}
+
+VOID_T app_vibration_resume(VOID_T)
+{
+    if (s_poll_timer_id == NULL) {
+        return;
+    }
+    s_debounce_cnt = 0;
+    s_triggered = FALSE;
+    tal_sw_timer_start(s_poll_timer_id, VIBRATION_POLL_MS, TAL_TIMER_CYCLE);
 }

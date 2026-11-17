@@ -47,6 +47,7 @@ STATIC TIMER_ID s_charge_poll_timer_id = NULL;
 
 /* 当前充电状态 */
 STATIC charge_state_t s_charge_state = CHG_STATE_NO_USB;
+STATIC VOID_T (*s_usb_removed_cb)(VOID_T) = NULL;
 
 /***********************************************************************
  ********************* static function prototypes **********************
@@ -129,6 +130,9 @@ STATIC VOID_T app_charge_poll_handler(TIMER_ID timer_id, VOID_T *arg)
     default:
         app_state_set_charging(FALSE);
         app_state_set_charge_done(FALSE);
+        if (s_usb_removed_cb != NULL) {
+            s_usb_removed_cb();
+        }
         break;
     }
 }
@@ -137,7 +141,7 @@ STATIC VOID_T app_charge_poll_handler(TIMER_ID timer_id, VOID_T *arg)
  ********************* public functions *********************************
  **********************************************************************/
 
-VOID_T app_charge_init(VOID_T)
+VOID_T app_charge_io_init(VOID_T)
 {
     TUYA_GPIO_BASE_CFG_T gpio_cfg = {
         .mode   = TUYA_GPIO_PULLUP,
@@ -148,6 +152,10 @@ VOID_T app_charge_init(VOID_T)
     /* 初始化两个 GPIO（不进中断，纯输入轮询） */
     tal_gpio_init(USB_DET, &gpio_cfg);
     tal_gpio_init(CHARGE_STATE, &gpio_cfg);
+}
+
+VOID_T app_charge_init(VOID_T)
+{
 
     /* 创建轮询定时器 */
     OPERATE_RET ret = tal_sw_timer_create(app_charge_poll_handler, NULL,
@@ -186,4 +194,24 @@ VOID_T app_charge_init(VOID_T)
 BOOL_T app_charge_is_detected(VOID_T)
 {
     return (s_charge_state == CHG_STATE_CHARGING);
+}
+
+VOID_T app_charge_suspend(VOID_T)
+{
+    if (s_charge_poll_timer_id != NULL) {
+        tal_sw_timer_stop(s_charge_poll_timer_id);
+    }
+}
+
+VOID_T app_charge_resume(VOID_T)
+{
+    if (s_charge_poll_timer_id != NULL) {
+        tal_sw_timer_start(s_charge_poll_timer_id, CHARGE_POLL_MS,
+                           TAL_TIMER_CYCLE);
+    }
+}
+
+VOID_T app_charge_register_usb_removed_cb(VOID_T (*cb)(VOID_T))
+{
+    s_usb_removed_cb = cb;
 }

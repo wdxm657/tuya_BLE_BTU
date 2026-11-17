@@ -96,17 +96,6 @@ BOOL_T app_state_set_power(BOOL_T on);
 BOOL_T app_state_is_powered_on(VOID_T);
 
 /**
- * @brief 请求在物理按键关机后立即进入低功耗
- */
-VOID_T app_state_request_immediate_sleep(VOID_T);
-
-/**
- * @brief 读取并清除一次性立即低功耗请求
- * @return TRUE=存在请求
- */
-BOOL_T app_state_take_immediate_sleep_request(VOID_T);
-
-/**
  * @brief 重新开始5分钟工作周期；若处于待机则恢复工作状态
  */
 VOID_T app_state_reset_standby_timer(VOID_T);

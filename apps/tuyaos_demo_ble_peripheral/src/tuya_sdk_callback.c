@@ -72,16 +72,25 @@ UINT16_T tal_app_server_conn_handle = 0xFFFF;
 STATIC TIMER_ID s_dp_report_timer_id = NULL;
 
 /* BLE 每次连接后连续强制全量上报的次数 */
-#define DP_CONNECT_FORCE_REPORT_COUNT  5U
+#define DP_CONNECT_FORCE_REPORT_COUNT  2U
 STATIC UINT8_T s_dp_force_report_count = 0;
 
-/* 关机且 BLE 未连接持续 120 秒后才允许进入低功耗。 */
-#define LOW_POWER_DELAY_MS  (120UL * 1000UL)
-STATIC BOOL_T   s_low_power_waiting = FALSE;
+/* 每60秒计数一次，累计15次（15分钟）后进入超低功耗。 */
+#define LOW_POWER_DELAY_MS             (60UL * 1000UL)
+#define RETENTION_LOW_POWER_COUNT_MAX  15U
 STATIC BOOL_T   s_low_power_entered = FALSE;
-STATIC BOOL_T   s_key_low_power_active = FALSE;
 STATIC BOOL_T   s_undervoltage_shutdown_active = FALSE;
-STATIC UINT32_T s_low_power_start_tick_ms = 0;
+
+/* Retention sleep 持续15分钟后停止BLE活动，进入超低功耗。 */
+STATIC TIMER_ID s_retention_timer_id = NULL;
+STATIC volatile UINT8_T s_retention_low_power_count = 0;
+STATIC BOOL_T s_retention_tracking = FALSE;
+STATIC BOOL_T s_retention_ultra_low_power = FALSE;
+STATIC volatile BOOL_T s_retention_check_pending = FALSE;
+STATIC volatile BOOL_T s_retention_hw_wakeup_pending = FALSE;
+STATIC BOOL_T s_retention_key_press_seen = FALSE;
+
+extern BOOL_T tkl_cpu_is_sleep(VOID_T);
 
 /* 设备状态DP定时上报（向APP周期性通知 work_state） */
 STATIC TIMER_ID s_work_state_report_timer_id = NULL;
@@ -104,14 +113,18 @@ TAL_BLE_ADV_PARAMS_T tal_adv_param = {
     .adv_type = TAL_BLE_ADV_TYPE_CS_UNDIR,
 };
 
-#if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 STATIC VOID_T tuya_pre_sleep_cb(VOID_T);
 STATIC VOID_T tuya_post_wakeup_cb(VOID_T);
+STATIC VOID_T tuya_retention_timer_handler(TIMER_ID timer_id, VOID_T *arg);
+STATIC VOID_T tuya_retention_sleep_process(VOID_T);
+STATIC VOID_T app_peripherals_resume_after_sleep(VOID_T);
+STATIC VOID_T usb_on_removed(VOID_T);
 STATIC TUYA_SLEEP_CB_T tal_sleep_cb = {
     .pre_sleep_cb = tuya_pre_sleep_cb,
     .post_wakeup_cb = tuya_post_wakeup_cb,
 };
 
+#if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 STATIC TUYA_BLE_BULKDATA_EXTERNAL_PARAM_T tuya_ble_external_param = {
     .type = 1,
     .flag = NEED_PARSING_BY_APP,
@@ -183,60 +196,6 @@ STATIC VOID_T enter_low_power_now(VOID_T)
     }
     tal_adc_deinit(TUYA_ADC_NUM_0);
     tal_cpu_allow_sleep();
-}
-
-/**
- * @brief 处理延时低功耗状态
- *
- * 不依赖 BLE 断开事件，因此也能覆盖冷启动后从未连接过 BLE 的情况。
- */
-STATIC VOID_T low_power_process(VOID_T)
-{
-    BOOL_T should_sleep = (!app_state_is_powered_on() &&
-                           tal_app_server_conn_handle == 0xFFFF);
-    UINT32_T now_ms;
-
-    /* 物理按键关机：不等待 BLE 断开或120秒倒计时。 */
-    if (app_state_take_immediate_sleep_request()) {
-        s_low_power_waiting = FALSE;
-        s_key_low_power_active = TRUE;
-        TAL_PR_INFO("[power] key power-off -> enter low power immediately");
-        enter_low_power_now();
-        return;
-    }
-
-    // if (!should_sleep) {
-    //     if (s_low_power_waiting) {
-    //         TAL_PR_INFO("[power] low-power countdown cancelled");
-    //     }
-    //     s_low_power_waiting = FALSE;
-
-    //     if (s_low_power_entered) {
-    //         s_low_power_entered = FALSE;
-    //         tal_cpu_force_wakeup();
-    //     }
-    //     return;
-    // }
-
-    // if (s_low_power_entered) {
-    //     return;
-    // }
-
-    // now_ms = tal_system_get_millisecond();
-    // if (!s_low_power_waiting) {
-    //     s_low_power_waiting = TRUE;
-    //     s_low_power_start_tick_ms = now_ms;
-    //     TAL_PR_INFO("[power] off and BLE disconnected, enter low power in 120s");
-    //     return;
-    // }
-
-    // if ((UINT32_T)(now_ms - s_low_power_start_tick_ms) < LOW_POWER_DELAY_MS) {
-    //     return;
-    // }
-
-    // s_low_power_waiting = FALSE;
-    // TAL_PR_INFO("[power] 120s elapsed -> enter low power");
-    // enter_low_power_now();
 }
 
 /**
@@ -386,10 +345,6 @@ STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
             tal_app_server_conn_handle = 0xFFFF;
             s_dp_force_report_count = 0;
 
-            /* BLE 断开 且关机状态 → 进入低功耗 */
-            if (!app_state_is_powered_on()) {
-                app_state_set_power(FALSE);
-            }
         } break;
 
         case TAL_BLE_EVT_ADV_REPORT: {
@@ -477,16 +432,103 @@ STATIC VOID_T tuya_uart_irq_rx_cb(TUYA_UART_NUM_E port_id, VOID_T *buff, UINT16_
     }
 }
 
-#if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
-
 STATIC VOID_T tuya_pre_sleep_cb(VOID_T)
 {
+    OPERATE_RET ret;
+
+    app_battery_suspend();
+    app_led_prepare_sleep();
+    app_key_suspend();
+    app_charge_suspend();
+    app_vibration_suspend();
+
+    if (s_retention_tracking || s_retention_ultra_low_power) {
+        return;
+    }
+
+    if (s_retention_timer_id == NULL) {
+        ret = tal_sw_timer_create(tuya_retention_timer_handler, NULL,
+                                  &s_retention_timer_id);
+        if (ret != OPRT_OK) {
+            TAL_PR_ERR("[retention] timer create failed: %d", ret);
+            return;
+        }
+    }
+
+    s_retention_low_power_count = 0;
+    s_retention_check_pending = FALSE;
+    ret = tal_sw_timer_start(s_retention_timer_id,
+                             LOW_POWER_DELAY_MS,
+                             TAL_TIMER_CYCLE);
+    if (ret != OPRT_OK) {
+        TAL_PR_ERR("[retention] timer start failed: %d", ret);
+        return;
+    }
+    s_retention_tracking = TRUE;
 }
 
 STATIC VOID_T tuya_post_wakeup_cb(VOID_T)
 {
+    /* 只记录硬件唤醒；不能在此退出 sleep 或恢复轮询定时器。 */
+    s_retention_hw_wakeup_pending = TRUE;
 }
 
+STATIC VOID_T tuya_retention_timer_handler(TIMER_ID timer_id, VOID_T *arg)
+{
+    /* 饱和计数，达到阈值后不再递增，避免长时间运行溢出。 */
+    if (s_retention_low_power_count < RETENTION_LOW_POWER_COUNT_MAX) {
+        s_retention_low_power_count++;
+    }
+    s_retention_check_pending = TRUE;
+}
+
+STATIC VOID_T tuya_retention_sleep_process(VOID_T)
+{
+    OPERATE_RET ret;
+
+    if (!tkl_cpu_is_sleep()) {
+        if (s_retention_tracking && s_retention_timer_id != NULL) {
+            tal_sw_timer_stop(s_retention_timer_id);
+        }
+        s_retention_tracking = FALSE;
+        s_retention_ultra_low_power = FALSE;
+        s_retention_check_pending = FALSE;
+        s_retention_low_power_count = 0;
+        return;
+    }
+
+    if (!s_retention_tracking || !s_retention_check_pending) {
+        return;
+    }
+    s_retention_check_pending = FALSE;
+
+    TAL_PR_INFO("[retention] low-power count: %d/%d",
+                s_retention_low_power_count,
+                RETENTION_LOW_POWER_COUNT_MAX);
+    if (s_retention_low_power_count < RETENTION_LOW_POWER_COUNT_MAX) {
+        return;
+    }
+
+    if (tal_app_server_conn_handle != 0xFFFF) {
+        tuya_ble_gap_disconnect();
+        /* 等待断开事件处理完成，避免其自动重启广播后覆盖下面的停止操作。 */
+        tal_system_sleep(1000);
+        TAL_PR_INFO("[retention] BLE disconnected after 15 minutes");
+    }
+
+    ret = tal_ble_advertising_stop();
+    if (ret != OPRT_OK) {
+        TAL_PR_WARN("[retention] stop advertising failed: %d", ret);
+        return;
+    }
+
+    tal_sw_timer_stop(s_retention_timer_id);
+    s_retention_tracking = FALSE;
+    s_retention_ultra_low_power = TRUE;
+    TAL_PR_INFO("[retention] enter ultra-low-power after 15 minutes");
+}
+
+#if defined(TUYA_SDK_TEST) && (TUYA_SDK_TEST == 1)
 VOID_T tuya_ble_bulkdata_info_cb(TUYA_BLE_BULKDATA_INFO_T* info)
 {
 //    info->total_length = 0;
@@ -578,49 +620,56 @@ OPERATE_RET tuya_init_third(VOID_T)
     };
     tkl_wakeup_source_set(&usb_wakeup_cfg);
 
-    /* ---- 模块初始化 ---- */
-    /* 1. 状态机（须在其他模块之前初始化） */
-    app_state_init();
-
-    /* 2. 初始化 GPIO 外设引脚 */
+    /* third 阶段仅初始化业务 GPIO，定时器和业务状态统一放到 last。 */
     TUYA_GPIO_BASE_CFG_T gpio_out_high = {
         .mode   = TUYA_GPIO_PUSH_PULL,
         .direct = TUYA_GPIO_OUTPUT,
         .level  = TUYA_GPIO_LEVEL_LOW,
     };
     tal_gpio_init(AD_BAT_SWITCH, &gpio_out_high);
-
-    /* 3. M_INA/M_INB GPIO 初始化已移除 — 由 app_motor_init() 内的 PWM 接管 */
-
-    /* 4. 按键（一直运行） */
-    app_key_init();
-
-    /* 5. LED 指示灯 */
-    app_led_init();
-
-    /* 6. 电池监测（ADC+定时器） */
-    app_battery_init();
-
-    /* 7. 充电检测（GPIO轮询） */
-    app_charge_init();
-
-    /* 8. 电机 (PWM 初始化) */
-    app_motor_init();
-
-    /* 9. 振动传感器 */
-    app_vibration_init();
-
+    app_battery_io_init();
+    app_motor_io_init();
+    app_key_io_init();
+    app_led_io_init();
+    app_charge_io_init();
+    app_vibration_io_init();
+    
     return OPRT_OK;
 }
 
 VOID_T power_off_cb(VOID_T){
     /* 这里只停止负载；低功耗由主循环在条件持续120秒后统一处理。 */
     app_motor_stop();
+    // 关机则直接进入retention
+    app_battery_save_percent();
+    tal_cpu_allow_sleep();
     TAL_PR_DEBUG("[power] motor stopped, waiting for low-power conditions");
 }
 
+STATIC VOID_T app_peripherals_resume_after_sleep(VOID_T)
+{
+    app_key_resume();
+    app_charge_resume();
+    app_vibration_resume();
+    app_battery_resume();
+    app_led_resume();
+}
+
+STATIC VOID_T usb_on_removed(VOID_T)
+{
+    if (app_state_is_powered_on()) {
+        return;
+    }
+
+    TAL_PR_INFO("[power] USB removed while powered off -> enter retention");
+    app_battery_save_percent();
+    tal_cpu_allow_sleep();
+}
+
 VOID_T power_on_cb(VOID_T){
+    /* 明确开机后退出 sleep，并恢复业务轮询。 */
     tal_cpu_force_wakeup();
+    app_peripherals_resume_after_sleep();
 
     /* 欠压低功耗被按键唤醒时，不允许电机启动。 */
     if (app_battery_is_critical() && !app_state_is_charging()) {
@@ -636,6 +685,16 @@ VOID_T power_on_cb(VOID_T){
 
 OPERATE_RET tuya_init_last(VOID_T)
 {
+    /* ---- 业务模块初始化（third 阶段只初始化 GPIO） ---- */
+    /* 状态机须先于会读写设备状态的其他模块初始化。 */
+    app_state_init();
+    app_key_init();
+    app_led_init();
+    app_battery_init();
+    app_charge_init();
+    app_motor_init();
+    app_vibration_init();
+
     // PB1 TX   PB7 RX
     tal_uart_init(TUYA_UART_NUM_0, &tal_uart_cfg);
 
@@ -666,6 +725,8 @@ OPERATE_RET tuya_init_last(VOID_T)
 
     /* 临界低电 → 硬件关机保护 */
     app_battery_register_critical_cb(battery_critical_poweroff);
+    app_charge_register_usb_removed_cb(usb_on_removed);
+    tal_cpu_sleep_callback_register(&tal_sleep_cb);
 
     /* 按键从欠压低功耗唤醒属于重新启动，首次采样后立即给出提示并休眠。 */
     if (app_battery_is_critical() && !app_state_is_charging()) {
@@ -676,8 +737,6 @@ OPERATE_RET tuya_init_last(VOID_T)
     // if (tal_oled_init() == OPRT_OK) {
     //     tal_oled_show_string(12, 1, (VOID_T*)"TuyaOS Demo", 16);
     // }
-
-    tal_cpu_sleep_callback_register(&tal_sleep_cb);
 
     tuya_ble_bulkdata_cb.info_cb = tuya_ble_bulkdata_info_cb;
     tuya_ble_bulkdata_cb.report_cb = tuya_ble_bulkdata_report_cb;
@@ -692,15 +751,14 @@ OPERATE_RET tuya_init_last(VOID_T)
     // 若标志位为0x03则认为是长按3秒后的复位启动，此时不能开机
     {
         UINT8_T f_reset = 0xFF;
-        BOOL_T user_power_on = FALSE;
         tal_flash_read(APP_DATA_FLASH_ADDR, &f_reset, 1);
         if (app_battery_is_critical() && !app_state_is_charging()) {
             TAL_PR_WARN("[boot] battery undervoltage, keep powered off");
         } else if (f_reset == 0x03) {
             TAL_PR_INFO("[boot] factory-reset flag detected, staying off");
         } else {
-            app_dp_config_restore(&user_power_on);
-            app_state_set_power(user_power_on);
+            // 启动默认开机
+            app_state_set_power(1);
         }
     }
     
@@ -709,15 +767,44 @@ OPERATE_RET tuya_init_last(VOID_T)
 
 OPERATE_RET tuya_main_loop(VOID_T)
 {
+    TUYA_GPIO_LEVEL_E key_level = TUYA_GPIO_LEVEL_HIGH;
+    TUYA_GPIO_LEVEL_E usb_level = TUYA_GPIO_LEVEL_LOW;
+
 #if !TUYA_BLE_USE_OS
     tuya_ble_main_tasks_exec();
 #endif
 
+    /*
+     * Deep-retention 唤醒后先确认按键确实按下，再等待松开才开机。
+     * 不使用软件定时器，避免在 retention 中制造周期唤醒。
+     * USB 唤醒时按键始终为高，不会误触发开机。
+     */
+    if (s_retention_hw_wakeup_pending && tkl_cpu_is_sleep()) {
+        /* USB 插入为高电平：立即退出 retention，但产品仍保持关机。 */
+        if (tal_gpio_read(USB_DET, &usb_level) == OPRT_OK &&
+            usb_level == TUYA_GPIO_LEVEL_HIGH) {
+            s_retention_hw_wakeup_pending = FALSE;
+            s_retention_key_press_seen = FALSE;
+            TAL_PR_INFO("[power] USB inserted in retention -> wake up");
+            tal_cpu_force_wakeup();
+            app_peripherals_resume_after_sleep();
+        } else if (tal_gpio_read(BOARD_KEY_PIN, &key_level) == OPRT_OK) {
+            if (key_level == TUYA_GPIO_LEVEL_LOW) {
+                s_retention_key_press_seen = TRUE;
+            } else if (s_retention_key_press_seen) {
+                s_retention_hw_wakeup_pending = FALSE;
+                s_retention_key_press_seen = FALSE;
+                TAL_PR_INFO("[power] retention key released -> power on");
+                app_state_set_power(TRUE);
+            }
+        }
+    }
+
     /* 状态机周期性处理（待机超时检测等） */
     app_state_process();
 
-    /* 关机且 BLE 未连接连续120秒后进入低功耗。 */
-    low_power_process();
+    /* Retention sleep 保持15分钟后关闭BLE广播，进入超低功耗。 */
+    tuya_retention_sleep_process();
 
 //    tal_watchdog_refresh();
     

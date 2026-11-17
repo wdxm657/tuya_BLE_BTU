@@ -294,10 +294,10 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
 
     /* 更新缓存 */
     s_cached_voltage = vol_mv;
-    if (s_cached_percent != percent) {
+    // if (s_cached_percent != percent) {
         TAL_PR_INFO("[battery] sample: %dmV, target=%d%%, display=%d%%",
                     vol_mv, target_percent, percent);
-    }
+    // }
     
     s_cached_percent = percent;
 
@@ -334,17 +334,9 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
  ********************* public functions *********************************
  **********************************************************************/
 
-OPERATE_RET app_battery_init(VOID_T)
+OPERATE_RET app_battery_io_init(VOID_T)
 {
     OPERATE_RET ret;
-    UINT8_T saved_percent = 0;
-    BOOL_T saved_percent_valid = FALSE;
-
-    if (app_battery_load_percent(&saved_percent) == OPRT_OK) {
-        s_cached_percent = saved_percent;
-        saved_percent_valid = TRUE;
-        TAL_PR_INFO("[battery] restored from flash: %d%%", saved_percent);
-    }
 
     /* ---------- ADC 初始化 ---------- */
     TUYA_ADC_BASE_CFG_T adc_cfg = {
@@ -362,6 +354,25 @@ OPERATE_RET app_battery_init(VOID_T)
 
     /* ---------- 使能分压电路（常开，不再开关） ---------- */
     tal_gpio_write(AD_BAT_SWITCH, TUYA_GPIO_LEVEL_HIGH);
+    s_adc_inited = TRUE;
+    return OPRT_OK;
+}
+
+OPERATE_RET app_battery_init(VOID_T)
+{
+    UINT8_T saved_percent = 0;
+    BOOL_T saved_percent_valid = FALSE;
+
+    if (!s_adc_inited) {
+        return OPRT_COM_ERROR;
+    }
+
+    if (app_battery_load_percent(&saved_percent) == OPRT_OK) {
+        s_cached_percent = saved_percent;
+        saved_percent_valid = TRUE;
+        TAL_PR_INFO("[battery] restored from flash: %d%%", saved_percent);
+    }
+
     tal_system_delay(10);  /* 等待电压稳定 */
 
     /* ---------- 首次采样初始化缓存 ---------- */
@@ -386,8 +397,51 @@ OPERATE_RET app_battery_init(VOID_T)
     tal_sw_timer_create(app_battery_monitor_handler, NULL, &s_monitor_timer_id);
     tal_sw_timer_start(s_monitor_timer_id, BATTERY_MONITOR_INTERVAL_MS, TAL_TIMER_CYCLE);
 
-    s_adc_inited = TRUE;
     TAL_PR_INFO("[battery] monitoring started, interval=%dms", BATTERY_MONITOR_INTERVAL_MS);
+    return OPRT_OK;
+}
+
+VOID_T app_battery_suspend(VOID_T)
+{
+    if (s_monitor_timer_id != NULL) {
+        tal_sw_timer_stop(s_monitor_timer_id);
+    }
+    if (s_adc_inited) {
+        tal_adc_deinit(TUYA_ADC_NUM_0);
+        s_adc_inited = FALSE;
+    }
+
+    TUYA_GPIO_BASE_CFG_T gpio_cfg = {
+        .mode   = TUYA_GPIO_PULLDOWN,
+        .direct = TUYA_GPIO_INPUT,
+        .level  = TUYA_GPIO_LEVEL_LOW,
+    };
+    tal_gpio_init(AD_BAT_SWITCH, &gpio_cfg);
+}
+
+OPERATE_RET app_battery_resume(VOID_T)
+{
+    OPERATE_RET ret;
+
+    if (!s_adc_inited) {
+        TUYA_GPIO_BASE_CFG_T gpio_cfg = {
+            .mode   = TUYA_GPIO_PUSH_PULL,
+            .direct = TUYA_GPIO_OUTPUT,
+            .level  = TUYA_GPIO_LEVEL_LOW,
+        };
+        tal_gpio_init(AD_BAT_SWITCH, &gpio_cfg);
+        ret = app_battery_io_init();
+        if (ret != OPRT_OK) {
+            return ret;
+        }
+        tal_system_delay(10);
+    }
+
+    if (s_monitor_timer_id != NULL) {
+        return tal_sw_timer_start(s_monitor_timer_id,
+                                  BATTERY_MONITOR_INTERVAL_MS,
+                                  TAL_TIMER_CYCLE);
+    }
     return OPRT_OK;
 }
 

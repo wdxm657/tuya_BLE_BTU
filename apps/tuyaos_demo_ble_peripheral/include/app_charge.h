@@ -49,7 +49,11 @@ extern "C" {
  *   - 创建并启动 100ms 周期定时器轮询双引脚电平
  *   - 启动时读取一次引脚状态，避免错过初始状态
  */
+VOID_T app_charge_io_init(VOID_T);
 VOID_T app_charge_init(VOID_T);
+VOID_T app_charge_suspend(VOID_T);
+VOID_T app_charge_resume(VOID_T);
+VOID_T app_charge_register_usb_removed_cb(VOID_T (*cb)(VOID_T));
 
 /**
  * @brief 获取当前充电器插入状态（通过 GPIO 读取）

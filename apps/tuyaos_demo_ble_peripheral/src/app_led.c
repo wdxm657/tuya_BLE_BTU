@@ -165,7 +165,7 @@ STATIC VOID_T app_led_blink_handler(TIMER_ID timer_id, VOID_T *arg)
  ********************* public functions *********************************
  **********************************************************************/
 
-VOID_T app_led_init(VOID_T)
+VOID_T app_led_io_init(VOID_T)
 {
     // 初始化所有LED IO
     TUYA_GPIO_BASE_CFG_T gpio_out_high = {
@@ -177,6 +177,13 @@ VOID_T app_led_init(VOID_T)
     tal_gpio_init(LED_R, &gpio_out_high);
     tal_gpio_init(LED_G, &gpio_out_high);
     tal_gpio_init(LED_B, &gpio_out_high);
+
+    /* GPIO 初始化阶段即保持所有 LED 熄灭。 */
+    app_led_set_pins(TUYA_GPIO_LEVEL_HIGH, TUYA_GPIO_LEVEL_HIGH, TUYA_GPIO_LEVEL_HIGH);
+}
+
+VOID_T app_led_init(VOID_T)
+{
     /* 创建闪烁定时器 */
     tal_sw_timer_create(app_led_blink_handler, NULL, &s_led_timer_id);
 
@@ -186,6 +193,25 @@ VOID_T app_led_init(VOID_T)
     s_led_on = FALSE;
 
     TAL_PR_INFO("[led] initialized");
+}
+
+VOID_T app_led_prepare_sleep(VOID_T)
+{
+    if (s_led_timer_id != NULL) {
+        tal_sw_timer_stop(s_led_timer_id);
+    }
+    app_led_set_pins(TUYA_GPIO_LEVEL_HIGH, TUYA_GPIO_LEVEL_HIGH,
+                     TUYA_GPIO_LEVEL_HIGH);
+    s_led_mode = LED_MODE_OFF;
+    s_led_on = FALSE;
+}
+
+VOID_T app_led_resume(VOID_T)
+{
+    app_led_io_init();
+    s_led_mode = LED_MODE_OFF;
+    s_led_on = FALSE;
+    app_led_update();
 }
 
 VOID_T app_led_set_mode(led_mode_t mode)

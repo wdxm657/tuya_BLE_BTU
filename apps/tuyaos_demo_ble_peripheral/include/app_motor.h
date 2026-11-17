@@ -69,6 +69,7 @@ typedef struct {
 /**
  * @brief 初始化电机模块（GPIO、定时器）
  */
+VOID_T app_motor_io_init(VOID_T);
 VOID_T app_motor_init(VOID_T);
 
 /**

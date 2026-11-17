@@ -149,14 +149,14 @@ STATIC VOID_T app_motor_set_direction(UINT8_T direction)
             /* M_INA=PWM(duty), M_INB=0 → 正转 */
             tal_pwm_duty_set(MOTOR_PWM_CH_INA, duty);
             tal_pwm_duty_set(MOTOR_PWM_CH_INB, MOTOR_PWM_DUTY_0);
-            TAL_PR_DEBUG("[motor] -> FORWARD, duty=%lu", duty);
+            TAL_PR_DEBUG("[motor] -> FORWARD, duty=%d", duty);
             break;
 
         case MOTOR_DIR_REVERSE:
             /* M_INA=0, M_INB=PWM(duty) → 反转 */
             tal_pwm_duty_set(MOTOR_PWM_CH_INA, MOTOR_PWM_DUTY_0);
             tal_pwm_duty_set(MOTOR_PWM_CH_INB, duty);
-            TAL_PR_DEBUG("[motor] -> REVERSE, duty=%lu", duty);
+            TAL_PR_DEBUG("[motor] -> REVERSE, duty=%d", duty);
             break;
 
         case MOTOR_DIR_STOP:
@@ -289,7 +289,7 @@ STATIC VOID_T app_motor_seq_stop(VOID_T)
  ********************* public functions *********************************
  **********************************************************************/
 
-VOID_T app_motor_init(VOID_T)
+VOID_T app_motor_io_init(VOID_T)
 {
     OPERATE_RET ret;
 
@@ -311,6 +311,12 @@ VOID_T app_motor_init(VOID_T)
     if (ret != OPRT_OK) {
         TAL_PR_ERR("[motor] PWM init failed for ch INB, ret=%d", ret);
     }
+    tal_pwm_start(MOTOR_PWM_CH_INA);
+    tal_pwm_start(MOTOR_PWM_CH_INB);
+}
+
+VOID_T app_motor_init(VOID_T)
+{
 
     /* 创建时序定时器（不自动启动） */
     tal_sw_timer_create(app_motor_seq_timeout_handler, NULL, &s_motor_timer_id);

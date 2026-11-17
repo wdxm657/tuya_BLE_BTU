@@ -43,7 +43,10 @@ typedef enum {
 /**
  * @brief 初始化 LED 模块（GPIO+定时器）
  */
+VOID_T app_led_io_init(VOID_T);
 VOID_T app_led_init(VOID_T);
+VOID_T app_led_prepare_sleep(VOID_T);
+VOID_T app_led_resume(VOID_T);
 
 /**
  * @brief 设置 LED 显示模式
