@@ -183,14 +183,20 @@ class MainWindow(QMainWindow):
         program_grid.addWidget(self.factory_button, 1, 0, 1, 3)
         self._add_action_button(
             program_grid,
-            "Program test audio (0x08004000, 112 KB)",
+            "Program test audio (0x08008000, 96 KB)",
             "program_test_audio",
             2,
             0,
-            "This erases/replaces the 112 KB test audio area from "
-            "0x08004000 to the end of Flash. Continue?",
+            "This erases/replaces the 96 KB test audio area from "
+            "0x08008000 to the end of Flash. Continue?",
         )
         root.addWidget(program_box)
+
+        self.export_audio_button = QPushButton("Export recording WAV...")
+        self.export_audio_button.clicked.connect(
+            lambda: self._run_operation("export_recording")
+        )
+        root.addWidget(self.export_audio_button)
 
         log_box = QGroupBox("Operation log")
         log_layout = QVBoxLayout(log_box)
@@ -331,7 +337,15 @@ class MainWindow(QMainWindow):
             return
 
         arguments: dict[str, object] = {}
-        if operation.startswith("program:"):
+        if operation == "export_recording":
+            output, _ = QFileDialog.getSaveFileName(
+                self, "Export recording", str(config.SCRIPT_DIR / "recording.wav"),
+                "WAV audio (*.wav)",
+            )
+            if not output:
+                return
+            arguments["output"] = output
+        elif operation.startswith("program:"):
             region_key = operation.partition(":")[2]
             arguments["image"] = self.image_inputs[region_key].text().strip()
         elif operation == "program_test_audio":

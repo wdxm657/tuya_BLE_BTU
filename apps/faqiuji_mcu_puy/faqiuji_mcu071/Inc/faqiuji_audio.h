@@ -9,14 +9,18 @@
 #endif
 
 #ifndef FAQIUJI_AUDIO_VOLUME_PERCENT
-#define FAQIUJI_AUDIO_VOLUME_PERCENT 50U
+#define FAQIUJI_AUDIO_VOLUME_PERCENT 20U
+#endif
+
+/* Isolate the DAC output while the ADC and flash writer are active. */
+#ifndef FAQIUJI_AUDIO_RECORD_MUTE_LOW
+#define FAQIUJI_AUDIO_RECORD_MUTE_LOW 1U
 #endif
 
 void faqiuji_audio_init(void);
 void faqiuji_audio_task(void *argument);
 void faqiuji_audio_tim6_irq_handler(void);
-/* Set only after a recording is saved; cleared on reset or a new recording. */
-extern volatile uint8_t g_audio_record_complete;
+void faqiuji_audio_dma_irq_handler(void);
 void faqiuji_audio_record_begin(void);
 void faqiuji_audio_record_end(uint8_t saved);
 

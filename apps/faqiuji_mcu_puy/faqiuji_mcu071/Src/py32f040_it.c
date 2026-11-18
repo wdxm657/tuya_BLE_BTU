@@ -29,3 +29,8 @@ void DMA1_Channel1_IRQHandler(void)
 {
   faqiuji_record_dma_irq_handler();
 }
+
+void DMA1_Channel2_3_IRQHandler(void)
+{
+  faqiuji_audio_dma_irq_handler();
+}

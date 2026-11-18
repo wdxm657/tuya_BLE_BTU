@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 import tempfile
+import struct
+import wave
 import unittest
 from unittest.mock import patch
 
@@ -14,23 +16,73 @@ class FakeMemoryRegion:
     length = config.FLASH_SIZE
     is_flash = True
 
+    def __init__(self, flash: object) -> None:
+        self.flash = flash
+
+
+class FakePageFlash:
+    class Operation:
+        PROGRAM = "program"
+
+    def __init__(self, target: object) -> None:
+        self.target = target
+        self.pages: list[int] = []
+        self.cleaned = False
+        self.corrupt = False
+
+    def get_page_info(self, _address: int) -> object:
+        return type("PageInfo", (), {"size": 256})()
+
+    def init(self, operation: str) -> None:
+        assert operation == self.Operation.PROGRAM
+        assert not self.target.running
+        assert self.target.reset_count > 0
+
+    def program_page(self, address: int, data: list[int]) -> None:
+        assert len(data) == 256
+        assert address % 256 == 0
+        self.pages.append(address)
+        start = address - config.FLASH_BASE
+        assert self.target.flash[start:start + 256] == b"\xFF" * 256
+        self.target.flash[start:start + 256] = bytes(data)
+        if self.corrupt:
+            self.target.flash[start + 128] ^= 1
+
+    def cleanup(self) -> None:
+        self.cleaned = True
+
 
 class FakeMemoryMap:
+    def __init__(self, flash: FakePageFlash) -> None:
+        self.region = FakeMemoryRegion(flash)
+
     def get_region_for_address(self, _address: int) -> FakeMemoryRegion:
-        return FakeMemoryRegion()
+        return self.region
 
 
 class FakeTarget:
     def __init__(self) -> None:
         self.flash = bytearray(b"\xFF" * config.FLASH_SIZE)
-        self.memory_map = FakeMemoryMap()
+        self.page_flash = FakePageFlash(self)
+        self.memory_map = FakeMemoryMap(self.page_flash)
         self.reset_count = 0
+        self.running = True
 
     def halt(self) -> None:
-        pass
+        self.running = False
+
+    def is_running(self) -> bool:
+        return self.running
+
+    def resume(self) -> None:
+        self.running = True
 
     def reset(self) -> None:
         self.reset_count += 1
+
+    def reset_and_halt(self) -> None:
+        self.reset()
+        self.halt()
 
     def read_memory_block8(self, address: int, length: int) -> list[int]:
         start = address - config.FLASH_BASE
@@ -99,6 +151,41 @@ class FakeFileProgrammer:
 
 
 class BackendTests(unittest.TestCase):
+    def test_export_recording_wav(self) -> None:
+        target = FakeConnectHelper.target
+        pcm = bytes(range(256)) * 20
+        image = struct.pack("<4I", 0x31415146, 16000, len(pcm), 1) + pcm
+        start = config.TEST_AUDIO_BASE - config.FLASH_BASE
+        target.flash[start:start + len(image)] = image
+        original = bytes(target.flash)
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "record.wav"
+            self.backend.export_recording(output)
+            with wave.open(str(output), "rb") as audio:
+                self.assertEqual(audio.getnchannels(), 1)
+                self.assertEqual(audio.getsampwidth(), 1)
+                self.assertEqual(audio.getframerate(), 16000)
+                self.assertEqual(audio.readframes(len(pcm)), pcm)
+        self.assertTrue(target.running)
+        self.assertEqual(bytes(target.flash), original)
+        self.assertEqual(FakeConnectHelper.last_options["connect_mode"], "attach")
+
+    def test_export_invalid_recording_restores_running(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "record.wav"
+            with self.assertRaises(FlashError):
+                self.backend.export_recording(output)
+            self.assertFalse(output.exists())
+        self.assertTrue(FakeConnectHelper.target.running)
+
+    def test_export_preserves_halted_state(self) -> None:
+        target = FakeConnectHelper.target
+        target.running = False
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(FlashError):
+                self.backend.export_recording(Path(directory) / "record.wav")
+        self.assertFalse(target.running)
+
     def setUp(self) -> None:
         FakeConnectHelper.target = FakeTarget()
         FakeFlashEraser.erased_addresses = []
@@ -219,6 +306,7 @@ class BackendTests(unittest.TestCase):
 
     def test_program_test_audio_writes_only_audio_flash_area(self) -> None:
         target = FakeConnectHelper.target
+        target.flash[:] = b"\x00" * config.FLASH_SIZE
         pcm = bytes(range(32))
         image = (
             b"FQA1"
@@ -249,6 +337,48 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(
             actual,
             image + b"\xFF" * (config.TEST_AUDIO_REGION.size - len(image)),
+        )
+        self.assertEqual(
+            FakeFlashEraser.erased_addresses,
+            list(range(config.TEST_AUDIO_REGION.start,
+                       config.TEST_AUDIO_REGION.end, config.FLASH_SECTOR_SIZE)),
+        )
+        self.assertFalse(FakeConnectHelper.last_options["cache.enable_memory"])
+        self.assertEqual(FakeConnectHelper.last_options["reset_type"], "sysresetreq")
+        self.assertEqual(target.reset_count, 1)
+        self.assertEqual(target.page_flash.pages, [config.TEST_AUDIO_BASE])
+        self.assertTrue(target.page_flash.cleaned)
+        self.assertFalse(target.running)
+
+    def test_audio_page_mismatch_stops_programming_and_cleans_up(self) -> None:
+        target = FakeConnectHelper.target
+        target.page_flash.corrupt = True
+        pcm = bytes(range(256)) * 3
+        image = struct.pack("<4I", 0x31415146, 16000, len(pcm), 1) + pcm
+        with tempfile.TemporaryDirectory() as directory:
+            image_path = Path(directory) / "audio.bin"
+            image_path.write_bytes(image)
+            with self.assertRaisesRegex(FlashError, "Audio page verify failed"):
+                self.backend.program_test_audio(image_path)
+        self.assertEqual(target.page_flash.pages, [config.TEST_AUDIO_BASE])
+        self.assertTrue(target.page_flash.cleaned)
+        self.assertFalse(target.running)
+
+    def test_audio_serial_programming_covers_multiple_pages(self) -> None:
+        target = FakeConnectHelper.target
+        pcm = bytes(range(256)) * 2
+        image = struct.pack("<4I", 0x31415146, 16000, len(pcm), 1) + pcm
+        with tempfile.TemporaryDirectory() as directory:
+            image_path = Path(directory) / "audio.bin"
+            image_path.write_bytes(image)
+            self.backend.program_test_audio(image_path)
+        self.assertEqual(
+            target.page_flash.pages,
+            [config.TEST_AUDIO_BASE + offset for offset in (0, 256, 512)],
+        )
+        self.assertEqual(
+            bytes(target.read_memory_block8(config.TEST_AUDIO_BASE, len(image))),
+            image,
         )
 
     def test_program_test_audio_rejects_invalid_header(self) -> None:

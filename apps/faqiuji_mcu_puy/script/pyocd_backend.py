@@ -3,6 +3,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 import tempfile
+import struct
+import wave
 from typing import Callable, Iterator
 
 from . import config
@@ -66,7 +68,7 @@ class PyOcdBackend:
             raise FlashError("SWD frequency must be positive.")
 
     @contextmanager
-    def _session(self) -> Iterator[object]:
+    def _session(self, *, attach: bool = False) -> Iterator[object]:
         ConnectHelper, _, _ = _pyocd_api()
         options = {
             "target_override": self.target_name,
@@ -75,7 +77,12 @@ class PyOcdBackend:
             "chip_erase": "sector",
             "auto_unlock": False,
             "resume_on_disconnect": False,
+            "cache.enable_memory": False,
         }
+        if attach:
+            options["connect_mode"] = "attach"
+        else:
+            options["reset_type"] = "sysresetreq"
         probe_uid = self.probe_uid
         if probe_uid is None:
             probes = ConnectHelper.get_all_connected_probes(blocking=False)
@@ -194,6 +201,49 @@ class PyOcdBackend:
             image,
         )
 
+    def export_recording(self, output_path: Path) -> None:
+        if self.target_name != "PY32F071xB":
+            raise FlashError("Recording export requires the PY32F071xB test layout.")
+        with self._session(attach=True) as session:
+            target = session.board.target
+            self._validate_target_flash(target)
+            was_running = target.is_running()
+            target.halt()
+            try:
+                header = bytes(target.read_memory_block8(
+                    config.TEST_AUDIO_BASE, config.TEST_AUDIO_HEADER_SIZE
+                ))
+                if len(header) != config.TEST_AUDIO_HEADER_SIZE:
+                    raise FlashError("Incomplete audio header read.")
+                magic, rate, count, encoding = struct.unpack("<4I", header)
+                if (
+                    magic != 0x31415146
+                    or rate != config.TEST_AUDIO_SAMPLE_RATE
+                    or encoding != 1
+                    or not 0 < count <= config.TEST_AUDIO_SIZE - config.TEST_AUDIO_HEADER_SIZE
+                ):
+                    raise FlashError("No valid completed PCM recording in the audio region.")
+                pcm = bytearray()
+                for offset in range(0, count, 4096):
+                    size = min(4096, count - offset)
+                    block = bytes(target.read_memory_block8(
+                        config.TEST_AUDIO_BASE + config.TEST_AUDIO_HEADER_SIZE + offset,
+                        size,
+                    ))
+                    if len(block) != size:
+                        raise FlashError("Incomplete audio data read.")
+                    pcm.extend(block)
+            finally:
+                if was_running:
+                    target.resume()
+        output_path = output_path.expanduser().resolve()
+        with wave.open(str(output_path), "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(1)
+            audio.setframerate(rate)
+            audio.writeframes(pcm)
+        self.log(f"Exported {count} samples ({count / rate:.3f} s): {output_path}")
+
     def _program_image(
         self,
         region: config.FlashRegion,
@@ -211,23 +261,36 @@ class PyOcdBackend:
             padded_path = Path(directory) / f"{region.name}.bin"
             padded_path.write_bytes(expected)
             with self._session() as session:
-                _, _, FileProgrammer = _pyocd_api()
+                _, FlashEraser, FileProgrammer = _pyocd_api()
                 target = session.board.target
                 self._validate_target_flash(target)
+                target.halt()
                 if region_key is not None:
                     self._check_direct_b_metadata(target, region_key)
-                FileProgrammer(
-                    session,
-                    chip_erase="sector",
-                    no_reset=True,
-                ).program(
-                    str(padded_path),
-                    file_format="bin",
-                    base_address=region.start,
-                )
+                if region == config.TEST_AUDIO_REGION:
+                    self.log("Resetting and halting MCU before audio programming...")
+                    target.reset_and_halt()
+                    self.log("Erasing and checking the test audio region before programming...")
+                    eraser = FlashEraser(session, FlashEraser.Mode.SECTOR)
+                    for address in range(region.start, region.end, config.FLASH_SECTOR_SIZE):
+                        eraser.erase([self._address_range(address, config.FLASH_SECTOR_SIZE)])
+                    self._verify_erased(target, region.start, region.size)
+                    self._program_audio_pages(target, expected)
+                else:
+                    FileProgrammer(
+                        session,
+                        chip_erase="sector",
+                        no_reset=True,
+                    ).program(
+                        str(padded_path),
+                        file_format="bin",
+                        base_address=region.start,
+                    )
                 target.halt()
                 self.log(f"Verifying {region.name} ({region.size} bytes)...")
                 actual = bytes(target.read_memory_block8(region.start, region.size))
+                if len(actual) != len(expected):
+                    raise FlashError(f"Incomplete read-back: {len(actual)}/{len(expected)} bytes.")
                 if actual != expected:
                     mismatch = next(
                         index
@@ -237,7 +300,8 @@ class PyOcdBackend:
                         if actual_byte != expected_byte
                     )
                     raise FlashError(
-                        f"Verify failed at address 0x{region.start + mismatch:08X}."
+                        f"Verify failed at address 0x{region.start + mismatch:08X}: "
+                        f"expected 0x{expected[mismatch]:02X}, read 0x{actual[mismatch]:02X}."
                     )
                 self.log(f"{region.name} programming and read-back verification passed.")
                 if region_key == "app_b":
@@ -249,6 +313,47 @@ class PyOcdBackend:
                             "Warning: APP_A already matches APP_B. IAP will not "
                             "install an identical image."
                         )
+
+    def _program_audio_pages(self, target: object, expected: bytes) -> None:
+        region = target.memory_map.get_region_for_address(config.TEST_AUDIO_BASE)
+        flash = region.flash
+        if flash is None:
+            raise FlashError("The selected pack has no audio-region flash algorithm.")
+        page = flash.get_page_info(config.TEST_AUDIO_BASE)
+        if page is None or page.size != 256:
+            raise FlashError("Expected the PY32F071 256-byte flash programming page.")
+        page_size = page.size
+        self.log("Programming audio in serial 256-byte pages with immediate read-back...")
+        try:
+            flash.init(flash.Operation.PROGRAM)
+            for offset in range(0, len(expected), page_size):
+                data = expected[offset:offset + page_size]
+                if data == b"\xFF" * page_size:
+                    continue
+                address = config.TEST_AUDIO_BASE + offset
+                # Synchronous programming avoids concurrent SWD writes to a second RAM buffer.
+                flash.program_page(address, list(data))
+                actual = bytes(target.read_memory_block8(address, len(data)))
+                if len(actual) != len(data):
+                    raise FlashError(
+                        f"Incomplete audio page read at 0x{address:08X}: "
+                        f"{len(actual)}/{len(data)} bytes."
+                    )
+                if actual != data:
+                    mismatch = next(i for i, (a, b) in enumerate(zip(actual, data)) if a != b)
+                    begin = max(0, mismatch - 8)
+                    end = min(len(data), mismatch + 9)
+                    raise FlashError(
+                        f"Audio page verify failed at 0x{address + mismatch:08X}: "
+                        f"expected 0x{data[mismatch]:02X}, read 0x{actual[mismatch]:02X}. "
+                        f"Context at 0x{address + begin:08X}: "
+                        f"expected [{data[begin:end].hex(' ')}], "
+                        f"read [{actual[begin:end].hex(' ')}]."
+                    )
+                if offset % config.FLASH_SECTOR_SIZE == 0:
+                    self.log(f"Audio page verified at 0x{address:08X}")
+        finally:
+            flash.cleanup()
 
     def factory_setup(self, iap_path: Path, app_a_path: Path) -> None:
         iap = self._validate_image("iap", iap_path)
