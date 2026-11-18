@@ -22,10 +22,11 @@
 #define RANDOM_BURST_STEP_MS (RANDOM_BURST_MS / RANDOM_BURST_RAMP_STEPS)
 #define RANDOM_STOP_MS 2000
 #define RANDOM_REVERSE_WAIT_MS 5000
-#define FIXED_INITIAL_DIRECTION_MS (4UL * 60UL * 1000UL)
+#define FIXED_INITIAL_SEQ_MS (60UL * 1000UL)
+#define FIXED_SINGLE_DIRECTION_MS (4UL * 60UL * 1000UL)
 #define MOTOR_DUTY_MIN_PERCENT 28
-#define MOTOR_DUTY_MAX_PERCENT 36
-#define MOTOR_DUTY_DEFAULT_PERCENT (MOTOR_DUTY_MIN_PERCENT + MOTOR_DUTY_MAX_PERCENT) / 2
+#define MOTOR_DUTY_MAX_PERCENT 52
+#define MOTOR_DUTY_DEFAULT_PERCENT (MOTOR_DUTY_MIN_PERCENT + MOTOR_DUTY_MAX_PERCENT) / 2.5
 #define MOTOR_STEPLESS_DEFAULT_PERCENT \
     (((MOTOR_DUTY_DEFAULT_PERCENT - MOTOR_DUTY_MIN_PERCENT) * 100) / \
      (MOTOR_DUTY_MAX_PERCENT - MOTOR_DUTY_MIN_PERCENT))
@@ -54,7 +55,6 @@ STATIC TIMER_ID s_motor_timer_id = NULL;
 STATIC UINT8_T s_seq_index = 0;
 STATIC UINT8_T s_var_seq_cycle_count = 0;
 STATIC UINT32_T s_fixed_start_ms = 0;
-STATIC BOOL_T s_fixed_seq_started = FALSE;
 #define BURST_SEQ_SIZE 20
 
 STATIC UINT8_T s_var_rand_seed = 0;
@@ -84,7 +84,7 @@ typedef struct
 
 #define FIX_STOP 1000
 STATIC const sm_simple_seq_step_t s_fixed_seq[] = {
-    // 4分钟运动结束后先停3秒
+    /* Start the alternating sequence with a 3-second pause. */
     {MOTOR_DIR_STOP, FIX_STOP * 3},
     {MOTOR_DIR_FORWARD, 500},
     {MOTOR_DIR_STOP, FIX_STOP},
@@ -245,7 +245,7 @@ STATIC UINT32_T app_motor_duty_for_stepless(UINT8_T percent)
     /* Battery compensation follows the voltage table. */
     voltage_percent = app_battery_get_percent();
     boost = app_motor_battery_boost(voltage_percent);
-    TAL_PR_INFO("[motor] voltage %d base %d boost_pwm %d", voltage, base_percent, boost);
+    TAL_PR_INFO("[motor] voltage %d base %d boost_pwm %d", voltage_percent, base_percent, boost);
 
     duty = MOTOR_PWM_DUTY_1 * base_percent + boost;
     if (duty > MOTOR_PWM_DUTY_1 * 100U) {
@@ -339,30 +339,27 @@ STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg)
 
     if (s_work_mode == WORK_MODE_FIXED)
     {
-        if (!s_fixed_seq_started) {
-            UINT32_T elapsed_ms = tal_system_get_millisecond() - s_fixed_start_ms;
-
-            if (elapsed_ms < FIXED_INITIAL_DIRECTION_MS) {
-                app_motor_set_direction(MOTOR_DIR_FORWARD, NULL);
-                tal_sw_timer_start(s_motor_timer_id,
-                                   FIXED_INITIAL_DIRECTION_MS - elapsed_ms,
-                                   TAL_TIMER_ONCE);
-                return;
-            }
-
-            s_fixed_seq_started = TRUE;
-            s_seq_index = 0;
+        UINT32_T elapsed_ms = tal_system_get_millisecond() - s_fixed_start_ms;
+        if (elapsed_ms >= FIXED_INITIAL_SEQ_MS) {
+            app_motor_set_direction(MOTOR_DIR_FORWARD, NULL);
+            tal_sw_timer_start(s_motor_timer_id, FIXED_SINGLE_DIRECTION_MS, TAL_TIMER_ONCE);
+            return;
         }
 
-        /* After the initial forward run, follow the fixed sequence until work timeout. */
+        /* Alternate for one minute, then run forward until work timeout. */
         const sm_simple_seq_step_t *step = &s_fixed_seq[s_seq_index];
+        UINT32_T duration_ms = step->duration_ms;
+        UINT32_T remaining_ms = FIXED_INITIAL_SEQ_MS - elapsed_ms;
+        if (duration_ms > remaining_ms) {
+            duration_ms = remaining_ms;
+        }
         app_motor_set_direction(step->dir,NULL);
         s_seq_index++;
         if (s_seq_index >= FIXED_SEQ_STEPS)
         {
             s_seq_index = 0;
         }
-        tal_sw_timer_start(s_motor_timer_id, step->duration_ms, TAL_TIMER_ONCE);
+        tal_sw_timer_start(s_motor_timer_id, duration_ms, TAL_TIMER_ONCE);
         return;
     }
 
@@ -471,7 +468,6 @@ VOID_T app_motor_timer_init(VOID_T)
     s_motor_running = FALSE;
     s_seq_index = 0;
     s_fixed_start_ms = 0;
-    s_fixed_seq_started = FALSE;
     s_var_substate = VAR_SUB_SEQ;
     s_var_seq_cycle_count = 0;
     s_var_rand_seed = 0;
@@ -496,7 +492,6 @@ VOID_T app_motor_set_mode(work_mode_t mode)
 
     s_work_mode = mode;
     s_seq_index = 0;
-    s_fixed_seq_started = FALSE;
     s_fixed_start_ms = tal_system_get_millisecond();
     s_var_substate = VAR_SUB_SEQ;
     s_var_seq_cycle_count = 0;
@@ -609,7 +604,6 @@ VOID_T app_motor_start(VOID_T)
     s_motor_enabled = TRUE;
     s_seq_index = 0;
     s_fixed_start_ms = tal_system_get_millisecond();
-    s_fixed_seq_started = FALSE;
     s_var_substate = VAR_SUB_SEQ;
     s_var_seq_cycle_count = 0;
     s_var_burst_step = 0;
