@@ -268,7 +268,7 @@ OPERATE_RET app_dp_report(UINT8_T dp_id, UINT8_T* buf, UINT32_T size)
             memcpy(g_rsp.dp_data, buf, DT_ENUM_LEN);
         } break;
 
-        /* enum: 工作状态 work/standby/charging/charge_done */
+        /* enum: 工作状态 work/standby/charging/charge_done/poweroff */
         case DP_ID_WORK_STATE: {
             g_rsp.dp_type = DT_ENUM;
             g_rsp.dp_data_len = DT_ENUM_LEN;

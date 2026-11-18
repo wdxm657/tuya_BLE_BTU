@@ -16,6 +16,7 @@
 #include "app_vibration.h"
 #include "app_control.h"
 #include "app_dp_parser.h"
+#include "app_power_manager.h"
 
 /**
  * @brief 状态变更处理：刷新 LED，并根据 work/standby 状态启停电机
@@ -24,14 +25,13 @@ STATIC VOID_T device_on_state_change(dev_state_t old_state, dev_state_t new_stat
 {
     app_led_update();
 
-    /* 任意模式工作满 5 分钟进入待机后，都必须停止电机。 */
-    if (new_state == DEV_STATE_STANDBY) {
+    /* 离开工作状态时统一停止电机，覆盖待机、关机和充电。 */
+    if (new_state != DEV_STATE_WORK) {
         app_motor_stop();
-    } else if (old_state == DEV_STATE_STANDBY &&
-               new_state == DEV_STATE_WORK &&
+    } else if (new_state == DEV_STATE_WORK &&
                app_state_is_powered_on() &&
                !app_battery_is_critical()) {
-        /* 从待机恢复工作时，按当前模式重新启动电机。 */
+        /* 从关机/待机恢复工作时，按当前模式启动电机。 */
         app_motor_start();
     }
 }
@@ -82,7 +82,8 @@ VOID_T app_control_boot(VOID_T)
         if (app_battery_is_critical() && !app_state_is_charging()) {
             TAL_PR_WARN("[boot] battery undervoltage, keep powered off");
         } else if (f_reset == 0x03) {
-            TAL_PR_INFO("[boot] factory-reset flag detected, staying off");
+            TAL_PR_WARN("[boot] app_power_manager_start_pairing");
+            app_power_manager_start_pairing();
         } else {
             // 启动默认开机
             app_state_set_power(1);

@@ -27,6 +27,9 @@ STATIC BOOL_T   s_low_power_entered = FALSE;
 STATIC BOOL_T   s_undervoltage_shutdown_active = FALSE;
 STATIC BOOL_T   s_low_power_requested = FALSE;
 STATIC BOOL_T   s_low_power_disconnect_requested = FALSE;
+STATIC BOOL_T s_pairing_active = FALSE;
+STATIC BOOL_T s_pairing_sleep_pending = FALSE;
+STATIC TIMER_ID s_pairing_timer_id = NULL;
 
 /* Retention sleep 持续15分钟后停止BLE活动，进入超低功耗。 */
 STATIC TIMER_ID s_retention_timer_id = NULL;
@@ -66,6 +69,60 @@ STATIC VOID_T enter_low_power_now(VOID_T)
     /* 由主循环完成 BLE 断开和停广播，再允许进入超低功耗。 */
     s_low_power_requested = TRUE;
     s_low_power_disconnect_requested = FALSE;
+}
+
+STATIC VOID_T pairing_timeout_handler(TIMER_ID timer_id, VOID_T *arg)
+{
+    s_pairing_sleep_pending = TRUE;
+}
+
+BOOL_T app_power_manager_is_pairing(VOID_T)
+{
+    return s_pairing_active;
+}
+
+VOID_T app_power_manager_on_bound(VOID_T)
+{
+    UINT8_T reset_flag = 0xFF;
+    if (tal_flash_read(APP_DATA_FLASH_ADDR, &reset_flag, 1) == OPRT_OK &&
+        reset_flag == 0x03) {
+        if (tal_flash_erase(APP_DATA_FLASH_ADDR, 0x1000) != OPRT_OK) {
+            TAL_PR_ERR("[pairing] clear factory-reset flag failed");
+        }
+    }
+    if (s_pairing_active && !s_pairing_sleep_pending) {
+        tal_sw_timer_stop(s_pairing_timer_id);
+        s_pairing_active = FALSE;
+        TAL_PR_INFO("[pairing] bound, finish pairing window");
+        app_led_update();
+    }
+}
+
+VOID_T app_power_manager_start_pairing(VOID_T)
+{
+    if (s_pairing_timer_id == NULL &&
+        tal_sw_timer_create(pairing_timeout_handler, NULL,
+                            &s_pairing_timer_id) != OPRT_OK) {
+        TAL_PR_ERR("[pairing] timer create failed");
+        enter_low_power_now();
+        return;
+    }
+    s_pairing_active = TRUE;
+    s_pairing_sleep_pending = FALSE;
+    tal_sw_timer_start(s_pairing_timer_id, 30000U, TAL_TIMER_ONCE);
+    app_led_update();
+    TAL_PR_INFO("[pairing] factory reset: blue blink, wait 30 seconds");
+}
+
+BOOL_T app_power_manager_pairing_short_press(VOID_T)
+{
+    if (!s_pairing_active) {
+        return FALSE;
+    }
+    s_pairing_sleep_pending = TRUE;
+    app_led_prepare_sleep();
+    TAL_PR_INFO("[pairing] short press released -> enter ultra-low-power");
+    return TRUE;
 }
 
 /**
@@ -187,7 +244,8 @@ STATIC VOID_T tuya_retention_sleep_process(VOID_T)
  * 主循环也执行此检查，覆盖断开、重连及启动时未连接的情况。 */
 STATIC VOID_T app_update_sleep_policy(VOID_T)
 {
-    if (app_state_is_powered_on() || s_undervoltage_shutdown_active) {
+    if (app_state_is_powered_on() || s_undervoltage_shutdown_active ||
+        s_pairing_active || s_low_power_entered) {
         return;
     }
 
@@ -242,6 +300,11 @@ STATIC VOID_T usb_on_removed(VOID_T)
 }
 
 STATIC VOID_T power_on_cb(VOID_T){
+    if (s_pairing_active) {
+        tal_sw_timer_stop(s_pairing_timer_id);
+        s_pairing_active = FALSE;
+        s_pairing_sleep_pending = FALSE;
+    }
     /* 明确开机后退出 sleep，并恢复业务轮询。 */
     tal_cpu_force_wakeup();
     app_peripherals_resume_after_sleep();
@@ -273,6 +336,27 @@ VOID_T app_power_manager_process(VOID_T)
 {
     TUYA_GPIO_LEVEL_E key_level = TUYA_GPIO_LEVEL_HIGH;
     TUYA_GPIO_LEVEL_E usb_level = TUYA_GPIO_LEVEL_LOW;
+
+    if (s_pairing_active) {
+        tuya_ble_connect_status_t status = tuya_ble_connect_status_get();
+        if (!s_pairing_sleep_pending &&
+            (status == BONDING_CONN || status == BONDING_UNCONN)) {
+            app_power_manager_on_bound();
+        } else if (s_pairing_sleep_pending) {
+            /* 先熄灯并停止按键业务，等待松开，避免低电平立刻再次唤醒。 */
+            app_led_prepare_sleep();
+            app_key_suspend();
+            if (tal_gpio_read(BOARD_KEY_PIN, &key_level) != OPRT_OK ||
+                key_level != TUYA_GPIO_LEVEL_HIGH) {
+                return;
+            }
+            tal_sw_timer_stop(s_pairing_timer_id);
+            s_pairing_active = FALSE;
+            s_pairing_sleep_pending = FALSE;
+            /* 未绑定时保留0x03，下次深睡唤醒重启仍进入配网窗口。 */
+            enter_low_power_now();
+        }
+    }
 
     /*
      * Deep-retention 唤醒后先确认按键确实按下，再等待松开才开机。
@@ -335,7 +419,7 @@ VOID_T app_power_manager_process(VOID_T)
             s_retention_ultra_low_power = TRUE;
             s_low_power_requested = FALSE;
             app_battery_suspend();
-            TAL_PR_INFO("[power] battery <=5%% -> enter ultra-low-power now");
+            TAL_PR_INFO("[power] enter ultra-low-power now");
             tal_cpu_allow_sleep();
             return;
         }

@@ -306,10 +306,10 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
 
     /* 更新缓存 */
     s_cached_voltage = vol_mv;
-    // if (s_cached_percent != percent) {
+    if (s_cached_percent != percent) {
         TAL_PR_INFO("[battery] sample: %dmV, estimated_target=%d%%, actual_target=%d%%, display=%d%%",
                     vol_mv, target_percent, actual_target_percent, percent);
-    // }
+    }
     
     s_cached_percent = percent;
 

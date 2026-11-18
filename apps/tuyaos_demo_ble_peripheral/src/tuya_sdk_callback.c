@@ -114,8 +114,7 @@ STATIC VOID_T tuya_ble_evt_callback(TAL_BLE_EVT_PARAMS_T *p_event)
 
         case TAL_BLE_EVT_PERIPHERAL_CONNECT: {
             TAL_PR_INFO("connected");
-            // 清除配网标志位
-            tal_flash_erase(APP_DATA_FLASH_ADDR, 0x1000);
+            /* 物理连接不等于配网成功，待绑定成功后再清除配网标志。 */
             tal_app_server_conn_handle = p_event->ble_event.connect.peer.conn_handle;
 
             tuya_ble_connected_handler();

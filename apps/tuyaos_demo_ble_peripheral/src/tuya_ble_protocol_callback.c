@@ -29,6 +29,7 @@
 
 #include "app_dp_parser.h"
 #include "app_led.h"
+#include "app_power_manager.h"
 
 /***********************************************************************
  ********************* constant ( macro and enum ) *********************
@@ -76,6 +77,7 @@ STATIC VOID_T tuya_ble_protocol_callback(tuya_ble_cb_evt_param_t* event)
         case TUYA_BLE_CB_EVT_CONNECT_STATUS: {
             if (event->connect_status == BONDING_CONN) {
                 TAL_PR_INFO("bonding and connecting");
+                app_power_manager_on_bound();
 
                 tuya_ble_update_conn_param_timer_start();
             }

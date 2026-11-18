@@ -30,13 +30,14 @@ extern "C" {
 /** 待机超时时间 ms (5 分钟) */
 #define STANDBY_TIMEOUT_MS      (5 * 60 * 1000UL)
 
-/** 设备状态枚举 — 优先级从高到低：charging > work > standby > charge_done
- *  注：与 DP_ID_WORK_STATE 枚举值一致 */
+/** 设备状态枚举，与 DP26 的枚举值一致。
+ * USB 插入时显示充电/满电；无 USB 时区分工作、待机和关机。 */
 typedef enum {
     DEV_STATE_WORK        = 0,    /**< 工作中（可进行电机运动） */
     DEV_STATE_STANDBY     = 1,    /**< 待机 */
-    DEV_STATE_CHARGING    = 2,    /**< 充电中（最高优先级，电机不工作，红灯常亮，强制关机） */
-    DEV_STATE_CHARGE_DONE = 3,    /**< 满电（指示灯熄灭，仅满电推送） */
+    DEV_STATE_POWEROFF    = 2,    /**< 关机（与保持开机的待机状态区分） */
+    DEV_STATE_CHARGING    = 3,    /**< 充电中（最高优先级，电机不工作，红灯常亮，强制关机） */
+    DEV_STATE_CHARGE_DONE = 4,    /**< 满电（指示灯熄灭，仅满电推送） */
 } dev_state_t;
 
 /***********************************************************************
@@ -116,7 +117,7 @@ VOID_T app_state_process(VOID_T);
 
 /**
  * @brief 获取设备状态对应 DP_WORK_STATE 的枚举值
- * @return UINT8_T 枚举值
+ * @return work=0, standby=1, charging=2, charge_done=3, poweroff=4
  */
 UINT8_T app_state_get_dp_enum(VOID_T);
 

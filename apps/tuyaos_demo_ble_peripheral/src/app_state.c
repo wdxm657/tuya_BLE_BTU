@@ -6,11 +6,12 @@
  *
  * @copyright Copyright 2026 Tuya Inc. All Rights Reserved.
  *
- * 设备状态优先级（高→低）：charging > work > standby > charge_done
+ * USB 插入时显示 charging/charge_done；无 USB 时区分 work/standby/poweroff。
  *   - charging：充电中，电机不工作，红灯常亮，强制关机
  *   - work：正常工作，电机可运动
  *   - standby：连续工作5分钟后进入待机，停止电机，BLE可接收指令；振动后重新工作5分钟
  *   - charge_done：满电，仅推送通知
+ *   - poweroff：关机，不参与工作和振动唤醒
  *
  * 电源架构（统一开关机）：
  *   物理按键短按和蓝牙 DP_SWITCH 控制同一个电源状态，不分软件/硬件开关。
@@ -28,7 +29,7 @@
  **********************************************************************/
 
 /* 当前设备状态 */
-STATIC dev_state_t s_dev_state = DEV_STATE_WORK;
+STATIC dev_state_t s_dev_state = DEV_STATE_POWEROFF;
 
 /* 电源开关 */
 STATIC BOOL_T  s_powered = FALSE;
@@ -79,15 +80,15 @@ STATIC VOID_T app_state_set(dev_state_t new_state)
 /**
  * @brief 根据电源/充电状态重新计算设备状态
  *
- * 优先级：charging(最高) > charge_done > powered→work > 未开机→standby
+ * 优先级：USB插入→charging/charge_done > 未开机→poweroff > 开机→work
  * 注意：charging 检查必须在 !s_powered 之前，因为充电插入会强制关机，
- *       但仍需将设备状态设为 CHARGING（而非 STANDBY），以正确显示红灯常亮。
+ *       但仍需优先显示充电/满电状态。
  */
 STATIC VOID_T app_state_recalculate(VOID_T)
 {
     if (s_charging) {
         /* 充电优先级最高 */
-        app_state_set(DEV_STATE_CHARGING);
+        app_state_set(s_charge_done ? DEV_STATE_CHARGE_DONE : DEV_STATE_CHARGING);
         /* 充电时停止待机定时器 */
         if (s_standby_timer_id != NULL) {
             tal_sw_timer_stop(s_standby_timer_id);
@@ -96,7 +97,7 @@ STATIC VOID_T app_state_recalculate(VOID_T)
     }
 
     if (!s_powered) {
-        app_state_set(DEV_STATE_STANDBY);
+        app_state_set(DEV_STATE_POWEROFF);
         return;
     }
 
@@ -132,10 +133,7 @@ VOID_T app_state_init(VOID_T)
     s_powered     = FALSE;
     s_charging    = FALSE;
     s_charge_done = FALSE;
-    s_dev_state   = DEV_STATE_STANDBY;  /* 默认待机，等待用户交互 */
-
-    /* 启动待机定时器 */
-    tal_sw_timer_start(s_standby_timer_id, STANDBY_TIMEOUT_MS, TAL_TIMER_ONCE);
+    s_dev_state   = DEV_STATE_POWEROFF; /* 初始化关机，业务启动时再开机。 */
 
     TAL_PR_INFO("[state] initialized (powered=%d)", s_powered);
 }
@@ -163,10 +161,8 @@ VOID_T app_state_set_charging(BOOL_T charging)
             app_state_set_power(FALSE);
         }
     } else {
-        /* 停止充电时，不自动开机（需按键/蓝牙再次开机） */
-        if (s_standby_timer_id != NULL) {
-            tal_sw_timer_start(s_standby_timer_id, STANDBY_TIMEOUT_MS, TAL_TIMER_ONCE);
-        }
+        /* 拔出 USB 后清除满电标志，保持关机。 */
+        s_charge_done = FALSE;
     }
 
     app_state_recalculate();
@@ -223,8 +219,8 @@ BOOL_T app_state_set_power(BOOL_T on)
             tal_sw_timer_start(s_standby_timer_id, STANDBY_TIMEOUT_MS, TAL_TIMER_ONCE);
         }
     } else {
-        /* 关机：进入低功耗模式，所有功能关闭 */
-        app_state_set(DEV_STATE_STANDBY);
+        /* 统一计算：普通关机为 POWEROFF，USB 插入时为充电/满电。 */
+        app_state_recalculate();
         if (s_standby_timer_id != NULL) {
             tal_sw_timer_stop(s_standby_timer_id);
         }

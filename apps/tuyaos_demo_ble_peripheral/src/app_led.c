@@ -30,6 +30,7 @@
 #include "app_led.h"
 #include "app_state.h"
 #include "app_battery.h"
+#include "app_power_manager.h"
 #include "tuya_sdk_callback.h"
 #include "tuya_ble_main.h"
 
@@ -325,7 +326,11 @@ VOID_T app_led_update(VOID_T)
         return;
     }
 
-    if (app_state_is_charging())
+    if (app_power_manager_is_pairing())
+    {
+        new_mode = LED_MODE_BLUE_BLINK;
+    }
+    else if (app_state_is_charging())
     {
         new_mode = LED_MODE_RED_SOLID;
     }

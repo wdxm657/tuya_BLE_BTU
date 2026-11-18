@@ -27,7 +27,7 @@ extern "C" {
 #define  DP_ID_BATTERY          18   /* value, ro — 电池电量 0~100% */
 #define  DP_ID_FAULT            20   /* bitmap, ro — 故障告警: bit0=battery_low, bit1=device_stuck */
 #define  DP_ID_MOVEMENT_LEVEL   22   /* enum, rw — 行进速度: level_1~level_5 */
-#define  DP_ID_WORK_STATE       26   /* enum, ro — 工作状态: work/standby/charging/charge_done */
+#define  DP_ID_WORK_STATE       26   /* enum, ro — work/standby/charging/charge_done/poweroff */
 
 /***********************************************************************
  ********************* struct ******************************************

@@ -36,6 +36,7 @@
 #include "app_key.h"
 #include "app_dp_parser.h"
 #include "app_state.h"
+#include "app_power_manager.h"
 
 /***********************************************************************
  ********************* constant ( macro and enum ) *********************
@@ -194,7 +195,9 @@ STATIC VOID_T app_key_poll_handler(TIMER_ID timer_id, VOID_T *arg)
                         } else {
                             TAL_PR_INFO("[key] short press release (%dms)",
                                         press_duration);
-                            app_state_toggle_power();
+                            if (!app_power_manager_pairing_short_press()) {
+                                app_state_toggle_power();
+                            }
                         }
                     }
 
