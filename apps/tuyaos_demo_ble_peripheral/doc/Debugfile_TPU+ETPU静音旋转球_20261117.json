@@ -1,0 +1,111 @@
+{
+    "Pro_Key": "lsgwzi8s",
+    "Dp_Data": [
+        {
+            "attr": 1664,
+            "code": "switch",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_power2",
+            "id": 1,
+            "mode": "rw",
+            "name": "开关",
+            "property": {
+                "type": "bool"
+            },
+            "subType": "bool",
+            "type": "obj"
+        },
+        {
+            "attr": 1664,
+            "code": "mode",
+            "defaultValue": "fast",
+            "desc": "fast：快\nslow：慢\ninteractive：互动",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_mode",
+            "id": 4,
+            "mode": "rw",
+            "name": "工作模式",
+            "property": {
+                "range": [
+                    "fast",
+                    "slow",
+                    "interactive"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "battery_percentage",
+            "defaultValue": "",
+            "desc": "",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-dp_battery",
+            "id": 18,
+            "mode": "ro",
+            "name": "电池电量",
+            "property": {
+                "max": 100,
+                "min": 0,
+                "scale": 0,
+                "step": 1,
+                "type": "value",
+                "unit": "%"
+            },
+            "subType": "value",
+            "type": "obj"
+        },
+        {
+            "attr": 1152,
+            "code": "fault",
+            "defaultValue": "0",
+            "desc": "battery_low：电池低电量告警",
+            "editPermission": true,
+            "extContent": "",
+            "iconname": "icon-baojing",
+            "id": 20,
+            "mode": "ro",
+            "name": "故障告警",
+            "property": {
+                "label": [
+                    "battery_low"
+                ],
+                "maxlen": 1,
+                "type": "bitmap"
+            },
+            "scope": "fault",
+            "subType": "bitmap",
+            "type": "obj"
+        },
+        {
+            "attr": 1664,
+            "code": "work_state",
+            "defaultValue": "work",
+            "desc": "work：逗宠中\nstandby：待机中\ncharging：充电中\ncharge_done：充电完成\npoweroff：关机",
+            "editPermission": true,
+            "extContent": "",
+            "id": 26,
+            "mode": "ro",
+            "name": "工作状态",
+            "property": {
+                "range": [
+                    "work",
+                    "standby",
+                    "charging",
+                    "charge_done",
+                    "poweroff"
+                ],
+                "type": "enum"
+            },
+            "subType": "enum",
+            "type": "obj"
+        }
+    ]
+}
