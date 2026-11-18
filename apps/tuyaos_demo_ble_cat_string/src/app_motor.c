@@ -22,8 +22,7 @@
 #define RANDOM_BURST_STEP_MS (RANDOM_BURST_MS / RANDOM_BURST_RAMP_STEPS)
 #define RANDOM_STOP_MS 2000
 #define RANDOM_REVERSE_WAIT_MS 5000
-#define FIXED_INITIAL_SEQ_MS (60UL * 1000UL)
-#define FIXED_SINGLE_DIRECTION_MS (4UL * 60UL * 1000UL)
+#define FIXED_PHASE_MS (60UL * 1000UL)
 #define MOTOR_DUTY_MIN_PERCENT 28
 #define MOTOR_DUTY_MAX_PERCENT 52
 #define MOTOR_DUTY_DEFAULT_PERCENT (MOTOR_DUTY_MIN_PERCENT + MOTOR_DUTY_MAX_PERCENT) / 2.5
@@ -125,6 +124,7 @@ STATIC const sm_simple_seq_step_t s_fixed_seq[] = {
     {MOTOR_DIR_FORWARD, 1500},
     {MOTOR_DIR_STOP, FIX_STOP},
     {MOTOR_DIR_REVERSE, 700},
+    {MOTOR_DIR_STOP, FIX_STOP * 3},
 };
 
 STATIC const sm_simple_seq_step_t s_variable_seq[VARIABLE_SEQ_STEPS] = {
@@ -340,16 +340,17 @@ STATIC VOID_T app_motor_timer_handler(TIMER_ID timer_id, VOID_T *arg)
     if (s_work_mode == WORK_MODE_FIXED)
     {
         UINT32_T elapsed_ms = tal_system_get_millisecond() - s_fixed_start_ms;
-        if (elapsed_ms >= FIXED_INITIAL_SEQ_MS) {
+        UINT32_T remaining_ms = FIXED_PHASE_MS - (elapsed_ms % FIXED_PHASE_MS);
+        if ((elapsed_ms / FIXED_PHASE_MS) % 2U != 0U) {
+            s_seq_index = 0;
             app_motor_set_direction(MOTOR_DIR_FORWARD, NULL);
-            tal_sw_timer_start(s_motor_timer_id, FIXED_SINGLE_DIRECTION_MS, TAL_TIMER_ONCE);
+            tal_sw_timer_start(s_motor_timer_id, remaining_ms, TAL_TIMER_ONCE);
             return;
         }
 
-        /* Alternate for one minute, then run forward until work timeout. */
+        /* Even minutes follow the sequence; odd minutes run forward. */
         const sm_simple_seq_step_t *step = &s_fixed_seq[s_seq_index];
         UINT32_T duration_ms = step->duration_ms;
-        UINT32_T remaining_ms = FIXED_INITIAL_SEQ_MS - elapsed_ms;
         if (duration_ms > remaining_ms) {
             duration_ms = remaining_ms;
         }
@@ -491,7 +492,8 @@ VOID_T app_motor_set_mode(work_mode_t mode)
     }
 
     s_work_mode = mode;
-    s_seq_index = 0;
+    /* Skip the leading pause only when starting a new fixed-mode run. */
+    s_seq_index = (mode == WORK_MODE_FIXED) ? 1U : 0U;
     s_fixed_start_ms = tal_system_get_millisecond();
     s_var_substate = VAR_SUB_SEQ;
     s_var_seq_cycle_count = 0;
@@ -602,7 +604,7 @@ VOID_T app_motor_start(VOID_T)
         return;
     }
     s_motor_enabled = TRUE;
-    s_seq_index = 0;
+    s_seq_index = (s_work_mode == WORK_MODE_FIXED) ? 1U : 0U;
     s_fixed_start_ms = tal_system_get_millisecond();
     s_var_substate = VAR_SUB_SEQ;
     s_var_seq_cycle_count = 0;
