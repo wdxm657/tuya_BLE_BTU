@@ -10,7 +10,9 @@ import re
 from typing import Deque, Iterable, Optional, Sequence
 
 
-CHANNEL_COUNT = 4
+SENSOR_CHANNEL_COUNT = 10
+ALGORITHM_CHANNEL_COUNT = 4
+CHANNEL_COUNT = ALGORITHM_CHANNEL_COUNT
 CREF_PF = 20.0
 
 
@@ -63,9 +65,9 @@ class MCP1081Parser:
         self._temperature: Optional[float] = None
         self._data_ref: Optional[int] = None
         self._freq_ref: Optional[float] = None
-        self._data_ch: list[Optional[int]] = [None] * CHANNEL_COUNT
-        self._freq_ch: list[Optional[float]] = [None] * CHANNEL_COUNT
-        self._cap_ch: list[Optional[float]] = [None] * CHANNEL_COUNT
+        self._data_ch: list[Optional[int]] = [None] * SENSOR_CHANNEL_COUNT
+        self._freq_ch: list[Optional[float]] = [None] * SENSOR_CHANNEL_COUNT
+        self._cap_ch: list[Optional[float]] = [None] * SENSOR_CHANNEL_COUNT
 
     def feed_line(self, line: str) -> Optional[SensorFrame]:
         text = line.strip()
@@ -91,7 +93,7 @@ class MCP1081Parser:
         if not match:
             return None
         channel = int(match.group(1))
-        if not 0 <= channel < CHANNEL_COUNT:
+        if not 0 <= channel < SENSOR_CHANNEL_COUNT:
             return None
         self._data_ch[channel] = int(match.group(2))
         self._freq_ch[channel] = float(match.group(3)) if match.group(3) else None
@@ -109,11 +111,11 @@ class MCP1081Parser:
     def _parse_compact(self, text: str) -> Optional[SensorFrame]:
         fields = [field.strip() for field in text.split(",")]
         # Firmware format: S,ref,ch0,...,ch9,temp
-        if len(fields) < 7:
+        if len(fields) < 13:
             return None
         try:
             data_ref = int(fields[1])
-            channel_data = [int(value) for value in fields[2:6]]
+            channel_data = [int(value) for value in fields[2:12]]
             temperature = float(fields[12]) if len(fields) > 12 else None
         except (ValueError, IndexError):
             return None
@@ -126,7 +128,7 @@ class MCP1081Parser:
             data_ref=data_ref,
             freq_ref_mhz=None,
             data_ch=tuple(channel_data),
-            freq_ch_mhz=(None,) * CHANNEL_COUNT,
+            freq_ch_mhz=(None,) * SENSOR_CHANNEL_COUNT,
             cap_pf=tuple(caps),
             source="compact",
         )
@@ -188,16 +190,16 @@ class WaterLevelAlgorithm:
         self.reset_filters()
 
     def reset_filters(self) -> None:
-        self._median_buffers = [deque(maxlen=self.median_window) for _ in range(CHANNEL_COUNT)]
-        self._average_buffers = [deque(maxlen=self.average_window) for _ in range(CHANNEL_COUNT)]
+        self._median_buffers = [deque(maxlen=self.median_window) for _ in range(ALGORITHM_CHANNEL_COUNT)]
+        self._average_buffers = [deque(maxlen=self.average_window) for _ in range(ALGORITHM_CHANNEL_COUNT)]
 
     def process(self, caps: Sequence[float], timestamp: Optional[datetime] = None) -> AlgorithmResult:
         raw_cap = self._validate_caps(caps)
         empty = self.empty_baseline or raw_cap
         full = self.full_calibration or tuple(value + 1.0 for value in empty)
-        direction = tuple(1 if full[i] >= empty[i] else -1 for i in range(CHANNEL_COUNT))
-        raw_delta = tuple(direction[i] * (raw_cap[i] - empty[i]) for i in range(CHANNEL_COUNT))
-        full_span = tuple(abs(full[i] - empty[i]) for i in range(CHANNEL_COUNT))
+        direction = tuple(1 if full[i] >= empty[i] else -1 for i in range(ALGORITHM_CHANNEL_COUNT))
+        raw_delta = tuple(direction[i] * (raw_cap[i] - empty[i]) for i in range(ALGORITHM_CHANNEL_COUNT))
+        full_span = tuple(abs(full[i] - empty[i]) for i in range(ALGORITHM_CHANNEL_COUNT))
 
         medians: list[float] = []
         averages: list[float] = []
@@ -214,7 +216,7 @@ class WaterLevelAlgorithm:
         level = min(100.0, max(0.0, raw_level))
         contributions = tuple(
             100.0 * averages[i] / full_sum if self.calibrated and full_sum > 1e-12 else 0.0
-            for i in range(CHANNEL_COUNT)
+            for i in range(ALGORITHM_CHANNEL_COUNT)
         )
         return AlgorithmResult(
             timestamp=timestamp or datetime.now(), raw_cap=raw_cap, empty_baseline=empty,
@@ -229,10 +231,10 @@ class WaterLevelAlgorithm:
         items = list(frames)
         if not items:
             raise ValueError("没有可用于标定的有效数据帧")
-        return tuple(fmean(frame.cap_pf[i] for frame in items) for i in range(CHANNEL_COUNT))
+        return tuple(fmean(frame.cap_pf[i] for frame in items) for i in range(ALGORITHM_CHANNEL_COUNT))
 
     @staticmethod
     def _validate_caps(caps: Sequence[float]) -> tuple[float, ...]:
-        if len(caps) != CHANNEL_COUNT:
+        if len(caps) != ALGORITHM_CHANNEL_COUNT:
             raise ValueError("必须提供 4 个通道的电容值")
         return tuple(float(value) for value in caps)
