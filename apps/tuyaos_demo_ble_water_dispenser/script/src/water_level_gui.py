@@ -394,8 +394,36 @@ class CycleAnalysisWindow(QtWidgets.QDialog):
                 raise ValueError("CSV 表头格式不受支持")
             self.actions.sort(key=lambda action: action[0])
             self.refresh_table()
+            self.restore_capture_position()
         except (OSError, ValueError):
             pass
+
+    def restore_capture_position(self) -> None:
+        """Continue at the step after the latest timestamped save."""
+        if not self.actions:
+            self.cycle_spin.setValue(1)
+            self.set_direction_and_index("down", 0)
+            return
+        _, cycle, direction, height_index = self.actions[-1]
+        if direction == "down" and height_index < 10:
+            next_cycle, next_direction, next_index = cycle, "down", height_index + 1
+        elif direction == "down":
+            next_cycle, next_direction, next_index = cycle, "up", 10
+        elif height_index > 0:
+            next_cycle, next_direction, next_index = cycle, "up", height_index - 1
+        else:
+            next_cycle, next_direction, next_index = cycle + 1, "down", 0
+        self.cycle_spin.setValue(next_cycle)
+        self.set_direction_and_index(next_direction, next_index)
+
+    def set_direction_and_index(self, direction: str, height_index: int) -> None:
+        direction_index = self.direction_combo.findData(direction)
+        self.direction_combo.blockSignals(True)
+        if direction_index >= 0:
+            self.direction_combo.setCurrentIndex(direction_index)
+        self.direction_combo.blockSignals(False)
+        self.index_spin.setValue(height_index)
+        self.update_volume_display()
 
     def close_csv(self) -> None:
         if self.csv_file:
