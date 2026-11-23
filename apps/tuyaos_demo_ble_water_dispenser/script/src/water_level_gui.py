@@ -8,7 +8,7 @@ import math
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from statistics import fmean
+from statistics import fmean, pstdev
 import sys
 import time
 from typing import Optional
@@ -17,6 +17,7 @@ import serial
 from serial.tools import list_ports
 from PyQt5 import QtCore, QtGui, QtWidgets
 import pyqtgraph as pg
+import numpy as np
 
 from water_level_core import AlgorithmResult, MCP1081Parser, SensorFrame, WaterLevelAlgorithm
 
@@ -54,6 +55,136 @@ class SerialWorker(QtCore.QThread):
         self.wait(1500)
 
 
+class CycleChartsDialog(QtWidgets.QDialog):
+    """Visual analysis of the currently loaded cycle CSV records."""
+
+    def __init__(self, records: list[dict], source_name: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"循环图表分析 — {source_name}")
+        self.resize(1180, 760)
+        self.records = [dict(record) for record in records]
+        layout = QtWidgets.QVBoxLayout(self)
+        self.summary_label = QtWidgets.QLabel()
+        self.summary_label.setWordWrap(True)
+        self.summary_label.setStyleSheet("font-weight:bold;color:#344054;padding:6px")
+        layout.addWidget(self.summary_label)
+        self.tabs = QtWidgets.QTabWidget()
+        layout.addWidget(self.tabs, 1)
+        self._build_charts()
+
+    @staticmethod
+    def _plot(title: str, y_label: str) -> pg.PlotWidget:
+        plot = pg.PlotWidget(title=title)
+        plot.setLabel("bottom", "高度 ID")
+        plot.setLabel("left", y_label)
+        plot.showGrid(x=True, y=True, alpha=0.25)
+        plot.setXRange(0, 10, padding=0.03)
+        plot.addLegend()
+        return plot
+
+    def _add_tab(self, widget: QtWidgets.QWidget, title: str) -> None:
+        page = QtWidgets.QWidget()
+        page_layout = QtWidgets.QVBoxLayout(page)
+        page_layout.addWidget(widget)
+        self.tabs.addTab(page, title)
+
+    def _values_by_id(self, field: str) -> dict[int, list[float]]:
+        values = {index: [] for index in range(11)}
+        for record in self.records:
+            value = record.get(field)
+            if value is not None:
+                values[int(record["height_index"])].append(float(value))
+        return values
+
+    def _build_charts(self) -> None:
+        cycles = sorted({int(record["cycle"]) for record in self.records})
+
+        curves = self._plot("各循环上升/下降百分比趋势", "原始百分比 (%)")
+        hysteresis = self._plot("同一循环相同水位误差（Up - Down）", "百分比差 (百分点)")
+        hysteresis.addItem(pg.InfiniteLine(pos=0, angle=0, pen=pg.mkPen("#667085", style=QtCore.Qt.DashLine)))
+        for position, cycle in enumerate(cycles):
+            color = pg.intColor(position, hues=max(1, len(cycles)), values=1, maxValue=220)
+            cycle_records = sorted(
+                (record for record in self.records if int(record["cycle"]) == cycle),
+                key=lambda record: int(record["height_index"]),
+            )
+            for field, symbol, style, suffix in (
+                ("down_percent", "o", QtCore.Qt.SolidLine, "Down"),
+                ("up_percent", "t", QtCore.Qt.DashLine, "Up"),
+            ):
+                points = [(int(record["height_index"]), float(record[field])) for record in cycle_records if record.get(field) is not None]
+                if points:
+                    curves.plot(
+                        [point[0] for point in points], [point[1] for point in points],
+                        pen=pg.mkPen(color, width=2, style=style), symbol=symbol,
+                        symbolBrush=color, symbolSize=6, name=f"循环{cycle} {suffix}",
+                    )
+            diff_points = [
+                (int(record["height_index"]), float(record["up_percent"]) - float(record["down_percent"]))
+                for record in cycle_records
+                if record.get("down_percent") is not None and record.get("up_percent") is not None
+            ]
+            if diff_points:
+                hysteresis.plot(
+                    [point[0] for point in diff_points], [point[1] for point in diff_points],
+                    pen=pg.mkPen(color, width=2), symbol="o", symbolBrush=color,
+                    name=f"循环{cycle}",
+                )
+        self._add_tab(curves, "循环趋势")
+
+        down_values = self._values_by_id("down_percent")
+        up_values = self._values_by_id("up_percent")
+        ids = list(range(11))
+        down_mean = [fmean(down_values[index]) if down_values[index] else math.nan for index in ids]
+        up_mean = [fmean(up_values[index]) if up_values[index] else math.nan for index in ids]
+        down_std = [pstdev(down_values[index]) if len(down_values[index]) > 1 else 0.0 for index in ids]
+        up_std = [pstdev(up_values[index]) if len(up_values[index]) > 1 else 0.0 for index in ids]
+
+        means = self._plot("所有循环均值（误差棒为 ±1 标准差）", "原始百分比 (%)")
+        means.plot(ids, down_mean, pen=pg.mkPen("#1565c0", width=3), symbol="o", symbolBrush="#1565c0", name="Down 均值")
+        means.plot(ids, up_mean, pen=pg.mkPen("#d97706", width=3), symbol="t", symbolBrush="#d97706", name="Up 均值")
+        x_values = np.asarray(ids, dtype=float)
+        means.addItem(pg.ErrorBarItem(
+            x=x_values, y=np.asarray(down_mean), top=np.asarray(down_std), bottom=np.asarray(down_std),
+            beam=0.18, pen=pg.mkPen("#1565c0"),
+        ))
+        means.addItem(pg.ErrorBarItem(
+            x=x_values, y=np.asarray(up_mean), top=np.asarray(up_std), bottom=np.asarray(up_std),
+            beam=0.18, pen=pg.mkPen("#d97706"),
+        ))
+        self._add_tab(means, "所有循环均值")
+
+        repeatability = self._plot("跨循环重复性误差（标准差）", "标准差 (百分点)")
+        repeatability.addItem(pg.BarGraphItem(x=[i - 0.18 for i in ids], height=down_std, width=0.34, brush="#5B8FF9", name="Down 标准差"))
+        repeatability.addItem(pg.BarGraphItem(x=[i + 0.18 for i in ids], height=up_std, width=0.34, brush="#F6BD16", name="Up 标准差"))
+        self._add_tab(repeatability, "重复性误差")
+        self._add_tab(hysteresis, "同水位误差")
+
+        down_range = [max(values) - min(values) if values else 0.0 for values in down_values.values()]
+        up_range = [max(values) - min(values) if values else 0.0 for values in up_values.values()]
+        ranges = self._plot("跨循环最大波动范围（最大值 - 最小值）", "极差 (百分点)")
+        ranges.addItem(pg.BarGraphItem(x=[i - 0.18 for i in ids], height=down_range, width=0.34, brush="#2E90FA", name="Down 极差"))
+        ranges.addItem(pg.BarGraphItem(x=[i + 0.18 for i in ids], height=up_range, width=0.34, brush="#F79009", name="Up 极差"))
+        self._add_tab(ranges, "极差")
+
+        differences = [
+            (abs(float(record["up_percent"]) - float(record["down_percent"])), int(record["cycle"]), int(record["height_index"]))
+            for record in self.records
+            if record.get("down_percent") is not None and record.get("up_percent") is not None
+        ]
+        worst_hysteresis = max(differences, default=(0.0, 0, 0))
+        repeatability_candidates = [
+            (down_range[index], "Down", index) for index in ids
+        ] + [(up_range[index], "Up", index) for index in ids]
+        worst_repeatability = max(repeatability_candidates, default=(0.0, "--", 0))
+        self.summary_label.setText(
+            f"共 {len(cycles)} 次循环；最大同水位误差绝对值 {worst_hysteresis[0]:.4f} 个百分点"
+            f"（循环 {worst_hysteresis[1]} / ID {worst_hysteresis[2]}）；"
+            f"最大跨循环极差 {worst_repeatability[0]:.4f} 个百分点"
+            f"（{worst_repeatability[1]} / ID {worst_repeatability[2]}）。"
+        )
+
+
 class CycleAnalysisWindow(QtWidgets.QDialog):
     """Manually capture A-route percentages for up/down cycle analysis."""
 
@@ -88,6 +219,7 @@ class CycleAnalysisWindow(QtWidgets.QDialog):
         self.csv_path: Optional[Path] = None
         self.records: list[dict] = []
         self.actions: list[tuple[str, int, str, int]] = []
+        self.charts_window: Optional[CycleChartsDialog] = None
         self._build_ui()
         self._open_default_csv()
 
@@ -115,13 +247,14 @@ class CycleAnalysisWindow(QtWidgets.QDialog):
         self.choose_csv_button = QtWidgets.QPushButton("另存/切换 CSV")
         self.next_cycle_button = QtWidgets.QPushButton("下一循环")
         self.delete_last_button = QtWidgets.QPushButton("删除最近一条")
+        self.charts_button = QtWidgets.QPushButton("图表分析")
         controls.addWidget(QtWidgets.QLabel("循环编号"), 0, 0)
         controls.addWidget(self.cycle_spin, 0, 1)
         controls.addWidget(QtWidgets.QLabel("当前方向"), 0, 2)
         controls.addWidget(self.direction_combo, 0, 3)
         controls.addWidget(QtWidgets.QLabel("高度 Index"), 1, 0)
         controls.addWidget(self.index_spin, 1, 1)
-        controls.addWidget(QtWidgets.QLabel("A路当前水位"), 1, 2)
+        controls.addWidget(QtWidgets.QLabel("A路原始百分比"), 1, 2)
         controls.addWidget(self.level_label, 1, 3)
         controls.addWidget(QtWidgets.QLabel("对应容量"), 2, 0)
         controls.addWidget(self.volume_label, 2, 1)
@@ -131,6 +264,7 @@ class CycleAnalysisWindow(QtWidgets.QDialog):
         controls.addWidget(self.next_cycle_button, 3, 2)
         controls.addWidget(self.choose_csv_button, 3, 3)
         controls.addWidget(self.delete_last_button, 4, 0, 1, 2)
+        controls.addWidget(self.charts_button, 4, 2, 1, 2)
         layout.addLayout(controls)
 
         self.path_label = QtWidgets.QLabel()
@@ -156,6 +290,7 @@ class CycleAnalysisWindow(QtWidgets.QDialog):
         self.choose_csv_button.clicked.connect(self.choose_csv)
         self.next_cycle_button.clicked.connect(self.next_cycle)
         self.delete_last_button.clicked.connect(self.delete_last_record)
+        self.charts_button.clicked.connect(self.show_charts)
         self.direction_combo.currentIndexChanged.connect(self.reset_index_for_direction)
         self.index_spin.valueChanged.connect(self.update_volume_display)
         self.reset_index_for_direction()
@@ -189,6 +324,16 @@ class CycleAnalysisWindow(QtWidgets.QDialog):
         if path.suffix.lower() != ".csv":
             path = path.with_suffix(".csv")
         self.open_csv(path)
+
+    def show_charts(self) -> None:
+        if not self.records:
+            QtWidgets.QMessageBox.warning(self, "图表分析", "当前 CSV 没有可绘制的数据。")
+            return
+        source_name = self.csv_path.name if self.csv_path else "当前数据"
+        if self.charts_window is not None:
+            self.charts_window.close()
+        self.charts_window = CycleChartsDialog(self.records, source_name, self)
+        self.charts_window.show()
 
     def update_level(self, level: float) -> None:
         self.current_level = float(level)
@@ -715,7 +860,9 @@ class MainWindow(QtWidgets.QMainWindow):
         }
         self.latest_results = results
         if self.cycle_analysis_window is not None:
-            self.cycle_analysis_window.update_level(results["A"].level_percent)
+            # Cycle analysis must preserve the unbounded algorithm result for
+            # calibration/error analysis; do not store the 0..100 UI clamp.
+            self.cycle_analysis_window.update_level(results["A"].raw_level_percent)
         self.update_result(frame, results)
         self.write_csv(frame, results)
 
@@ -1041,7 +1188,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.cycle_analysis_window is None:
             self.cycle_analysis_window = CycleAnalysisWindow(self)
         if "A" in self.latest_results:
-            self.cycle_analysis_window.update_level(self.latest_results["A"].level_percent)
+            self.cycle_analysis_window.update_level(self.latest_results["A"].raw_level_percent)
         self.cycle_analysis_window.show()
         self.cycle_analysis_window.raise_()
         self.cycle_analysis_window.activateWindow()
