@@ -294,7 +294,7 @@ STATIC VOID_T app_battery_monitor_handler(TIMER_ID timer_id, VOID_T *arg)
         s_cached_percent = 100;
     }
     else{
-        s_cached_percent = filtered_percent;
+        s_cached_percent = (filtered_percent > 99U) ? 99U : filtered_percent;
     }
 
 
